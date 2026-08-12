@@ -68,6 +68,7 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
 
     val bgDir = remember { File(context.filesDir, "input_backgrounds").apply { mkdirs() } }
     val drawerBgDir = remember { File(context.filesDir, "drawer_backgrounds").apply { mkdirs() } }
+    val settingsBgDir = remember { File(context.filesDir, "settings_backgrounds").apply { mkdirs() } }
 
     // Input background picker launcher
     val bgPickerLauncher = rememberLauncherForActivityResult(
@@ -92,6 +93,19 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                 destFile.outputStream().use { output -> input.copyTo(output) }
             }
             updateDisplaySetting(displaySetting.copy(drawerBackgroundPath = destFile.absolutePath))
+        }
+    }
+
+    // Settings home background picker launcher
+    val settingsBgPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            val destFile = File(settingsBgDir, "settings_bg_${System.currentTimeMillis()}.png")
+            context.contentResolver.openInputStream(it)?.use { input ->
+                destFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            updateDisplaySetting(displaySetting.copy(settingsBackgroundPath = destFile.absolutePath))
         }
     }
 
@@ -154,6 +168,62 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
             contentPadding = contentPadding + PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Settings home background and surface transparency
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("设置主页背景") },
+                ) {
+                    item(
+                        headlineContent = { Text("自定义设置主页背景图") },
+                        supportingContent = {
+                            Text(
+                                if (displaySetting.settingsBackgroundPath.isNotBlank() &&
+                                    File(displaySetting.settingsBackgroundPath).exists()
+                                ) {
+                                    "当前背景: ${File(displaySetting.settingsBackgroundPath).name}"
+                                } else {
+                                    "选择一张图片作为设置主页背景"
+                                }
+                            )
+                        },
+                        trailingContent = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (displaySetting.settingsBackgroundPath.isNotBlank()) {
+                                    TextButton(onClick = {
+                                        File(displaySetting.settingsBackgroundPath).delete()
+                                        updateDisplaySetting(displaySetting.copy(settingsBackgroundPath = ""))
+                                    }) { Text("清除") }
+                                }
+                                TextButton(onClick = {
+                                    settingsBgPickerLauncher.launch(arrayOf("image/*"))
+                                }) { Text("选择图片") }
+                            }
+                        },
+                    )
+                    item(
+                        headlineContent = { Text("设置卡片透明度") },
+                        supportingContent = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Slider(
+                                    value = displaySetting.settingsUiAlpha,
+                                    onValueChange = {
+                                        updateDisplaySetting(displaySetting.copy(settingsUiAlpha = it))
+                                    },
+                                    valueRange = 0.25f..1f,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text("${(displaySetting.settingsUiAlpha * 100).toInt()}%")
+                            }
+                        },
+                    )
+                }
+            }
+
             // Input Background
             item {
                 CardGroup(

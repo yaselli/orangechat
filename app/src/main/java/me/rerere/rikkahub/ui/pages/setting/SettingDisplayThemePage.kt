@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -37,6 +38,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DisplaySetting
+import me.rerere.rikkahub.data.datastore.UiMaterialStyle
+import me.rerere.rikkahub.data.datastore.VisualThemePalette
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -156,6 +159,126 @@ fun SettingDisplayThemePage(vm: SettingVM = koinViewModel()) {
                     )
                 }
             }
+
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("主题配色（单选）") },
+                ) {
+                    listOf(
+                        VisualThemePalette.ORIGINAL,
+                        VisualThemePalette.SEA_SALT,
+                    ).forEach { palette ->
+                        item(
+                            headlineContent = {
+                                Text(if (palette == VisualThemePalette.ORIGINAL) "原始配色" else "海盐")
+                            },
+                            supportingContent = {
+                                Text(
+                                    if (palette == VisualThemePalette.ORIGINAL) "使用应用原有主题配色"
+                                    else "清透、低饱和的海盐配色"
+                                )
+                            },
+                            trailingContent = {
+                                RadioButton(
+                                    selected = displaySetting.visualThemePalette == palette,
+                                    onClick = {
+                                        updateDisplaySetting(displaySetting.copy(visualThemePalette = palette))
+                                    },
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("聊天气泡材质（单选）") },
+                ) {
+                    UiMaterialStyle.entries.forEach { style ->
+                        item(
+                            headlineContent = { Text(style.materialTitle()) },
+                            supportingContent = { Text(style.materialDescription()) },
+                            trailingContent = {
+                                RadioButton(
+                                    selected = displaySetting.bubbleMaterialStyle == style,
+                                    onClick = {
+                                        updateDisplaySetting(displaySetting.copy(bubbleMaterialStyle = style))
+                                    },
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("输入栏材质（单选）") },
+                ) {
+                    UiMaterialStyle.entries.forEach { style ->
+                        item(
+                            headlineContent = { Text(style.materialTitle()) },
+                            supportingContent = { Text(style.materialDescription()) },
+                            trailingContent = {
+                                RadioButton(
+                                    selected = displaySetting.inputMaterialStyle == style,
+                                    onClick = {
+                                        updateDisplaySetting(displaySetting.copy(inputMaterialStyle = style))
+                                    },
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("侧边栏外观") },
+                ) {
+                    item(
+                        headlineContent = { Text("侧边栏水玻璃") },
+                        supportingContent = { Text("磨砂、半透明、亮边和柔和阴影") },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.enableGlassDrawer,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(enableGlassDrawer = it))
+                                },
+                            )
+                        },
+                    )
+                    item(
+                        headlineContent = { Text("立体侧滑动效") },
+                        supportingContent = { Text("侧边栏打开时，聊天页右移并产生立体透视") },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.enableDrawerCardTransform,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(enableDrawerCardTransform = it))
+                                },
+                            )
+                        },
+                    )
+                }
+            }
         }
     }
+}
+
+private fun UiMaterialStyle.materialTitle(): String = when (this) {
+    UiMaterialStyle.ORIGINAL -> "原始"
+    UiMaterialStyle.LIQUID_GLASS -> "水玻璃"
+    UiMaterialStyle.FROSTED -> "磨砂"
+}
+
+private fun UiMaterialStyle.materialDescription(): String = when (this) {
+    UiMaterialStyle.ORIGINAL -> "保留应用原有材质"
+    UiMaterialStyle.LIQUID_GLASS -> "清透玻璃、柔和高光与景深"
+    UiMaterialStyle.FROSTED -> "细腻雾面、低反射的磨砂质感"
 }

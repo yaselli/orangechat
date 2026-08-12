@@ -728,6 +728,9 @@ data class DisplaySetting(
     val drawerBackgroundPath: String = "",
     // 侧边栏元素透明度
     val drawerItemAlpha: Float = 1f,
+    // 设置主页背景与卡片透明度
+    val settingsBackgroundPath: String = "",
+    val settingsUiAlpha: Float = 0.88f,
     // 颜色自定义
     val chatTextColor: Long? = null,
     val globalTextColor: Long? = null,

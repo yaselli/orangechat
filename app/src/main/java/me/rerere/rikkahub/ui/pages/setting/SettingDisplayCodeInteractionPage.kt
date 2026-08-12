@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -33,8 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DisplaySetting
-import me.rerere.rikkahub.data.datastore.UiMaterialStyle
-import me.rerere.rikkahub.data.datastore.VisualThemePalette
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -108,122 +105,6 @@ fun SettingDisplayCodeInteractionPage(vm: SettingVM = koinViewModel()) {
                                 checked = displaySetting.showLineNumbers,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(showLineNumbers = it))
-                                }
-                            )
-                        },
-                    )
-                }
-            }
-
-            // 主题、材质与侧边栏效果
-            item {
-                CardGroup(
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("主题配色（单选）") },
-                ) {
-                    listOf(
-                        VisualThemePalette.ORIGINAL,
-                        VisualThemePalette.SEA_SALT,
-                    ).forEach { palette ->
-                        val title = when (palette) {
-                            VisualThemePalette.ORIGINAL -> "原始配色"
-                            VisualThemePalette.SEA_SALT -> "海盐"
-                            VisualThemePalette.SAKURA_MIST -> "樱雾"
-                            VisualThemePalette.AURORA -> "极光"
-                            VisualThemePalette.MIDNIGHT -> "午夜"
-                        }
-                        item(
-                            headlineContent = { Text(title) },
-                            trailingContent = {
-                                RadioButton(
-                                    selected = displaySetting.visualThemePalette == palette,
-                                    onClick = {
-                                        updateDisplaySetting(displaySetting.copy(visualThemePalette = palette))
-                                    },
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-
-            item {
-                CardGroup(
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("聊天气泡材质（单选）") },
-                ) {
-                    UiMaterialStyle.entries.forEach { style ->
-                        val title = when (style) {
-                            UiMaterialStyle.ORIGINAL -> "原始"
-                            UiMaterialStyle.LIQUID_GLASS -> "水玻璃"
-                            UiMaterialStyle.FROSTED -> "磨砂"
-                        }
-                        item(
-                            headlineContent = { Text(title) },
-                            trailingContent = {
-                                RadioButton(
-                                    selected = displaySetting.bubbleMaterialStyle == style,
-                                    onClick = {
-                                        updateDisplaySetting(displaySetting.copy(bubbleMaterialStyle = style))
-                                    },
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-
-            item {
-                CardGroup(
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("输入栏材质（单选）") },
-                ) {
-                    UiMaterialStyle.entries.forEach { style ->
-                        val title = when (style) {
-                            UiMaterialStyle.ORIGINAL -> "原始"
-                            UiMaterialStyle.LIQUID_GLASS -> "水玻璃"
-                            UiMaterialStyle.FROSTED -> "磨砂"
-                        }
-                        item(
-                            headlineContent = { Text(title) },
-                            trailingContent = {
-                                RadioButton(
-                                    selected = displaySetting.inputMaterialStyle == style,
-                                    onClick = {
-                                        updateDisplaySetting(displaySetting.copy(inputMaterialStyle = style))
-                                    },
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-
-            item {
-                CardGroup(
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("侧边栏效果") },
-                ) {
-                    item(
-                        headlineContent = { Text("侧边栏水玻璃") },
-                        supportingContent = { Text("开启磨砂、半透明、亮边和柔和阴影") },
-                        trailingContent = {
-                            Switch(
-                                checked = displaySetting.enableGlassDrawer,
-                                onCheckedChange = {
-                                    updateDisplaySetting(displaySetting.copy(enableGlassDrawer = it))
-                                }
-                            )
-                        },
-                    )
-                    item(
-                        headlineContent = { Text("立体侧滑动效") },
-                        supportingContent = { Text("聊天页右移，并向侧边栏形成柔和透视") },
-                        trailingContent = {
-                            Switch(
-                                checked = displaySetting.enableDrawerCardTransform,
-                                onCheckedChange = {
-                                    updateDisplaySetting(displaySetting.copy(enableDrawerCardTransform = it))
                                 }
                             )
                         },

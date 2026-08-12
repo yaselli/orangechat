@@ -136,6 +136,7 @@ private fun CardGroupListItem(
 fun CardGroup(
     modifier: Modifier = Modifier,
     title: (@Composable () -> Unit)? = null,
+    colors: ListItemColors = CustomColors.listItemColors,
     content: @Composable CardGroupScope.() -> Unit,
 ) {
     val scope = CardGroupScope()
@@ -153,7 +154,11 @@ fun CardGroup(
         }
         val count = scope.items.size
         scope.items.fastForEachIndexed { index, item ->
-            CardGroupListItem(item = item, count = count, index = index)
+            CardGroupListItem(
+                item = if (item.colors == null) item.copy(colors = colors) else item,
+                count = count,
+                index = index,
+            )
             if (index != count - 1) {
                 Spacer(modifier = Modifier.height(CardGroupItemSpacing))
             }
