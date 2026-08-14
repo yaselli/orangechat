@@ -666,6 +666,14 @@ enum class VisualThemePalette {
 }
 
 @Serializable
+data class AnniversaryEntry(
+    val id: String,
+    val title: String,
+    /** ISO-8601 local date, for example 2023-05-20. */
+    val startDate: String,
+)
+
+@Serializable
 data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
@@ -706,6 +714,10 @@ data class DisplaySetting(
     val visualThemePalette: VisualThemePalette = VisualThemePalette.SEA_SALT,
     // 显示在聊天侧边栏“插件”页中的快捷插件 ID
     val drawerPluginShortcutIds: Set<String> = emptySet(),
+    // 纪念日：完全保存在本机；最多选择一个条目精简注入给 AI
+    val anniversaries: List<AnniversaryEntry> = emptyList(),
+    val anniversaryAiInjectionEnabled: Boolean = false,
+    val anniversaryAiInjectionId: String? = null,
     val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,

@@ -92,6 +92,7 @@ import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.buildAnniversaryPrompt
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
@@ -920,7 +921,10 @@ addAll(localTools.getTools(assistant.localTools, me.rerere.rikkahub.data.ai.tool
                     // Plugin tools
                     addAll(pluginToolProvider.getTools())
                 },
-                pluginPromptInjections = pluginToolProvider.getPluginPromptInjections(),
+                pluginPromptInjections = buildList {
+                    addAll(pluginToolProvider.getPluginPromptInjections())
+                    settings.displaySetting.buildAnniversaryPrompt()?.let(::add)
+                },
                 conversationId = conversationId.toString(),
             ).onCompletion {
                 // 取消 Live Update 通知

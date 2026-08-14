@@ -532,6 +532,18 @@ fun ChatDrawerContent(
                     },
                 )
 
+                DrawerAction(
+                    icon = {
+                        Icon(HugeIcons.TransactionHistory, "纪念日")
+                    },
+                    label = {
+                        Text("纪念日")
+                    },
+                    onClick = {
+                        navController.navigate(Screen.Anniversary)
+                    },
+                )
+
                 Spacer(Modifier.weight(1f))
 
                 DrawerAction(
