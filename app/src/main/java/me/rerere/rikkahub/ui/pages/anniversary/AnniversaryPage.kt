@@ -29,6 +29,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -190,12 +191,13 @@ fun AnniversaryPage(vm: SettingVM = koinViewModel()) {
         AnniversaryEditorDialog(
             initial = editing,
             onDismiss = { showEditor = false },
-            onSave = { title, date ->
+            onSave = { title, date, countdown ->
                 val old = editing
                 val saved = AnniversaryEntry(
                     id = old?.id ?: UUID.randomUUID().toString(),
                     title = title,
                     startDate = date.toString(),
+                    countdown = countdown,
                 )
                 val newEntries = if (old == null) entries + saved else entries.map { if (it.id == old.id) saved else it }
                 updateEntries(newEntries, display.anniversaryAiInjectionId ?: saved.id)
@@ -209,7 +211,10 @@ fun AnniversaryPage(vm: SettingVM = koinViewModel()) {
 private fun AnniversaryHero(entry: AnniversaryEntry?) {
     val today = LocalDate.now()
     val start = entry?.let { runCatching { LocalDate.parse(it.startDate) }.getOrNull() }
-    val days = start?.let { ChronoUnit.DAYS.between(it, today) + 1 }
+    val days = start?.let {
+        if (entry?.countdown == true) ChronoUnit.DAYS.between(today, it)
+        else ChronoUnit.DAYS.between(it, today) + 1
+    }
     val nextAnnual = start?.let {
         val monthDay = MonthDay.from(it)
         var candidate = monthDay.atYear(today.year)
@@ -239,22 +244,33 @@ private fun AnniversaryHero(entry: AnniversaryEntry?) {
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text(
-                    text = entry?.let { "我们的“${it.title}”" } ?: "把重要的日子留在这里",
+                    text = entry?.let {
+                        if (it.countdown) "距离“${it.title}”还有" else "我们的“${it.title}”"
+                    } ?: "把重要的日子留在这里",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (days != null && days >= 1) {
+                if (days != null && days >= 0) {
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(days.toString(), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Light)
                         Text(" 天", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 10.dp))
                     }
-                    Text("始于 ${entry?.startDate.orEmpty().replace('-', '.')}", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(10.dp))
                     Text(
-                        text = "距离下一周年还有 ${nextAnnual ?: 0} 天",
+                        if (entry?.countdown == true) "目标日期 ${entry.startDate.replace('-', '.')}"
+                        else "始于 ${entry?.startDate.orEmpty().replace('-', '.')}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
                     )
+                    if (entry?.countdown != true) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = "距离下一周年还有 ${nextAnnual ?: 0} 天",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else if (days == 0L) {
+                        Spacer(Modifier.height(10.dp))
+                        Text("就是今天", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    }
                 } else {
                     Text("新建一个纪念日后，这里会自动记录每一天。", style = MaterialTheme.typography.bodyMedium)
                 }
@@ -288,7 +304,10 @@ private fun AnniversaryRow(
     onDelete: () -> Unit,
 ) {
     val start = runCatching { LocalDate.parse(entry.startDate) }.getOrNull()
-    val days = start?.let { (ChronoUnit.DAYS.between(it, LocalDate.now()) + 1).coerceAtLeast(0) }
+    val days = start?.let {
+        if (entry.countdown) ChronoUnit.DAYS.between(LocalDate.now(), it).coerceAtLeast(0)
+        else (ChronoUnit.DAYS.between(it, LocalDate.now()) + 1).coerceAtLeast(0)
+    }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -315,7 +334,9 @@ private fun AnniversaryRow(
                 Text(entry.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(entry.startDate.replace('-', '.'), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (days != null) Text("$days 天", style = MaterialTheme.typography.titleMedium)
+            if (days != null) {
+                Text(if (entry.countdown) "倒数 $days 天" else "$days 天", style = MaterialTheme.typography.titleMedium)
+            }
             IconButton(onClick = onEdit) { Icon(HugeIcons.PencilEdit01, "编辑") }
             IconButton(onClick = onDelete) { Icon(HugeIcons.Delete01, "删除") }
         }
@@ -368,17 +389,34 @@ private fun AiInjectionCard(
 private fun AnniversaryEditorDialog(
     initial: AnniversaryEntry?,
     onDismiss: () -> Unit,
-    onSave: (String, LocalDate) -> Unit,
+    onSave: (String, LocalDate, Boolean) -> Unit,
 ) {
     var title by remember(initial) { mutableStateOf(initial?.title.orEmpty()) }
     var dateText by remember(initial) { mutableStateOf(initial?.startDate ?: LocalDate.now().toString()) }
+    var countdown by remember(initial) { mutableStateOf(initial?.countdown ?: false) }
     val parsedDate = runCatching { LocalDate.parse(dateText.trim()) }.getOrNull()
-    val valid = title.isNotBlank() && parsedDate != null && !parsedDate.isAfter(LocalDate.now())
+    val valid = title.isNotBlank() && parsedDate != null && if (countdown) {
+        !parsedDate.isBefore(LocalDate.now())
+    } else {
+        !parsedDate.isAfter(LocalDate.now())
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "新建纪念日" else "编辑纪念日") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !countdown,
+                        onClick = { countdown = false },
+                        label = { Text("累计天数") },
+                    )
+                    FilterChip(
+                        selected = countdown,
+                        onClick = { countdown = true },
+                        label = { Text("倒数日") },
+                    )
+                }
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -390,8 +428,10 @@ private fun AnniversaryEditorDialog(
                 OutlinedTextField(
                     value = dateText,
                     onValueChange = { dateText = it },
-                    label = { Text("开始日期") },
-                    supportingText = { Text("格式：2023-05-20") },
+                    label = { Text(if (countdown) "目标日期" else "开始日期") },
+                    supportingText = {
+                        Text(if (countdown) "格式：2026-12-31，可选择未来日期" else "格式：2023-05-20")
+                    },
                     isError = dateText.isNotBlank() && parsedDate == null,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -399,7 +439,7 @@ private fun AnniversaryEditorDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(title.trim(), parsedDate!!) }, enabled = valid) { Text("保存") }
+            TextButton(onClick = { onSave(title.trim(), parsedDate!!, countdown) }, enabled = valid) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )

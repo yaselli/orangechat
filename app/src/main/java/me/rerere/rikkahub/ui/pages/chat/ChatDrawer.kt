@@ -435,7 +435,7 @@ fun ChatDrawerContent(
             )
 
             Row(
-                horizontalArrangement = Arrangement.SpaceAround,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -543,8 +543,6 @@ fun ChatDrawerContent(
                         navController.navigate(Screen.Anniversary)
                     },
                 )
-
-                Spacer(Modifier.weight(1f))
 
                 DrawerAction(
                     icon = {

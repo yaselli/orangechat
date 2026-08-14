@@ -671,6 +671,8 @@ data class AnniversaryEntry(
     val title: String,
     /** ISO-8601 local date, for example 2023-05-20. */
     val startDate: String,
+    /** true 表示未来倒数日；false 表示从开始日累计天数。 */
+    val countdown: Boolean = false,
 )
 
 @Serializable

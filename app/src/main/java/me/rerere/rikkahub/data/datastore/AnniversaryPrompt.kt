@@ -18,7 +18,16 @@ fun DisplaySetting.buildAnniversaryPrompt(today: LocalDate = LocalDate.now()): S
     if (!anniversaryAiInjectionEnabled) return null
     val entry = anniversaries.firstOrNull { it.id == anniversaryAiInjectionId } ?: return null
     val startDate = runCatching { LocalDate.parse(entry.startDate) }.getOrNull() ?: return null
-    val dayNumber = ChronoUnit.DAYS.between(startDate, today) + 1
-    if (dayNumber < 1) return null
-    return "[纪念日] 用户的“${entry.title}”始于${entry.startDate}，今天是第${dayNumber}天。"
+    return if (entry.countdown) {
+        val remaining = ChronoUnit.DAYS.between(today, startDate)
+        when {
+            remaining > 0 -> "[倒数日] 距离用户的“${entry.title}”（${entry.startDate}）还有${remaining}天。"
+            remaining == 0L -> "[倒数日] 今天就是用户的“${entry.title}”（${entry.startDate}）。"
+            else -> null
+        }
+    } else {
+        val dayNumber = ChronoUnit.DAYS.between(startDate, today) + 1
+        if (dayNumber < 1) return null
+        "[纪念日] 用户的“${entry.title}”始于${entry.startDate}，今天是第${dayNumber}天。"
+    }
 }
