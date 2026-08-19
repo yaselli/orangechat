@@ -443,6 +443,7 @@ fun ChatDrawerContent(
                     .alpha(settings.displaySetting.drawerItemAlpha)
             ) {
                 DrawerAction(
+                    modifier = Modifier.weight(1f),
                     icon = {
                         Icon(
                             imageVector = HugeIcons.LookTop,
@@ -457,7 +458,10 @@ fun ChatDrawerContent(
                     },
                 )
 
-                Box {
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
                     DrawerAction(
                         icon = {
                             Icon(HugeIcons.Sparkles, "Menu")
@@ -509,6 +513,7 @@ fun ChatDrawerContent(
                 }
 
                 DrawerAction(
+                    modifier = Modifier.weight(1f),
                     icon = {
                         Icon(HugeIcons.InLove, stringResource(R.string.favorite_page_title))
                     },
@@ -521,6 +526,7 @@ fun ChatDrawerContent(
                 )
 
                 DrawerAction(
+                    modifier = Modifier.weight(1f),
                     icon = {
                         Icon(HugeIcons.ChartColumn, "统计数据")
                     },
@@ -533,6 +539,7 @@ fun ChatDrawerContent(
                 )
 
                 DrawerAction(
+                    modifier = Modifier.weight(1f),
                     icon = {
                         Icon(HugeIcons.TransactionHistory, "纪念日")
                     },
@@ -545,6 +552,7 @@ fun ChatDrawerContent(
                 )
 
                 DrawerAction(
+                    modifier = Modifier.weight(1f),
                     icon = {
                         Icon(HugeIcons.Settings03, null)
                     },
@@ -922,24 +930,32 @@ private fun DrawerAction(
     label: @Composable () -> Unit,
     onClick: () -> Unit,
 ) {
-    Surface(
-        onClick = onClick,
+    Box(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        shape = CircleShape,
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        contentAlignment = Alignment.Center,
     ) {
-        Tooltip(
-            tooltip = {
-                label()
-            }
+        Surface(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onClick),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            shape = CircleShape,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ) {
-            Box(
-                modifier = Modifier
-                    .padding(10.dp)
-                    .size(20.dp),
+            Tooltip(
+                tooltip = {
+                    label()
+                }
             ) {
-                icon()
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.size(20.dp)) {
+                        icon()
+                    }
+                }
             }
         }
     }
