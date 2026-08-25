@@ -13,6 +13,8 @@ data class ProactiveMessageSetting(
     val enabled: Boolean = false,
     val minIntervalMinutes: Int = 30,
     val maxIntervalMinutes: Int = 90,
+    // 同一条真实用户消息之后，最多允许几次主动追问；用户一回复即清零。
+    val maxFollowUpMessages: Int = 2,
     val assistantId: String = "",
     // 是否允许 AI 根据上下文判断后强制跳转屏幕到聊天界面
     val allowForceJump: Boolean = false,

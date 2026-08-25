@@ -14,9 +14,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -28,17 +30,22 @@ import me.rerere.hugeicons.stroke.Brain01
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Zap
+import me.rerere.hugeicons.stroke.Time02
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.androidx.compose.koinViewModel
 
 @Composable
-fun ExtensionsPage() {
+fun ExtensionsPage(vm: SettingVM = koinViewModel()) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val navController = LocalNavController.current
+    val settings by vm.settings.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -91,6 +98,27 @@ fun ExtensionsPage() {
                         leadingContent = { Icon(HugeIcons.Folder01, null) },
                         headlineContent = { Text(stringResource(R.string.extensions_page_workspace)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_workspace_desc)) },
+                    )
+                    item(
+                        leadingContent = { Icon(HugeIcons.Time02, null) },
+                        headlineContent = { Text("时间注入") },
+                        supportingContent = {
+                            Text("向 AI 提供当前时间和真实回复间隔；关闭后不会加入这段上下文")
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.systemToolsSetting.timeContextInjectionEnabled,
+                                onCheckedChange = { enabled ->
+                                    vm.updateSettings(
+                                        settings.copy(
+                                            systemToolsSetting = settings.systemToolsSetting.copy(
+                                                timeContextInjectionEnabled = enabled,
+                                            ),
+                                        ),
+                                    )
+                                },
+                            )
+                        },
                     )
                 }
             }

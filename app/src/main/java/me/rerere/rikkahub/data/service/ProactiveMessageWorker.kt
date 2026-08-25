@@ -35,7 +35,11 @@ class ProactiveMessageWorker(
         private const val TAG = "ProactiveMessageWorker"
         private const val UNIQUE_WORK_NAME = "proactive_message_work"
 
-        fun scheduleNext(context: Context, setting: me.rerere.rikkahub.data.datastore.ProactiveMessageSetting) {
+        fun scheduleNext(
+            context: Context,
+            setting: me.rerere.rikkahub.data.datastore.ProactiveMessageSetting,
+            delayMinutesOverride: Int? = null,
+        ) {
             if (!setting.enabled) {
                 cancel(context)
                 return
@@ -43,7 +47,8 @@ class ProactiveMessageWorker(
 
             val minMinutes = setting.minIntervalMinutes.coerceAtLeast(1)
             val maxMinutes = setting.maxIntervalMinutes.coerceAtLeast(minMinutes)
-            val delayMinutes = Random.nextInt(minMinutes, maxMinutes + 1)
+            val delayMinutes = delayMinutesOverride?.coerceAtLeast(1)
+                ?: Random.nextInt(minMinutes, maxMinutes + 1)
 
             val workRequest = OneTimeWorkRequestBuilder<ProactiveMessageWorker>()
                 .setInitialDelay(delayMinutes.toLong(), TimeUnit.MINUTES)

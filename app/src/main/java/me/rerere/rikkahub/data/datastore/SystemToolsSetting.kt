@@ -20,6 +20,11 @@ data class SystemToolsSetting(
     val ocrApiUrl: String = "",
     val ocrModel: String = "",
 
+    // Lightweight time context injection. This is deliberately independent
+    // from individual assistants so the user has one predictable switch.
+    val timeContextInjectionEnabled: Boolean = false,
+    val timeContextInjectionIntervalMinutes: Int = 5,
+
     // Feature 1: Location exploration
     val locationExploreEnabled: Boolean = false,
     val locationExploreRadius: Int = 1000,

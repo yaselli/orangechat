@@ -244,26 +244,6 @@ private fun AssistantMemoryContent(
                 }
             )
             item(
-                headlineContent = { Text(stringResource(R.string.assistant_page_time_reminder)) },
-                supportingContent = {
-                    Text(
-                        text = stringResource(R.string.assistant_page_time_reminder_desc),
-                    )
-                },
-                trailingContent = {
-                    Switch(
-                        checked = assistant.enableTimeReminder,
-                        onCheckedChange = {
-                            onUpdateAssistant(
-                                assistant.copy(
-                                    enableTimeReminder = it
-                                )
-                            )
-                        }
-                    )
-                }
-            )
-            item(
                 headlineContent = { Text("外置记忆库") },
                 supportingContent = {
                     val count = assistant.externalMemoryIds.size
