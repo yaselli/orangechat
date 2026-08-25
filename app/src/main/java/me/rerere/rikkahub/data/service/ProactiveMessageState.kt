@@ -64,7 +64,10 @@ internal class ProactiveMessageStateStore(context: Context) {
     fun recordSent(state: ProactiveSessionState, messageId: String, text: String): ProactiveSessionState {
         val updated = state.copy(
             followUpCount = state.followUpCount + 1,
-            recentProactiveMessageIds = (state.recentProactiveMessageIds + messageId).takeLast(4).toSet(),
+            recentProactiveMessageIds = (state.recentProactiveMessageIds + messageId)
+                .toList()
+                .takeLast(4)
+                .toSet(),
             lastProactiveText = text.take(500),
             stopUntilUserReturns = false,
         )
