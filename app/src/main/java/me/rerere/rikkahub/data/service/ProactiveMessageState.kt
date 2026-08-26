@@ -17,16 +17,29 @@ internal data class ProactiveDecision(
 )
 
 internal fun parseProactiveDecision(rawText: String, jumpDetectedDuringStreaming: Boolean): ProactiveDecision {
-    val waitMatch = Regex("\\[WAIT(?::(\\d+))?]", RegexOption.IGNORE_CASE).find(rawText)
+    val finalLine = rawText.lineSequence().lastOrNull { it.isNotBlank() }.orEmpty()
+    val bracketWaitRegex = Regex("\\[WAIT(?:\\s*[:：]\\s*(\\d+))?]", RegexOption.IGNORE_CASE)
+    val bareWaitRegex = Regex("^\\s*WAIT(?:\\s*[:：]?\\s*(\\d+))?\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE)
+    val bracketWaitMatch = bracketWaitRegex.find(rawText)
+    val bareWaitMatch = bareWaitRegex.matchEntire(finalLine)
+    val waitMatch = bracketWaitMatch ?: bareWaitMatch
     val waitMinutes = waitMatch?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(5, 1440)
-    val stop = Regex("\\[STOP]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
-    val pass = Regex("\\[PASS]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
+
+    val bracketStop = Regex("\\[STOP]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
+    val bareStop = Regex("^\\s*STOP\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE).matches(finalLine)
+    val stop = bracketStop || bareStop
+
+    val bracketPass = Regex("\\[PASS]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
+    val barePass = Regex("^\\s*PASS\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE).matches(finalLine)
+    val pass = bracketPass || barePass
     val jump = jumpDetectedDuringStreaming ||
         Regex("\\[JUMP]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
 
-    val cleaned = rawText
+    val cleaned = if (bareStop || barePass || bareWaitMatch != null) {
+        ""
+    } else rawText
         .replace(Regex("\\[(?:PASS|STOP|JUMP)]", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("\\[WAIT(?::\\d+)?]", RegexOption.IGNORE_CASE), "")
+        .replace(bracketWaitRegex, "")
         .trim()
 
     return ProactiveDecision(
@@ -66,7 +79,7 @@ internal class ProactiveMessageStateStore(context: Context) {
             followUpCount = state.followUpCount + 1,
             recentProactiveMessageIds = (state.recentProactiveMessageIds + messageId)
                 .toList()
-                .takeLast(4)
+                .takeLast(8)
                 .toSet(),
             lastProactiveText = text.take(500),
             stopUntilUserReturns = false,

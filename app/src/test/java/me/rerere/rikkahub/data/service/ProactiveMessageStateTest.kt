@@ -40,4 +40,42 @@ class ProactiveMessageStateTest {
         assertFalse(decision.shouldSend)
         assertTrue(decision.stopUntilUserReturns)
     }
+
+    @Test
+    fun `bare stop with punctuation never leaks into chat`() {
+        val decision = parseProactiveDecision("STOP。", false)
+        assertFalse(decision.shouldSend)
+        assertTrue(decision.stopUntilUserReturns)
+        assertEquals("", decision.message)
+    }
+
+    @Test
+    fun `bare pass never leaks into chat`() {
+        val decision = parseProactiveDecision(" pass ", false)
+        assertFalse(decision.shouldSend)
+        assertEquals("", decision.message)
+    }
+
+    @Test
+    fun `bare wait accepts spaces and full width colon`() {
+        val decision = parseProactiveDecision("WAIT ： 90。", false)
+        assertFalse(decision.shouldSend)
+        assertEquals(90, decision.waitMinutes)
+        assertEquals("", decision.message)
+    }
+
+    @Test
+    fun `normal sentence containing stop is not swallowed`() {
+        val decision = parseProactiveDecision("别说 stop 这种词啦", false)
+        assertTrue(decision.shouldSend)
+        assertEquals("别说 stop 这种词啦", decision.message)
+    }
+
+    @Test
+    fun `explanation followed by bare stop is treated as control`() {
+        val decision = parseProactiveDecision("这时候不该继续打扰。\nSTOP", false)
+        assertFalse(decision.shouldSend)
+        assertTrue(decision.stopUntilUserReturns)
+        assertEquals("", decision.message)
+    }
 }

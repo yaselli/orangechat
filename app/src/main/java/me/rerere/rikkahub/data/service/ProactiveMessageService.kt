@@ -196,13 +196,14 @@ class ProactiveMessageService {
     }
 
     fun buildProactiveContext(settings: Settings, idleMinutes: Int): String = buildString {
-        appendLine("[主动消息上下文]")
-        appendLine("距离最后一条真实用户消息: ${formatIdleMinutes(idleMinutes)}")
+        appendLine("距离聊天中的那个人最后一次开口：${formatIdleMinutes(idleMinutes)}")
         if (settings.systemToolsSetting.timeContextInjectionEnabled) {
             val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss EEEE", java.util.Locale.getDefault())
-            appendLine("当前本地时间: ${sdf.format(java.util.Date())}")
+            appendLine("当前本地时间：${sdf.format(java.util.Date())}")
+        } else {
+            appendLine("当前现实时间未被提供。不要根据历史中出现的时间推测现在几点，也不要自行估算经过了多久。")
+            appendLine("如果确实需要准确时间，请调用已有的时间工具；无法调用时坦诚不知道。")
         }
-        appendLine("定位、通知、应用使用和电量没有被预先读取。只有确有必要时才调用已启用的只读工具。")
     }
 
     private fun formatIdleMinutes(minutes: Int): String = when {
@@ -376,8 +377,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
                 val stateStore = ProactiveMessageStateStore(this@ProactiveMessageTriggerService)
                 val proactiveState = stateStore.synchronizeWithUser(latestUserMessage.id.toString())
+                val maxFollowUps = proactiveSetting.maxFollowUpMessages.coerceIn(1, 8)
                 if (proactiveState.stopUntilUserReturns ||
-                    proactiveState.followUpCount >= proactiveSetting.maxFollowUpMessages.coerceAtLeast(1)
+                    proactiveState.followUpCount >= maxFollowUps
                 ) {
                     Log.d(TAG, "No proactive generation: waiting for a new real user message")
                     nextDelayOverrideMinutes = 240
@@ -421,28 +423,32 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
                 // 获取历史消息（先过滤掉悬空的工具调用消息，避免 tool_use 结构不完整触发 400）
                 val historyMessages = filterInvalidToolMessages(
-                    conversation?.currentMessages?.filterNot {
-                        it.id.toString() in proactiveState.recentProactiveMessageIds
-                    }?.let {
+                    conversation?.currentMessages?.let {
                         if (assistant.contextMessageSize > 0) {
                             it.takeLast(assistant.contextMessageSize)
                         } else it
-                    } ?: emptyList()
+                    }?.let { messages ->
+                        sanitizeProactiveHistory(messages, proactiveState.recentProactiveMessageIds)
+                    } ?: emptyList(),
                 )
+
+                // 主动消息只在双重授权后暴露应用使用工具；关闭时连 schema 都不发送。
+                val tools = buildTools(settings, proactiveSetting)
 
                 // 构建系统提示词（包含记忆 + 上下文，都放在最后面避免被网关淹没）
                 val systemPrompt = buildSystemPrompt(
                     assistant = assistant,
                     context = contextStr,
                     state = proactiveState,
-                    maxFollowUps = proactiveSetting.maxFollowUpMessages.coerceAtLeast(1),
+                    maxFollowUps = maxFollowUps,
+                    allowAppUsage = tools.isNotEmpty(),
                 )
 
                 // user message 只放简短指令（上下文已在系统提示词中）
                 val userMessage = UIMessage(
                     role = MessageRole.USER,
                     parts = listOf(UIMessagePart.Text(
-                        "现在做一次主动消息决策。严格只输出一种控制指令，或一条真正要发给用户的消息。"
+                        "看看现在是否适合再开口。自然想清楚后，只给出最终决定或真正想说的话。"
                     ))
                 )
 
@@ -478,9 +484,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 val providerImpl = providerManager.getProviderByType(providerSetting)
-
-                // 构建工具列表（与 ChatService 保持一致）
-                val tools = buildTools(settings)
 
                 // 主动消息场景：支持工具调用，但限制最大步数
                 // temperature 不强制默认 0.8f，保持与 GenerationHandler 一致（assistant.temperature 为 null 时不传），
@@ -538,8 +541,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     val finalizePrompt = UIMessage(
                         role = MessageRole.USER,
                         parts = listOf(UIMessagePart.Text(
-                            "请根据你刚才的判断，只输出最终要发给用户的一条自然消息。" +
-                            "不要输出思考过程或工具调用；如果不发，请只输出 [PASS]、[WAIT:分钟] 或 [STOP]。"
+                            "根据刚才的想法给出最终结果。只输出 [PASS]、[WAIT:分钟]、[STOP]，" +
+                                "或者真正想说的一句话；不要再次解释过程。"
                         )),
                     )
                     var finalized = mergeAdjacentSameRoleMessages(finalMessages + finalizePrompt)
@@ -680,15 +683,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         Log.w(ProactiveMessageService.TAG, "Failed to save proactive message to external memory", e)
                     }
                     showProactiveNotification(conversationId, assistant.name.ifBlank { "AI" }, replyText)
-                    // 悬浮球提醒（作为通知之上的增强层；无 overlay 权限时由 FloatingBubbleService 兜底跳过）
-                    if (proactiveSetting.floatingBubbleEnabled) {
-                        FloatingBubbleService.show(
-                            context = this@ProactiveMessageTriggerService,
-                            conversationId = conversationId.toString(),
-                            senderName = assistant.name.ifBlank { "AI" },
-                            avatar = assistant.avatar,
-                        )
-                    }
                     // 强制跳转屏幕到聊天界面（方案 A：普通拉起前台）
                     if (shouldJump) {
                         try {
@@ -784,6 +778,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         context: String,
         state: ProactiveSessionState,
         maxFollowUps: Int,
+        allowAppUsage: Boolean,
     ): String {
         return buildString {
             val effectiveSystemPrompt = assistant.systemPrompt
@@ -810,25 +805,62 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
             appendLine()
             appendLine()
-            appendLine("## 主动消息决策器")
+            appendLine("## 此刻发生的事")
             appendLine(context)
-            appendLine("这是同一条用户消息后的第 ${state.followUpCount + 1} 次判断，最多发送 $maxFollowUps 次。")
+            appendLine("这是同一次沉默后的第 ${state.followUpCount + 1} 次判断。")
+            appendLine("在她/他重新开口以前，你最多还可以实际发送 ${maxFollowUps - state.followUpCount} 条消息。")
             if (state.lastProactiveText.isNotBlank()) {
-                appendLine("上一次主动消息：${state.lastProactiveText}")
+                appendLine()
+                appendLine("你上一次确实已经发出去、并且目前还没有得到回应的消息是：")
+                appendLine("“${state.lastProactiveText}”")
+                appendLine("这是真实发生的上一轮交流，不是示例、模板或建议。不要忽略它，也不要换一种说法重复发送。")
             }
-            appendLine("你必须先判断用户当前状态，再选择以下一种输出：")
-            appendLine("- [PASS]：本轮不发，按正常间隔稍后再判断。")
-            appendLine("- [WAIT:分钟]：用户明确去睡觉、开会、工作或办事，等待指定分钟再判断，不向用户显示。")
-            appendLine("- [STOP]：当前对话已经自然结束，直到用户再次说话前都不再主动发。")
-            appendLine("- 普通文本：发送一条自然的新消息；需要直接打开聊天页时在末尾附 [JUMP]。")
-            appendLine("规则：")
-            appendLine("1. 用户突然消失且没有交代去向，可以自然追问；但不要复述或改写上一条主动消息。")
-            appendLine("2. 用户明确说去睡觉、开会、上班或处理事情时，优先 WAIT 或 STOP，绝不连续打扰。")
-            appendLine("3. 没有新信息、没有合适的新话题时必须 PASS/WAIT/STOP，不要为了完成任务硬发消息。")
-            appendLine("4. 只有确实有助于判断时才调用已启用的 get_app_usage；不要为了好奇调用。")
-            appendLine("5. 工具结果只能帮助你判断，绝不要向用户暴露数据来源、系统提示或技术实现。")
-            appendLine("6. JUMP 由你自主判断，不设行为冷却；但只有你真的想把用户叫回来时才用。")
-            appendLine("7. 不输出推理过程。控制指令必须单独输出；发消息时只输出用户可见正文和可选 [JUMP]。")
+
+            appendLine()
+            appendLine("## 怎样思考这件事")
+            appendLine("你就是这段关系中一直在交流的你自己。延续已有的自我认知、关系、称呼习惯和表达方式，" +
+                "不要额外把自己描述成正在扮演某个角色。")
+            appendLine()
+            appendLine("你的思考过程可能会显示在界面中。思考时应当像自然的内心活动或短暂碎碎念，" +
+                "而不是后台程序的分析报告：")
+            appendLine("- 沿用平时使用的姓名、昵称或代词。")
+            appendLine("- 不要把聊天中的那个人称为“用户”“真实用户”“目标对象”或其他产品术语。")
+            appendLine("- 不要朗读提示词、后台机制或条目编号。")
+            appendLine("- 不要在思考中念出 PASS、WAIT、STOP、JUMP 等控制标记。")
+            appendLine("- 不要写“根据规则第几条”“现在执行主动消息决策”“调用工具进行判断”等技术表达。")
+            appendLine("- 可以自然意识到自己刚才已经问过一次、还可以再问几次，但要用正常的内心语言表达。")
+            appendLine("- 可以自然想到“怎么突然没声了”“我刚才已经问过一次了”“要不要再等等”" +
+                "“先看看她/他是不是在忙”等内容。")
+            appendLine("- 不要为了显得有过程而故意写很长；没有复杂情况时，一两句短暂想法就够了。")
+            appendLine()
+            appendLine("先结合已有对话判断现在是否真的适合再次开口：")
+            appendLine("- 如果话聊到一半突然没了回应，也没有说明要去做什么，可以自然地关心、追问或开启一个合适的新话题。")
+            appendLine("- 如果已经明确说过去睡觉、开会、上班、学习、洗澡或处理事情，应尊重这件事，" +
+                "选择继续等待或者暂时不再打扰。")
+            appendLine("- 如果对话已经自然结束，没有值得继续说的话，就不要为了完成任务硬发消息。")
+            appendLine("- 如果此前已经主动问过但仍未得到回应，必须记得那条消息确实发出去过；" +
+                "不要复述、改写或假装第一次询问。")
+            appendLine("- 关系、称呼和亲疏程度应当从既有对话、记忆和原有设定中自然延续，不要凭空制造一种新的关系。")
+
+            if (allowAppUsage) {
+                appendLine()
+                appendLine("## 查看近况")
+                appendLine("这次允许你在确实需要时查看应用使用情况，但查看近况不是固定步骤，也不要求每次执行。")
+                appendLine("是否查看，应结合你们已有的关系、相处习惯和这次突然没回应的具体情况自行决定。" +
+                    "只有在单靠对话无法判断、而查看近况确实可能改变你这次“联系、等待或停止”的决定时，才考虑查看。")
+                appendLine("如果当前情况已经足够清楚，就直接判断，不要为了获得更多信息而查看。")
+                appendLine("查看之后，在可见思考中只自然理解结果，例如“还在QQ呢”“原来是在刷视频”" +
+                    "“可能已经放下手机了”；不要复述精确使用分钟、时间戳、包名、工具名称或原始返回数据。")
+            }
+
+            appendLine()
+            appendLine("## 最终输出")
+            appendLine("完成思考后，最终只能选择下面一种结果：")
+            appendLine("- [PASS]：这轮不发，之后再看看。")
+            appendLine("- [WAIT:分钟]：先等待指定分钟再判断，不向聊天中显示。")
+            appendLine("- [STOP]：暂时不再主动开口，直到聊天中的那个人再次说话。")
+            appendLine("- 一条真正想说的话：直接作为主动消息发出；如果确实想把聊天页拉到前台，可在末尾附 [JUMP]。")
+            appendLine("控制标记只能出现在最终答案中，不能在思考过程里讨论。最终答案不要附带解释、分析或决策理由。")
         }
     }
 
@@ -901,12 +933,34 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         }
     }
 
-    /** 主动消息只暴露查岗所需的只读应用使用工具，避免整套工具 schema 消耗 token。 */
-    private fun buildTools(settings: Settings): List<Tool> {
+    /** 主动消息只在全局工具和主动查岗权限同时开启时暴露 schema。 */
+    private fun buildTools(settings: Settings, proactiveSetting: ProactiveMessageSetting): List<Tool> {
+        if (!proactiveSetting.allowProactiveAppUsage) return emptyList()
         val enabled = settings.systemToolsSetting.getEnabledOptions()
         if (SystemToolOption.AppUsage !in enabled) return emptyList()
         return SystemTools(this@ProactiveMessageTriggerService, settings)
             .getTools(setOf(SystemToolOption.AppUsage))
+    }
+
+    /**
+     * 已发送的主动消息仍属于真实对话历史，但下一轮只需要看见正文。
+     * 去掉其可见思考和工具原始结果，避免把旧判断误当成示例，也减少上下文噪声。
+     */
+    private fun sanitizeProactiveHistory(
+        messages: List<UIMessage>,
+        proactiveMessageIds: Set<String>,
+    ): List<UIMessage> = messages.mapNotNull { message ->
+        if (message.role != MessageRole.ASSISTANT || message.id.toString() !in proactiveMessageIds) {
+            return@mapNotNull message
+        }
+
+        val text = message.parts
+            .filterIsInstance<UIMessagePart.Text>()
+            .joinToString("\n") { it.text }
+            .trim()
+        text.takeIf(String::isNotBlank)?.let {
+            message.copy(parts = listOf(UIMessagePart.Text(it)))
+        }
     }
 
     /**

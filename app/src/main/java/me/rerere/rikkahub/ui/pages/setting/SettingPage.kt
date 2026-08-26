@@ -76,6 +76,7 @@ import me.rerere.hugeicons.stroke.Shield02
 import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Share04
 import me.rerere.hugeicons.stroke.Sun01
+import me.rerere.hugeicons.stroke.Time02
 import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.hugeicons.stroke.MessageMultiple01
 import me.rerere.hugeicons.stroke.Message01
@@ -312,6 +313,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.WavingHand01, null) },
                         supportingContent = { Text("AI 在设定间隔内主动发消息，有记忆有上下文") },
                         headlineContent = { Text("主动消息") },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingExtraInjection) },
+                        leadingContent = { Icon(HugeIcons.Time02, null) },
+                        supportingContent = { Text("分别管理当前时间与回复间隔信息") },
+                        headlineContent = { Text("额外注入") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingWeixinBot) },

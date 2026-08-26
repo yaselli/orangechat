@@ -145,6 +145,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingDisplayNotificationPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayTransparencyPage
+import me.rerere.rikkahub.ui.pages.setting.SettingExtraInjectionPage
 import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
@@ -700,6 +701,10 @@ entry<Screen.Extensions> {
                                 SettingProactiveMessagePage()
                             }
 
+                            entry<Screen.SettingExtraInjection> {
+                                SettingExtraInjectionPage()
+                            }
+
                             entry<Screen.SettingWeixinBot> {
                                 SettingWeixinBotPage()
                             }
@@ -1079,6 +1084,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingProactiveMessage : Screen
+
+    @Serializable
+    data object SettingExtraInjection : Screen
 
     @Serializable
     data object SettingWeixinBot : Screen

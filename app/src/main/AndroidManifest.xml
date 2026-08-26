@@ -215,16 +215,6 @@
         android:value="proactive message scheduling" />
     </service>
 
-    <!-- Floating Bubble Service (主动消息悬浮球提醒) -->
-    <service
-      android:name=".data.service.FloatingBubbleService"
-      android:exported="false"
-      android:foregroundServiceType="specialUse">
-      <property
-        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="floating bubble notification" />
-    </service>
-
     <!-- Supabase Sync Service -->
     <service
       android:name=".data.service.SupabaseSyncService"

@@ -10,8 +10,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,7 +36,6 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RiskConfirmDialog
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.ProactiveMessageWorker
 import org.koin.compose.koinInject
@@ -46,7 +43,6 @@ import org.koin.compose.koinInject
 @Composable
 fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
     val context = LocalContext.current
-    val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
@@ -128,54 +124,6 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                             }
                         )
                     }
-                    // 悬浮球开关（仅在主动消息启用时显示）
-                    if (settings.proactiveMessageSetting.enabled) {
-                        val overlayPermissionLauncher = rememberLauncherForActivityResult(
-                            contract = ActivityResultContracts.StartActivityForResult()
-                        ) { }
-                        val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            Settings.canDrawOverlays(context)
-                        } else true
-
-                        item(
-                            headlineContent = { Text("悬浮球提醒") },
-                            supportingContent = {
-                                Text(
-                                    if (hasOverlayPermission) {
-                                        "主动消息到达时以悬浮球形式提醒，点击直接进入聊天页"
-                                    } else {
-                                        "需要先授予「显示在其他应用上层」权限才能显示悬浮球"
-                                    }
-                                )
-                            },
-                            trailingContent = {
-                                Switch(
-                                    checked = settings.proactiveMessageSetting.floatingBubbleEnabled,
-                                    onCheckedChange = { enabled ->
-                                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
-                                            // 无 overlay 权限，引导用户去系统设置授权
-                                            val intent = Intent(
-                                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                                Uri.parse("package:${context.packageName}")
-                                            )
-                                            overlayPermissionLauncher.launch(intent)
-                                            return@Switch
-                                        }
-                                        vm.updateSettings(
-                                            settings.copy(
-                                                proactiveMessageSetting = settings.proactiveMessageSetting.copy(
-                                                    floatingBubbleEnabled = enabled
-                                                )
-                                            )
-                                        )
-                                        if (!enabled) {
-                                            me.rerere.rikkahub.data.service.FloatingBubbleService.dismiss(context)
-                                        }
-                                    }
-                                )
-                            }
-                        )
-                    }
                 }
             }
             item {
@@ -232,7 +180,7 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                             OutlinedTextField(
                                 value = settings.proactiveMessageSetting.maxFollowUpMessages.toString(),
                                 onValueChange = { value ->
-                                    value.toIntOrNull()?.takeIf { it in 1..5 }?.let { count ->
+                                    value.toIntOrNull()?.takeIf { it in 1..8 }?.let { count ->
                                         vm.updateSettings(
                                             settings.copy(
                                                 proactiveMessageSetting = settings.proactiveMessageSetting.copy(
@@ -246,7 +194,30 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                                 singleLine = true,
                                 modifier = Modifier.padding(top = 8.dp),
                             )
-                            Text("同一条真实用户消息后最多发送几次；用户一回复就自动清零。建议 2 次。")
+                            Text("同一次沉默后最多发送几次，可设置 1～8 次；重新开口后自动清零。")
+                        },
+                    )
+                    item(
+                        headlineContent = { Text("允许主动消息查岗") },
+                        supportingContent = {
+                            Text(
+                                "开启后，AI 可在主动消息判断确有需要时调用应用使用工具；" +
+                                    "关闭后，主动消息不会读取应用使用情况。此设置不影响正常聊天中的工具使用。",
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.proactiveMessageSetting.allowProactiveAppUsage,
+                                onCheckedChange = { enabled ->
+                                    vm.updateSettings(
+                                        settings.copy(
+                                            proactiveMessageSetting = settings.proactiveMessageSetting.copy(
+                                                allowProactiveAppUsage = enabled,
+                                            ),
+                                        ),
+                                    )
+                                },
+                            )
                         },
                     )
                 }
@@ -314,7 +285,7 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                     item(
                         headlineContent = { Text("说明") },
                         supportingContent = {
-                            Text("AI 会先判断用户是突然离开、明确去忙，还是对话已经结束，再决定发送、等待或停止。不会把上一轮主动消息当成用户的新回复；达到连续追问上限后，会等待用户重新开口。\n\n只有确实需要查岗时才会调用已启用的应用使用工具，未调用就不会附带这份数据。AI 也可以自行用 JUMP 拉起聊天页。\n\nAlarmManager 与 WorkManager 会共同保证后台调度。")
+                            Text("AI 会先判断聊天中的人是突然离开、明确去忙，还是对话已经结束，再决定发送、等待或停止。上一轮主动消息会作为真实交流保留，达到连续追问上限后会等待再次开口。\n\n只有同时开启系统里的应用使用工具和本页的查岗权限，主动消息才可以按需查看；未调用就不会附带这份数据。AI 也可以自行用 JUMP 拉起聊天页。\n\nAlarmManager 与 WorkManager 会共同保证后台调度。")
                         },
                     )
                 }

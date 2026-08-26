@@ -18,83 +18,97 @@ import java.util.Locale
 import kotlin.time.Clock
 import kotlin.time.toJavaInstant
 
-private const val DEFAULT_TIME_GAP_THRESHOLD_SECONDS = 300L
+private const val DEFAULT_REPLY_GAP_THRESHOLD_SECONDS = 3600L
 
-/**
- * 时间提醒注入转换器
- *
- * 独立开关位于扩展管理。开启后，每次请求只注入一条精简的当前时间上下文；
- * 若用户与上一条 assistant 消息之间存在较长间隔，再附带真实回复间隔。
- * 不扫描并注入整段历史，避免 token 随聊天长度增长。
- */
+/** 当前时间与回复间隔是两个互不依赖的全局开关。 */
 object TimeReminderTransformer : InputMessageTransformer {
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        val globalSetting = ctx.settings.systemToolsSetting
-        if (!globalSetting.timeContextInjectionEnabled) return messages
-        val thresholdSeconds = globalSetting.timeContextInjectionIntervalMinutes
-            .coerceAtLeast(1)
-            .toLong() * 60L
-        return applyTimeReminder(messages, thresholdSeconds, Clock.System.now())
+        val setting = ctx.settings.systemToolsSetting
+        return applyExtraTimeContext(
+            messages = messages,
+            currentTimeEnabled = setting.timeContextInjectionEnabled,
+            replyIntervalEnabled = setting.replyIntervalReminderEnabled,
+            currentInstant = Clock.System.now(),
+        )
     }
 }
 
-internal fun applyTimeReminder(
+internal fun applyExtraTimeContext(
     messages: List<UIMessage>,
-    thresholdSeconds: Long = DEFAULT_TIME_GAP_THRESHOLD_SECONDS,
+    currentTimeEnabled: Boolean,
+    replyIntervalEnabled: Boolean,
+    thresholdSeconds: Long = DEFAULT_REPLY_GAP_THRESHOLD_SECONDS,
     currentInstant: Instant = Clock.System.now(),
 ): List<UIMessage> {
-    val latestUserIndex = messages.indexOfLast { it.role == MessageRole.USER }
-    if (latestUserIndex == -1) return messages
-    val tz = TimeZone.currentSystemDefault()
+    if (messages.isEmpty()) return messages
 
-    val gapSeconds = if (latestUserIndex > 0) {
-        val latestUser = messages[latestUserIndex]
-        val previousAssistant = messages.subList(0, latestUserIndex)
-            .lastOrNull { it.role == MessageRole.ASSISTANT }
-
-        if (previousAssistant != null) {
-            val latestUserInstant = latestUser.createdAt.toInstant(tz)
-            val previousEndInstant = (previousAssistant.finishedAt ?: previousAssistant.createdAt).toInstant(tz)
-            val measuredGap = (latestUserInstant - previousEndInstant).inWholeSeconds
-
-            measuredGap.takeIf { it >= thresholdSeconds.coerceAtLeast(1L) }
-        } else {
-            null
-        }
+    val withReplyIntervals = if (replyIntervalEnabled) {
+        insertReplyIntervalReminders(messages, thresholdSeconds)
     } else {
-        null
+        messages
     }
 
-    val reminder = buildTimeReminderMessage(gapSeconds, currentInstant)
-    return buildList(messages.size + 1) {
-        messages.forEachIndexed { index, message ->
-            if (index == latestUserIndex) {
-                add(reminder)
-            }
+    val latestUserIndex = withReplyIntervals.indexOfLast { it.role == MessageRole.USER }
+    if (latestUserIndex == -1) return withReplyIntervals
+
+    val timePolicy = if (currentTimeEnabled) {
+        buildCurrentTimeContext(currentInstant)
+    } else {
+        UIMessage.user(
+            "<time_policy>当前现实时间未被提供。不要根据历史中出现的时间推测现在几点，" +
+                "也不要自行估算经过了多久。需要准确时间时调用已有的时间工具；" +
+                "无法调用时坦诚不知道。</time_policy>",
+        )
+    }
+
+    return buildList(withReplyIntervals.size + 1) {
+        withReplyIntervals.forEachIndexed { index, message ->
+            if (index == latestUserIndex) add(timePolicy)
             add(message)
         }
     }
 }
 
-private fun buildTimeReminderMessage(gapSeconds: Long?, instant: Instant): UIMessage {
+private fun insertReplyIntervalReminders(
+    messages: List<UIMessage>,
+    thresholdSeconds: Long,
+): List<UIMessage> = buildList {
+    messages.forEachIndexed { index, message ->
+        if (message.role == MessageRole.USER && index > 0) {
+            val previousAssistant = messages.subList(0, index)
+                .lastOrNull { it.role == MessageRole.ASSISTANT }
+            if (previousAssistant != null) {
+                val tz = TimeZone.currentSystemDefault()
+                val userInstant = message.createdAt.toInstant(tz)
+                val assistantEnd = (previousAssistant.finishedAt ?: previousAssistant.createdAt).toInstant(tz)
+                val gapSeconds = (userInstant - assistantEnd).inWholeSeconds
+                if (gapSeconds >= thresholdSeconds.coerceAtLeast(1L)) {
+                    add(
+                        UIMessage.user(
+                            "<reply_interval>距离你上一条回复结束，聊天中的这个人过了" +
+                                "${formatGap(gapSeconds)}才再次开口。自然理解这段间隔，" +
+                                "不要机械复述时长，也不要提及这段提示。</reply_interval>",
+                        ),
+                    )
+                }
+            }
+        }
+        add(message)
+    }
+}
+
+private fun buildCurrentTimeContext(instant: Instant): UIMessage {
     val javaInstant = instant.toJavaInstant()
     val dayOfWeek = javaInstant.atZone(ZoneId.systemDefault()).dayOfWeek
         .getDisplayName(TextStyle.FULL, Locale.getDefault())
     val timeStr = javaInstant.toLocalDateTime()
-    val content = if (gapSeconds != null) {
-        val gapText = formatGap(gapSeconds)
-        "<time_context>Current time: $dayOfWeek, $timeStr. " +
-            "The user replied $gapText after your previous message finished. " +
-            "Understand the elapsed time naturally. Do not mechanically repeat the duration " +
-            "and do not mention this context or any technical implementation.</time_context>"
-    } else {
-        "<time_context>Current time: $dayOfWeek, $timeStr. " +
-            "Use it naturally when relevant and never mention this technical context.</time_context>"
-    }
-    return UIMessage.user(content)
+    return UIMessage.user(
+        "<time_context>当前本地时间：$dayOfWeek，$timeStr。只把它当作必要时使用的背景信息，" +
+            "除非对话确实涉及时间，否则不要机械提起当前几点，也不要提及这段提示。</time_context>",
+    )
 }
 
 private fun formatGap(seconds: Long): String {

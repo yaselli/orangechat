@@ -12,6 +12,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,48 +30,80 @@ class TimeReminderTransformerTest {
 
     @Test
     fun `empty messages remain empty`() {
-        assertTrue(applyTimeReminder(emptyList()).isEmpty())
+        assertTrue(
+            applyExtraTimeContext(
+                emptyList(),
+                currentTimeEnabled = false,
+                replyIntervalEnabled = false,
+            ).isEmpty(),
+        )
     }
 
     @Test
-    fun `single user gets one current time context`() {
+    fun `current time switch injects exact time without reply interval`() {
         val messages = listOf(
             message(MessageRole.USER, "Hello", LocalDateTime(2026, 8, 25, 10, 0)),
         )
-        val result = applyTimeReminder(
+        val result = applyExtraTimeContext(
             messages,
+            currentTimeEnabled = true,
+            replyIntervalEnabled = false,
             currentInstant = Instant.parse("2026-08-25T01:05:00Z"),
         )
         assertEquals(2, result.size)
         assertTrue(text(result[0]).contains("<time_context>"))
+        assertFalse(text(result[0]).contains("<reply_interval>"))
         assertEquals("Hello", text(result[1]))
     }
 
     @Test
-    fun `long reply gap is described from previous assistant finish`() {
+    fun `time disabled injects one stable no guessing policy`() {
+        val messages = listOf(
+            message(MessageRole.USER, "现在几点", LocalDateTime(2026, 8, 25, 10, 0)),
+        )
+        val result = applyExtraTimeContext(
+            messages,
+            currentTimeEnabled = false,
+            replyIntervalEnabled = false,
+        )
+        assertEquals(2, result.size)
+        assertEquals(1, result.count { text(it).contains("<time_policy>") })
+        assertTrue(text(result[0]).contains("不要根据历史"))
+    }
+
+    @Test
+    fun `reply interval works independently from current time`() {
         val messages = listOf(
             message(MessageRole.ASSISTANT, "去忙吧", LocalDateTime(2026, 8, 25, 8, 0)),
             message(MessageRole.USER, "回来啦", LocalDateTime(2026, 8, 25, 10, 0)),
         )
-        val result = applyTimeReminder(
+        val result = applyExtraTimeContext(
             messages,
-            thresholdSeconds = 300,
-            currentInstant = Instant.parse("2026-08-25T01:05:00Z"),
+            currentTimeEnabled = false,
+            replyIntervalEnabled = true,
+            thresholdSeconds = 3600,
         )
-        assertEquals(3, result.size)
-        assertTrue(text(result[1]).contains("2小时0分0秒"))
+        assertEquals(4, result.size)
+        assertEquals(1, result.count { text(it).contains("<time_policy>") })
+        assertEquals(1, result.count { text(it).contains("<reply_interval>") })
+        assertTrue(result.any { text(it).contains("2小时0分0秒") })
+        assertFalse(result.any { text(it).contains("<time_context>") })
     }
 
     @Test
-    fun `only latest user receives time context`() {
+    fun `short reply gap does not add interval marker`() {
         val messages = listOf(
-            message(MessageRole.USER, "一", LocalDateTime(2026, 8, 25, 8, 0)),
-            message(MessageRole.ASSISTANT, "二", LocalDateTime(2026, 8, 25, 8, 1)),
-            message(MessageRole.USER, "三", LocalDateTime(2026, 8, 25, 10, 0)),
+            message(MessageRole.ASSISTANT, "一会儿见", LocalDateTime(2026, 8, 25, 8, 0)),
+            message(MessageRole.USER, "好", LocalDateTime(2026, 8, 25, 8, 5)),
         )
-        val result = applyTimeReminder(messages, currentInstant = Instant.parse("2026-08-25T01:05:00Z"))
-        assertEquals(4, result.size)
-        assertEquals(1, result.count { text(it).contains("<time_context>") })
-        assertEquals("三", text(result.last()))
+        val result = applyExtraTimeContext(
+            messages,
+            currentTimeEnabled = true,
+            replyIntervalEnabled = true,
+            thresholdSeconds = 3600,
+            currentInstant = Instant.parse("2026-08-25T01:05:00Z"),
+        )
+        assertEquals(3, result.size)
+        assertFalse(result.any { text(it).contains("<reply_interval>") })
     }
 }

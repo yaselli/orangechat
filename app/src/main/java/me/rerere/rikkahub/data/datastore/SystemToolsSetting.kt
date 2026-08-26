@@ -23,6 +23,9 @@ data class SystemToolsSetting(
     // Lightweight time context injection. This is deliberately independent
     // from individual assistants so the user has one predictable switch.
     val timeContextInjectionEnabled: Boolean = false,
+    // Insert a compact elapsed-time marker before messages that follow a long pause.
+    // Kept separate from current-time injection so either feature can be used alone.
+    val replyIntervalReminderEnabled: Boolean = false,
     val timeContextInjectionIntervalMinutes: Int = 5,
 
     // Feature 1: Location exploration
