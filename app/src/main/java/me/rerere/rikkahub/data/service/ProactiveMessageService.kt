@@ -25,6 +25,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import androidx.core.app.NotificationCompat
 import android.os.Build
+import android.os.PowerManager
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -70,6 +71,8 @@ import kotlin.uuid.Uuid
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
 class ProactiveMessageService {
@@ -251,10 +254,13 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val json: Json by inject()
     private val chatService: ChatService by inject()
     private val proactiveMessageService = ProactiveMessageService()
+    private val activeRunCount = AtomicInteger(0)
+    private val generationWakeLocks = ConcurrentHashMap<Int, PowerManager.WakeLock>()
 
     companion object {
         private const val TAG = "ProactiveMessageTrigger"
         private const val MAX_TOOL_STEPS = 5 // 主动消息最大工具调用步数
+        private const val GENERATION_WAKE_LOCK_TIMEOUT_MS = 10 * 60 * 1000L
         // 外部触发（网关轮询）时跳过内部 minInterval 去重
         const val EXTRA_FORCE_TRIGGER = "force_trigger"
         // 激进模式设备事件上下文（由 DeviceEventAiTriggerService 传入）
@@ -292,7 +298,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         val isFromDeviceEvent = deviceEventContext != null
         if (isFromDeviceEvent) {
             Log.i(TAG, "Ignoring legacy aggressive-mode device event")
-            stopSelf()
+            if (activeRunCount.get() == 0) stopSelf(startId)
             return START_NOT_STICKY
         }
         if (isForceTrigger) {
@@ -305,6 +311,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             .build()
         startForeground(20001, notification)
 
+        // WorkManager 只负责把服务唤醒；真正耗时的是下面完整的流式生成、落库和通知流程。
+        // WakeLock 必须由服务持有到该流程结束，否则华为/鸿蒙、红米/澎湃等 ROM 在息屏后
+        // 可能暂停网络流：上游已经开始计费，但本地收不到完整正文。
+        activeRunCount.incrementAndGet()
+        acquireGenerationWakeLock(startId)
+
         CoroutineScope(Dispatchers.IO).launch {
             var conversationId: kotlin.uuid.Uuid? = null
             var nextDelayOverrideMinutes: Int? = null
@@ -313,7 +325,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val proactiveSetting = settings.proactiveMessageSetting
 
                 if (!proactiveSetting.enabled) {
-                    stopSelf()
                     return@launch
                 }
 
@@ -338,7 +349,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     if (skipDueToInterval) {
                         Log.d(TAG, "Duplicate trigger within min interval, skipping")
                         ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
-                        stopSelf()
                         return@launch
                     }
                 } else {
@@ -357,7 +367,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 if (model == null) {
                     Log.e(ProactiveMessageService.TAG, "No model found for proactive message")
                     ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
-                    stopSelf()
                     return@launch
                 }
 
@@ -372,7 +381,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 if (latestUserMessage == null) {
                     Log.d(TAG, "No real user message found; skipping proactive generation")
                     nextDelayOverrideMinutes = 240
-                    stopSelf()
                     return@launch
                 }
                 val stateStore = ProactiveMessageStateStore(this@ProactiveMessageTriggerService)
@@ -383,7 +391,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 ) {
                     Log.d(TAG, "No proactive generation: waiting for a new real user message")
                     nextDelayOverrideMinutes = 240
-                    stopSelf()
                     return@launch
                 }
 
@@ -411,7 +418,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     )
                     // 必须走到 finally 块的"安排下一次触发"逻辑，不能绕过定时链收尾。
                     // 用 stopSelf + return@launch 退出主流程，finally 会正常执行（scheduleNext 已用 NonCancellable 保护）。
-                    stopSelf()
                     return@launch
                 }
 
@@ -479,7 +485,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 if (providerSetting == null) {
                     Log.e(ProactiveMessageService.TAG, "No provider found for proactive message")
                     ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
-                    stopSelf()
                     return@launch
                 }
 
@@ -765,11 +770,43 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     }
                 }
                 conversationId?.let { chatService.removeConversationReference(it) }
-                stopSelf()
+                releaseGenerationWakeLock(startId)
+                val remainingRuns = activeRunCount.updateAndGet { count ->
+                    (count - 1).coerceAtLeast(0)
+                }
+                if (remainingRuns == 0) {
+                    stopSelf()
+                }
             }
         }
 
         return START_NOT_STICKY
+    }
+
+    private fun acquireGenerationWakeLock(startId: Int) {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "OrangeChat::ProactiveGeneration:$startId",
+        ).apply {
+            setReferenceCounted(false)
+            acquire(GENERATION_WAKE_LOCK_TIMEOUT_MS)
+        }
+        generationWakeLocks[startId] = wakeLock
+        Log.d(TAG, "Acquired proactive generation WakeLock for startId=$startId")
+    }
+
+    private fun releaseGenerationWakeLock(startId: Int) {
+        generationWakeLocks.remove(startId)?.let { wakeLock ->
+            if (wakeLock.isHeld) wakeLock.release()
+            Log.d(TAG, "Released proactive generation WakeLock for startId=$startId")
+        }
+    }
+
+    override fun onDestroy() {
+        generationWakeLocks.keys.toList().forEach(::releaseGenerationWakeLock)
+        activeRunCount.set(0)
+        super.onDestroy()
     }
 
     /** 构建带状态的主动消息决策提示词。 */

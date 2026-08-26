@@ -13,6 +13,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -223,6 +224,7 @@ class ChatCompletionsAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<MessageChunk> = callbackFlow {
+        val completedNormally = AtomicBoolean(false)
         val requestBody = buildChatCompletionRequest(
             messages = messages,
             params = params,
@@ -253,6 +255,7 @@ class ChatCompletionsAPI(
             ) {
                 if (data == "[DONE]") {
                     println("[onEvent] (done) 结束流: $data")
+                    completedNormally.set(true)
                     close()
                     return
                 }
@@ -343,6 +346,13 @@ class ChatCompletionsAPI(
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                // [DONE] closes callbackFlow, whose awaitClose used to cancel EventSource and
+                // provoke an expected "IOException: canceled" callback with HTTP 200. Do not
+                // report that normal cleanup as an API failure.
+                if (completedNormally.get() && t?.message.equals("canceled", ignoreCase = true)) {
+                    Log.d(TAG, "Ignoring EventSource cancellation after normal [DONE]")
+                    return
+                }
                 var exception = t
 
                 t?.printStackTrace()
@@ -376,6 +386,7 @@ class ChatCompletionsAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
+                completedNormally.set(true)
                 close()
             }
         }
@@ -384,7 +395,7 @@ class ChatCompletionsAPI(
 
         awaitClose {
             println("[awaitClose] 关闭eventSource ")
-            eventSource.cancel()
+            if (!completedNormally.get()) eventSource.cancel()
         }
         // trySend 在缓冲满时会静默丢弃 delta, 导致回复中间缺字 (#1295), 因此缓冲必须无界。
         // 与上游 rikkahub 对齐: 在 callbackFlow 上叠加 Channel.UNLIMITED 缓冲。

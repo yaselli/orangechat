@@ -9,7 +9,6 @@ package me.rerere.rikkahub.data.service
 import android.app.AlarmManager
 import android.content.Context
 import android.os.Build
-import android.os.PowerManager
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.Data
@@ -108,17 +107,11 @@ class ProactiveMessageWorker(
             return Result.success()
         }
 
-        // Acquire a wake lock for the duration of the work
-        val powerManager = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
-        val wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "ProactiveMessage::WorkerWakeLock"
-        )
-        wakeLock.acquire(5 * 60 * 1000L) // 5 minutes max
-
         try {
             // Delegate to the existing trigger service logic
-            // Start the foreground service which handles the actual AI generation
+            // Start the foreground service which handles the actual AI generation and owns
+            // the generation-long WakeLock. A Worker-only lock would be released immediately
+            // after startForegroundService(), leaving the paid streaming request unprotected.
             val serviceIntent = android.content.Intent(applicationContext, ProactiveMessageTriggerService::class.java)
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -136,10 +129,6 @@ class ProactiveMessageWorker(
             // Schedule next even on failure
             scheduleNext(applicationContext, proactiveSetting)
             return Result.retry()
-        } finally {
-            if (wakeLock.isHeld) {
-                wakeLock.release()
-            }
         }
     }
 }
