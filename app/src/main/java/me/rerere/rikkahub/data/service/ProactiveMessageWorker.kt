@@ -9,6 +9,7 @@ package me.rerere.rikkahub.data.service
 import android.app.AlarmManager
 import android.content.Context
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.Data
