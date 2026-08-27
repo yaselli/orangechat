@@ -54,6 +54,7 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
+import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -108,15 +109,40 @@ class ProactiveMessageService {
                 .apply()
 
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
+            val intent = Intent(context, ProactiveMessageTriggerService::class.java).apply {
                 action = ACTION_PROACTIVE_MESSAGE
             }
-            val pendingIntent = PendingIntent.getBroadcast(
+            // 让 AlarmManager 到点后直接启动前台生成服务。之前先发广播，
+            // 再由 BroadcastReceiver 调 startForegroundService()；部分国产 ROM 会把
+            // 这个“广播 -> 后台启服务”的第二步压到 App 回到前台才执行。
+            val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(
+                    context,
+                    REQUEST_CODE,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            } else {
+                PendingIntent.getService(
+                    context,
+                    REQUEST_CODE,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            }
+
+            // 清掉旧版可能已经排队的 broadcast PendingIntent，避免升级后双触发。
+            PendingIntent.getBroadcast(
                 context,
                 REQUEST_CODE,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+                Intent(context, ProactiveMessageReceiver::class.java).apply {
+                    action = ACTION_PROACTIVE_MESSAGE
+                },
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+            )?.let { legacyPendingIntent ->
+                alarmManager.cancel(legacyPendingIntent)
+                legacyPendingIntent.cancel()
+            }
 
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                 // Android 12+ needs canScheduleExactAlarms() check
@@ -167,18 +193,41 @@ class ProactiveMessageService {
                 .apply()
 
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
+            val intent = Intent(context, ProactiveMessageTriggerService::class.java).apply {
                 action = ACTION_PROACTIVE_MESSAGE
             }
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                REQUEST_CODE,
-                intent,
-                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-            )
+            val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(
+                    context,
+                    REQUEST_CODE,
+                    intent,
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+                )
+            } else {
+                PendingIntent.getService(
+                    context,
+                    REQUEST_CODE,
+                    intent,
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+                )
+            }
             pendingIntent?.let {
                 alarmManager.cancel(it)
+                it.cancel()
                 Log.d(TAG, "Cancelled proactive message alarm")
+            }
+
+            // 同时兼容取消升级前已排队的广播闹钟。
+            PendingIntent.getBroadcast(
+                context,
+                REQUEST_CODE,
+                Intent(context, ProactiveMessageReceiver::class.java).apply {
+                    action = ACTION_PROACTIVE_MESSAGE
+                },
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+            )?.let { legacyPendingIntent ->
+                alarmManager.cancel(legacyPendingIntent)
+                legacyPendingIntent.cancel()
             }
 
             // Also cancel WorkManager fallback
@@ -260,6 +309,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     companion object {
         private const val TAG = "ProactiveMessageTrigger"
         private const val MAX_TOOL_STEPS = 5 // 主动消息最大工具调用步数
+        private const val MAX_PROACTIVE_CONTEXT_MESSAGES = 20
         private const val GENERATION_WAKE_LOCK_TIMEOUT_MS = 10 * 60 * 1000L
         // 外部触发（网关轮询）时跳过内部 minInterval 去重
         const val EXTRA_FORCE_TRIGGER = "force_trigger"
@@ -304,10 +354,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         if (isForceTrigger) {
             Log.d(TAG, "Force trigger${if (isFromDeviceEvent) " from device event" else " from gateway poll"}, will skip min interval check")
         }
-        val notification = androidx.core.app.NotificationCompat.Builder(this, CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("正在思考...")
+        val notification = androidx.core.app.NotificationCompat.Builder(this, CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("主动消息处理中")
             .setSmallIcon(me.rerere.rikkahub.R.drawable.small_icon)
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
+            .setOngoing(true)
             .build()
         startForeground(20001, notification)
 
@@ -430,9 +482,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // 获取历史消息（先过滤掉悬空的工具调用消息，避免 tool_use 结构不完整触发 400）
                 val historyMessages = filterInvalidToolMessages(
                     conversation?.currentMessages?.let {
-                        if (assistant.contextMessageSize > 0) {
-                            it.takeLast(assistant.contextMessageSize)
-                        } else it
+                        val configuredSize = assistant.contextMessageSize
+                            .takeIf { size -> size > 0 }
+                            ?: MAX_PROACTIVE_CONTEXT_MESSAGES
+                        it.takeLast(configuredSize.coerceAtMost(MAX_PROACTIVE_CONTEXT_MESSAGES))
                     }?.let { messages ->
                         sanitizeProactiveHistory(messages, proactiveState.recentProactiveMessageIds)
                     } ?: emptyList(),
@@ -450,11 +503,15 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     allowAppUsage = tools.isNotEmpty(),
                 )
 
-                // user message 只放简短指令（上下文已在系统提示词中）
+                // 最后一条指令必须明确这是“后台主动消息判定”。
+                // 不能只写“看看是否适合开口”，否则长上下文/思考模型容易把它当成
+                // 对聊天最后一句的普通续写，从而跳过 PASS/WAIT/STOP 判定。
                 val userMessage = UIMessage(
                     role = MessageRole.USER,
                     parts = listOf(UIMessagePart.Text(
-                        "看看现在是否适合再开口。自然想清楚后，只给出最终决定或真正想说的话。"
+                        "现在做一次后台主动消息判定，这不是重新回复聊天中的最后一句。" +
+                            "必须先判断是否应该再开口；最终严格只输出 [PASS]、[WAIT:分钟]、[STOP]，" +
+                            "或一条真正要发出的主动消息。不要给多个候选回复，不要解释判定过程。"
                     ))
                 )
 
@@ -896,7 +953,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             appendLine("- [PASS]：这轮不发，之后再看看。")
             appendLine("- [WAIT:分钟]：先等待指定分钟再判断，不向聊天中显示。")
             appendLine("- [STOP]：暂时不再主动开口，直到聊天中的那个人再次说话。")
-            appendLine("- 一条真正想说的话：直接作为主动消息发出；如果确实想把聊天页拉到前台，可在末尾附 [JUMP]。")
+            appendLine("- 一条真正想说的话：直接作为主动消息发出；如果确实想把聊天页拉到前台让她看消息，可在末尾附 [JUMP]。")
             appendLine("控制标记只能出现在最终答案中，不能在思考过程里讨论。最终答案不要附带解释、分析或决策理由。")
         }
     }

@@ -120,9 +120,8 @@ class ProactiveMessageWorker(
                 applicationContext.startService(serviceIntent)
             }
 
-            // Schedule the next trigger via WorkManager
-            scheduleNext(applicationContext, proactiveSetting)
-
+            // 不在当前 Worker 运行期间用 ExistingWorkPolicy.REPLACE 替换自己。
+            // TriggerService 会在生成流程的 finally 中统一安排下一次触发。
             return Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "ProactiveMessageWorker failed", e)
