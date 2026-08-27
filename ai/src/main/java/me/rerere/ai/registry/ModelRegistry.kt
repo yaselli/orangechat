@@ -313,14 +313,28 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
-    private val KIMI_K2_5 = defineModel {
+    val KIMI_K2_5 = defineModel {
         tokens("kimi", "k", "2", "5")
         visionInput()
         toolReasoningAbility()
     }
 
-    private val KIMI_K2_6 = defineModel {
+    val KIMI_K2_6 = defineModel {
         tokens("kimi", "k", "2", "6")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    /** Moonshot Kimi K3 官方模型 ID（例如 kimi-k3）。 */
+    val KIMI_K3 = defineModel {
+        tokens("kimi", "k", "3")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    /** 兼容 Moonshot API 返回/要求的裸模型 ID `k3`。 */
+    val KIMI_K3_ALIAS = defineModel {
+        exact("k3")
         visionInput()
         toolReasoningAbility()
     }
@@ -452,6 +466,8 @@ object ModelRegistry {
         KIMI_K2,
         KIMI_K2_5,
         KIMI_K2_6,
+        KIMI_K3,
+        KIMI_K3_ALIAS,
         STEP_3,
         INTERN_S1,
         GLM_4_5,

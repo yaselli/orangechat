@@ -595,7 +595,15 @@ class ChatCompletionsAPI(
     }
 
     private fun isModelAllowTemperature(model: Model): Boolean {
-        return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
+        // Moonshot 的 K2.5/K2.6/K3 不接受 temperature；无论用官方
+        // `kimi-k3` 还是裸 ID `k3`，都必须在序列化请求前过滤该参数。
+        val isMoonshotRestricted = ModelRegistry.KIMI_K2_5.match(model.modelId) ||
+            ModelRegistry.KIMI_K2_6.match(model.modelId) ||
+            ModelRegistry.KIMI_K3.match(model.modelId) ||
+            ModelRegistry.KIMI_K3_ALIAS.match(model.modelId)
+        return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) &&
+            !ModelRegistry.GPT_5.match(model.modelId) &&
+            !isMoonshotRestricted
     }
 
     private fun buildMessages(messages: List<UIMessage>, model: Model) = buildJsonArray {

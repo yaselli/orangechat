@@ -68,6 +68,26 @@ class ModelRegistryTest {
     }
 
     @Test
+    fun testKimiK3OfficialAndBareIds() {
+        assertTrue(ModelRegistry.KIMI_K3.match("kimi-k3"))
+        assertTrue(ModelRegistry.KIMI_K3.match("moonshot-kimi-k3-preview"))
+        assertFalse(ModelRegistry.KIMI_K3.match("k3"))
+        assertTrue(ModelRegistry.KIMI_K3_ALIAS.match("k3"))
+        assertFalse(ModelRegistry.KIMI_K3_ALIAS.match("k3-preview"))
+
+        listOf("kimi-k3", "k3").forEach { modelId ->
+            assertEquals(
+                listOf(Modality.TEXT, Modality.IMAGE),
+                ModelRegistry.MODEL_INPUT_MODALITIES.getData(modelId)
+            )
+            assertEquals(
+                listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+                ModelRegistry.MODEL_ABILITIES.getData(modelId)
+            )
+        }
+    }
+
+    @Test
     fun testOpenAIOModels() {
         assertTrue(ModelRegistry.OPENAI_O_MODELS.match("o1"))
         assertTrue(ModelRegistry.OPENAI_O_MODELS.match("o3-mini"))
