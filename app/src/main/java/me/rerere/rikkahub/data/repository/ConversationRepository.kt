@@ -60,6 +60,12 @@ class ConversationRepository(
         }
     }
 
+    /** Lightweight lookup for background jobs; avoids decoding every node just to obtain an id. */
+    suspend fun getMostRecentConversationId(assistantId: Uuid): Uuid? {
+        return conversationDAO.getMostRecentConversationIdOfAssistant(assistantId.toString())
+            ?.let { Uuid.parse(it) }
+    }
+
     fun getConversationsOfAssistant(assistantId: Uuid): Flow<List<Conversation>> {
         return conversationDAO
             .getConversationsOfAssistant(assistantId.toString())

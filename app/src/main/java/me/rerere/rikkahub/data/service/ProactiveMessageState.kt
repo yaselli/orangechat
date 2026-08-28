@@ -26,37 +26,36 @@ internal fun parseProactiveDecision(rawText: String, jumpDetectedDuringStreaming
 
 internal fun parseProactiveDecision(
     rawText: String,
-    reasoningText: String,
+    @Suppress("UNUSED_PARAMETER") reasoningText: String,
     jumpDetectedDuringStreaming: Boolean,
 ): ProactiveDecision {
     val finalLine = rawText.lineSequence().lastOrNull { it.isNotBlank() }.orEmpty()
-    val bracketWaitRegex = Regex("\\[WAIT(?:\\s*[:：]\\s*(\\d+))?]", RegexOption.IGNORE_CASE)
+    val bracketWaitRegex = Regex("^\\s*\\[WAIT(?:\\s*[:：]\\s*(\\d+))?]\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE)
     val bareWaitRegex = Regex("^\\s*WAIT(?:\\s*[:：]?\\s*(\\d+))?\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE)
-    val bracketWaitMatch = bracketWaitRegex.find(rawText)
+    val bracketWaitMatch = bracketWaitRegex.matchEntire(finalLine)
     val bareWaitMatch = bareWaitRegex.matchEntire(finalLine)
     val waitMatch = bracketWaitMatch ?: bareWaitMatch
     val waitMinutes = waitMatch?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(5, 1440)
 
-    val bracketStop = Regex("\\[STOP]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
+    val bracketStop = Regex("^\\s*\\[STOP]\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE).matches(finalLine)
     val bareStop = Regex("^\\s*STOP\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE).matches(finalLine)
     val stop = bracketStop || bareStop
 
-    val bracketPass = Regex("\\[PASS]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
+    val bracketPass = Regex("^\\s*\\[PASS]\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE).matches(finalLine)
     val barePass = Regex("^\\s*PASS\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE).matches(finalLine)
-    // Some thinking providers occasionally decide "选 PASS" and still emit an accidental
-    // visible sentence. Only accept a complete affirmative clause as a reasoning decision.
-    // A loose substring match would incorrectly swallow replies such as
-    // "我不打算选择 PASS，还是发一句吧" or "如果选择 PASS 就会错".
-    val reasoningPass = hasExplicitReasoningPass(reasoningText)
-    val pass = bracketPass || barePass || reasoningPass
+    // Control markers are a protocol for the final answer only. Reasoning is deliberately
+    // ignored: a model may consider PASS and then decide to send a real message.
+    val pass = bracketPass || barePass
     val jump = jumpDetectedDuringStreaming ||
         Regex("\\[JUMP]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
 
-    val cleaned = if (bareStop || barePass || reasoningPass || bareWaitMatch != null) {
+    val cleaned = if (
+        bracketStop || bareStop || bracketPass || barePass ||
+        bracketWaitMatch != null || bareWaitMatch != null
+    ) {
         ""
     } else rawText
-        .replace(Regex("\\[(?:PASS|STOP|JUMP)]", RegexOption.IGNORE_CASE), "")
-        .replace(bracketWaitRegex, "")
+        .replace(Regex("\\[JUMP]", RegexOption.IGNORE_CASE), "")
         .trim()
 
     return ProactiveDecision(
@@ -66,25 +65,6 @@ internal fun parseProactiveDecision(
         waitMinutes = waitMinutes,
         stopUntilUserReturns = stop,
     )
-}
-
-private fun hasExplicitReasoningPass(reasoningText: String): Boolean {
-    if (reasoningText.isBlank()) return false
-    val affirmativeClause = Regex(
-        pattern = "^(?:" +
-            "(?:(?:所以|因此|那么|最终|本轮|这轮)\\s*)?" +
-            "(?:我\\s*)?(?:选择|选|决定(?:采用|输出)?|采用|输出)\\s*" +
-            "(?:为|是|[:：])?\\s*\\[?PASS]?" +
-            "|(?:最终|本轮|这轮)\\s*(?:决定)?\\s*(?:为|是|[:：])?\\s*\\[?PASS]?" +
-            ")\\s*$",
-        option = RegexOption.IGNORE_CASE,
-    )
-    return reasoningText
-        .split(Regex("[\\n。！？!?，,；;]+"))
-        .asSequence()
-        .map(String::trim)
-        .filter(String::isNotBlank)
-        .any(affirmativeClause::matches)
 }
 
 internal data class ProactiveSessionState(

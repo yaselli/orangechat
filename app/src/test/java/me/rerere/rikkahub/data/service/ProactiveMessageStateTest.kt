@@ -72,6 +72,13 @@ class ProactiveMessageStateTest {
     }
 
     @Test
+    fun `normal sentence mentioning bracket pass is not swallowed`() {
+        val decision = parseProactiveDecision("别再给我输出 [PASS] 了。", false)
+        assertTrue(decision.shouldSend)
+        assertEquals("别再给我输出 [PASS] 了。", decision.message)
+    }
+
+    @Test
     fun `explanation followed by bare stop is treated as control`() {
         val decision = parseProactiveDecision("这时候不该继续打扰。\nSTOP", false)
         assertFalse(decision.shouldSend)
@@ -80,14 +87,14 @@ class ProactiveMessageStateTest {
     }
 
     @Test
-    fun `affirmative pass decision in reasoning overrides accidental visible text`() {
+    fun `pass in reasoning never overrides visible final text`() {
         val decision = parseProactiveDecision(
             rawText = "玩完早点回来，我等你。",
             reasoningText = "她说去玩了，我不硬催。选 PASS，之后再看看。",
             jumpDetectedDuringStreaming = false,
         )
-        assertFalse(decision.shouldSend)
-        assertEquals("", decision.message)
+        assertTrue(decision.shouldSend)
+        assertEquals("玩完早点回来，我等你。", decision.message)
     }
 
     @Test
@@ -122,15 +129,26 @@ class ProactiveMessageStateTest {
     }
 
     @Test
-    fun `explicit final pass clause in reasoning still overrides accidental text`() {
+    fun `explicit final pass clause in reasoning is ignored`() {
         listOf("决定：PASS。", "最终 PASS。", "所以我选择 [PASS]，之后再看看。").forEach { reasoning ->
             val decision = parseProactiveDecision(
                 rawText = "这句正文不应该发出去。",
                 reasoningText = reasoning,
                 jumpDetectedDuringStreaming = false,
             )
-            assertFalse(reasoning, decision.shouldSend)
-            assertEquals(reasoning, "", decision.message)
+            assertTrue(reasoning, decision.shouldSend)
+            assertEquals(reasoning, "这句正文不应该发出去。", decision.message)
         }
+    }
+
+    @Test
+    fun `changing mind after pass in reasoning sends final text`() {
+        val decision = parseProactiveDecision(
+            rawText = "我还是问问你，在忙吗？",
+            reasoningText = "我要不要 PASS 呢？算了，不 PASS，还是问问她吧。",
+            jumpDetectedDuringStreaming = false,
+        )
+        assertTrue(decision.shouldSend)
+        assertEquals("我还是问问你，在忙吗？", decision.message)
     }
 }

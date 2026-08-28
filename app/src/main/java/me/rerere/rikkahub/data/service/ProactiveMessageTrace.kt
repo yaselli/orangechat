@@ -53,12 +53,12 @@ internal class ProactiveMessageTrace private constructor(
         event(
             label,
             "conversation=${safeId(conversation.id)} nodes=${conversation.messageNodes.size} " +
-                "messages=${current.size} shape=${current.joinToString(",", transform = ::messageShape)}",
+                messageSummary(current),
         )
     }
 
     fun messages(label: String, messages: List<UIMessage>) {
-        event(label, "count=${messages.size} shape=${messages.joinToString(",", transform = ::messageShape)}")
+        event(label, messageSummary(messages))
     }
 
     fun finish(outcome: String, error: Throwable? = null) {
@@ -90,6 +90,16 @@ internal class ProactiveMessageTrace private constructor(
                 .entries.joinToString("+") { (name, count) -> if (count == 1) name else "$name$count" }
                 .ifBlank { "Empty" }
             return "${message.role.name.first()}#${safeId(message.id)}[$partCounts]"
+        }
+
+        private fun messageSummary(messages: List<UIMessage>): String {
+            val roles = messages.groupingBy { it.role.name }.eachCount()
+                .entries.joinToString(",") { (role, count) -> "$role=$count" }
+            val parts = messages.asSequence().flatMap { it.parts.asSequence() }
+                .groupingBy(::partName).eachCount()
+                .entries.joinToString(",") { (part, count) -> "$part=$count" }
+            val tail = messages.takeLast(6).joinToString(",", transform = ::messageShape)
+            return "messages=${messages.size} roles=[$roles] parts=[$parts] tail=[$tail]"
         }
 
         private fun partName(part: UIMessagePart): String = when (part) {

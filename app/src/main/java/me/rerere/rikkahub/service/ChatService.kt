@@ -403,19 +403,16 @@ class ChatService(
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
 
+        // 用户一开口就立即撤销旧主动闹钟。新的休眠计时必须等本轮正常回复结束后再开始，
+        // 避免 AI 正在聊天时主动器到点，也避免长回复吃掉休眠间隔。
+        val currentProactiveSetting = settingsStore.settingsFlow.value.proactiveMessageSetting
+        if (currentProactiveSetting.enabled) {
+            me.rerere.rikkahub.data.service.ProactiveMessageService.cancel(context)
+        }
+
         val job = appScope.launch {
             try {
                 val settings = settingsStore.settingsFlow.first()
-
-                // 用户发送消息时重置主动消息计时器（异步执行，不阻塞发消息主流程）
-                try {
-                    val proactiveSetting = settings.proactiveMessageSetting
-                    if (proactiveSetting.enabled) {
-                        me.rerere.rikkahub.data.service.ProactiveMessageService.resetTimer(context, proactiveSetting)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.w("ChatService", "Failed to reset proactive timer", e)
-                }
 
                 // 读取最新状态 -> 追加用户消息 -> 落库，整体加锁。
                 // 防止跟同一时刻可能在跑的标题生成/建议生成/语音通话挂断反馈互相覆盖对方刚写入的消息。
@@ -502,6 +499,12 @@ class ChatService(
                 }
 
                 _generationDoneFlow.emit(conversationId)
+
+                // 只有本轮用户消息和正常 AI 回复完整处理完毕，才重新让主动器进入休眠计时。
+                val proactiveSetting = settingsStore.settingsFlow.value.proactiveMessageSetting
+                if (proactiveSetting.enabled) {
+                    me.rerere.rikkahub.data.service.ProactiveMessageService.resetTimer(context, proactiveSetting)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 Log.e(TAG, "sendMessage failed, conversationId=$conversationId", e)
@@ -877,50 +880,13 @@ class ChatService(
                     add(workspaceReminderTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = buildList {
-                    if (settings.enableWebSearch) {
-                        addAll(createSearchTools(settings))
-                    }
-addAll(localTools.getTools(assistant.localTools, me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
-    callerAssistantId = assistant.id.toString(),
-    callerConversationId = conversationId.toString(),
-)))
-                    // System tools (location, notifications, calendar, alarm, camera)
-                    val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions().toMutableSet()
-                    // 如果存在启用的外置记忆库，始终启用 supabase_query 工具
-                    if (settings.externalMemories.any { it.enabled }) {
-                        systemToolsOptions.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.SupabaseQuery)
-                    }
-                    if (systemToolsOptions.isNotEmpty()) {
-                        val systemTools = SystemTools(context, settings)
-                        addAll(systemTools.getTools(systemToolsOptions, conversation.currentMessages, filesManager))
-                    }
-                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
-                    if (assistant.enabledSkills.isNotEmpty()) {
-                        addAll(
-                            createSkillTools(
-                                enabledSkills = assistant.enabledSkills,
-                                allSkills = skillManager.listSkills(),
-                                skillManager = skillManager,
-                            )
-                        )
-                    }
-                    mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
-                        add(
-                            Tool(
-                                name = ToolNaming.buildMcpToolName(serverId, tool.name),
-                                description = tool.description ?: "",
-                                parameters = { tool.inputSchema },
-                                needsApproval = tool.needsApproval,
-                                execute = {
-                                    mcpManager.callTool(serverId, tool.name, it.jsonObject)
-                                },
-                            )
-                        )
-                    }
-                    // Plugin tools
-                    addAll(pluginToolProvider.getTools())
-                },
+                tools = buildAvailableTools(
+                    settings = settings,
+                    assistant = assistant,
+                    conversationId = conversationId,
+                    conversation = conversation,
+                    allowAppUsage = true,
+                ),
                 pluginPromptInjections = buildList {
                     addAll(pluginToolProvider.getPluginPromptInjections())
                     settings.displaySetting.buildAnniversaryPrompt()?.let(::add)
@@ -1092,6 +1058,72 @@ addAll(localTools.getTools(assistant.localTools, me.rerere.rikkahub.data.ai.tool
                 Log.w(TAG, "Failed to save assistant message to external memory", e)
             }
         }
+    }
+
+    /**
+     * One tool assembly path shared by normal and proactive chat. Proactive chat receives every
+     * configured tool except AppUsage, which additionally requires explicit proactive check-in
+     * consent. Merely exposing the AppUsage schema never reads or injects device usage data.
+     */
+    internal suspend fun buildAvailableTools(
+        settings: me.rerere.rikkahub.data.datastore.Settings,
+        assistant: Assistant,
+        conversationId: Uuid,
+        conversation: Conversation,
+        allowAppUsage: Boolean,
+    ): List<Tool> = buildList {
+        if (settings.enableWebSearch) {
+            addAll(createSearchTools(settings))
+        }
+        addAll(
+            localTools.getTools(
+                assistant.localTools,
+                me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
+                    callerAssistantId = assistant.id.toString(),
+                    callerConversationId = conversationId.toString(),
+                ),
+            )
+        )
+
+        val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions().toMutableSet()
+        if (!allowAppUsage) {
+            systemToolsOptions.remove(me.rerere.rikkahub.data.ai.tools.SystemToolOption.AppUsage)
+        }
+        if (settings.externalMemories.any { it.enabled }) {
+            systemToolsOptions.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.SupabaseQuery)
+        }
+        if (systemToolsOptions.isNotEmpty()) {
+            addAll(
+                SystemTools(context, settings).getTools(
+                    systemToolsOptions,
+                    conversation.currentMessages,
+                    filesManager,
+                )
+            )
+        }
+
+        addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
+        if (assistant.enabledSkills.isNotEmpty()) {
+            addAll(
+                createSkillTools(
+                    enabledSkills = assistant.enabledSkills,
+                    allSkills = skillManager.listSkills(),
+                    skillManager = skillManager,
+                )
+            )
+        }
+        mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
+            add(
+                Tool(
+                    name = ToolNaming.buildMcpToolName(serverId, tool.name),
+                    description = tool.description ?: "",
+                    parameters = { tool.inputSchema },
+                    needsApproval = tool.needsApproval,
+                    execute = { mcpManager.callTool(serverId, tool.name, it.jsonObject) },
+                )
+            )
+        }
+        addAll(pluginToolProvider.getTools())
     }
 
     private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
