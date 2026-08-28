@@ -78,4 +78,25 @@ class ProactiveMessageStateTest {
         assertTrue(decision.stopUntilUserReturns)
         assertEquals("", decision.message)
     }
+
+    @Test
+    fun `affirmative pass decision in reasoning overrides accidental visible text`() {
+        val decision = parseProactiveDecision(
+            rawText = "玩完早点回来，我等你。",
+            reasoningText = "她说去玩了，我不硬催。选 PASS，之后再看看。",
+            jumpDetectedDuringStreaming = false,
+        )
+        assertFalse(decision.shouldSend)
+        assertEquals("", decision.message)
+    }
+
+    @Test
+    fun `negative pass phrase in reasoning does not swallow reply`() {
+        val decision = parseProactiveDecision(
+            rawText = "还是提醒她早点休息。",
+            reasoningText = "这次不选 PASS，发一句简短提醒。",
+            jumpDetectedDuringStreaming = false,
+        )
+        assertTrue(decision.shouldSend)
+    }
 }

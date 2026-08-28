@@ -20,7 +20,7 @@ import kotlin.time.toJavaInstant
 
 private const val DEFAULT_REPLY_GAP_THRESHOLD_SECONDS = 3600L
 
-/** 当前时间与回复间隔是两个互不依赖的全局开关。 */
+/** 当前时间是全局开关；回复间隔恢复为每个助手独立设置。 */
 object TimeReminderTransformer : InputMessageTransformer {
     override suspend fun transform(
         ctx: TransformerContext,
@@ -30,7 +30,8 @@ object TimeReminderTransformer : InputMessageTransformer {
         return applyExtraTimeContext(
             messages = messages,
             currentTimeEnabled = setting.timeContextInjectionEnabled,
-            replyIntervalEnabled = setting.replyIntervalReminderEnabled,
+            replyIntervalEnabled = ctx.assistant.enableTimeReminder,
+            thresholdSeconds = ctx.assistant.timeReminderIntervalMinutes.coerceAtLeast(1) * 60L,
             currentInstant = Clock.System.now(),
         )
     }
@@ -44,6 +45,7 @@ internal fun applyExtraTimeContext(
     currentInstant: Instant = Clock.System.now(),
 ): List<UIMessage> {
     if (messages.isEmpty()) return messages
+    if (!currentTimeEnabled && !replyIntervalEnabled) return messages
 
     val withReplyIntervals = if (replyIntervalEnabled) {
         insertReplyIntervalReminders(messages, thresholdSeconds)
@@ -54,19 +56,9 @@ internal fun applyExtraTimeContext(
     val latestUserIndex = withReplyIntervals.indexOfLast { it.role == MessageRole.USER }
     if (latestUserIndex == -1) return withReplyIntervals
 
-    val timePolicy = if (currentTimeEnabled) {
-        buildCurrentTimeContext(currentInstant)
-    } else {
-        UIMessage.user(
-            "<time_policy>当前现实时间未被提供。不要根据历史中出现的时间推测现在几点，" +
-                "也不要自行估算经过了多久。需要准确时间时调用已有的时间工具；" +
-                "无法调用时坦诚不知道。</time_policy>",
-        )
-    }
-
-    return buildList(withReplyIntervals.size + 1) {
+    return buildList(withReplyIntervals.size + if (currentTimeEnabled) 1 else 0) {
         withReplyIntervals.forEachIndexed { index, message ->
-            if (index == latestUserIndex) add(timePolicy)
+            if (index == latestUserIndex && currentTimeEnabled) add(buildCurrentTimeContext(currentInstant))
             add(message)
         }
     }
@@ -75,28 +67,27 @@ internal fun applyExtraTimeContext(
 private fun insertReplyIntervalReminders(
     messages: List<UIMessage>,
     thresholdSeconds: Long,
-): List<UIMessage> = buildList {
-    messages.forEachIndexed { index, message ->
-        if (message.role == MessageRole.USER && index > 0) {
-            val previousAssistant = messages.subList(0, index)
-                .lastOrNull { it.role == MessageRole.ASSISTANT }
-            if (previousAssistant != null) {
-                val tz = TimeZone.currentSystemDefault()
-                val userInstant = message.createdAt.toInstant(tz)
-                val assistantEnd = (previousAssistant.finishedAt ?: previousAssistant.createdAt).toInstant(tz)
-                val gapSeconds = (userInstant - assistantEnd).inWholeSeconds
-                if (gapSeconds >= thresholdSeconds.coerceAtLeast(1L)) {
-                    add(
-                        UIMessage.user(
-                            "<reply_interval>距离你上一条回复结束，聊天中的这个人过了" +
-                                "${formatGap(gapSeconds)}才再次开口。自然理解这段间隔，" +
-                                "不要机械复述时长，也不要提及这段提示。</reply_interval>",
-                        ),
-                    )
-                }
-            }
-        }
-        add(message)
+): List<UIMessage> {
+    val latestUserIndex = messages.indexOfLast { it.role == MessageRole.USER }
+    if (latestUserIndex <= 0) return messages
+    val previousAssistant = messages.subList(0, latestUserIndex)
+        .lastOrNull { it.role == MessageRole.ASSISTANT } ?: return messages
+    val latestUser = messages[latestUserIndex]
+    val tz = TimeZone.currentSystemDefault()
+    val userInstant = latestUser.createdAt.toInstant(tz)
+    val assistantEnd = (previousAssistant.finishedAt ?: previousAssistant.createdAt).toInstant(tz)
+    val gapSeconds = (userInstant - assistantEnd).inWholeSeconds
+    if (gapSeconds < thresholdSeconds.coerceAtLeast(1L)) return messages
+
+    return messages.toMutableList().apply {
+        add(
+            latestUserIndex,
+            UIMessage.user(
+                "<reply_interval>距离你上一条回复结束，聊天中的这个人过了" +
+                    "${formatGap(gapSeconds)}才再次开口。自然理解这段间隔，" +
+                    "不要机械复述时长，也不要提及这段提示。</reply_interval>",
+            ),
+        )
     }
 }
 
@@ -106,8 +97,7 @@ private fun buildCurrentTimeContext(instant: Instant): UIMessage {
         .getDisplayName(TextStyle.FULL, Locale.getDefault())
     val timeStr = javaInstant.toLocalDateTime()
     return UIMessage.user(
-        "<time_context>当前本地时间：$dayOfWeek，$timeStr。只把它当作必要时使用的背景信息，" +
-            "除非对话确实涉及时间，否则不要机械提起当前几点，也不要提及这段提示。</time_context>",
+        "<time_context>当前本地时间：$dayOfWeek，$timeStr</time_context>",
     )
 }
 

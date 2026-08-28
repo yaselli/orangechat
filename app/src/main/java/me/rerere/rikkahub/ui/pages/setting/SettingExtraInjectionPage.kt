@@ -54,7 +54,7 @@ fun SettingExtraInjectionPage(vm: SettingVM = koinViewModel()) {
                     item(
                         headlineContent = { Text("当前时间注入") },
                         supportingContent = {
-                            Text("每次对话向 AI 提供准确的当前时间；关闭后不会让 AI 根据历史时间自行推测。")
+                            Text("开启时只向 AI 提供准确的当前时间；关闭后不添加任何替代提示。")
                         },
                         trailingContent = {
                             Switch(
@@ -64,26 +64,6 @@ fun SettingExtraInjectionPage(vm: SettingVM = koinViewModel()) {
                                         settings.copy(
                                             systemToolsSetting = settings.systemToolsSetting.copy(
                                                 timeContextInjectionEnabled = enabled,
-                                            ),
-                                        ),
-                                    )
-                                },
-                            )
-                        },
-                    )
-                    item(
-                        headlineContent = { Text("回复间隔提醒") },
-                        supportingContent = {
-                            Text("在间隔较大的消息前自动加入经过时长，帮助 AI 理解对话节奏；不包含当前时间。")
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = settings.systemToolsSetting.replyIntervalReminderEnabled,
-                                onCheckedChange = { enabled ->
-                                    vm.updateSettings(
-                                        settings.copy(
-                                            systemToolsSetting = settings.systemToolsSetting.copy(
-                                                replyIntervalReminderEnabled = enabled,
                                             ),
                                         ),
                                     )

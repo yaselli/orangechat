@@ -49,6 +49,7 @@ data class Assistant(
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
     val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
+    val timeReminderIntervalMinutes: Int = 5,           // 回复间隔提醒触发分钟数
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowSkipReply: Boolean = false,
     val externalMemoryIds: Set<Uuid> = emptySet(),      // 关联的外置记忆库 ID

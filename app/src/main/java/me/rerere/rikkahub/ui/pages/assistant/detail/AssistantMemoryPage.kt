@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -47,7 +48,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
@@ -242,6 +245,39 @@ private fun AssistantMemoryContent(
                         }
                     )
                 }
+            )
+            item(
+                headlineContent = { Text(stringResource(R.string.assistant_page_time_reminder)) },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_time_reminder_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.enableTimeReminder,
+                        onCheckedChange = { enabled ->
+                            onUpdateAssistant(assistant.copy(enableTimeReminder = enabled))
+                        },
+                    )
+                },
+            )
+            item(
+                headlineContent = { Text("触发间隔") },
+                supportingContent = { Text("相隔多少分钟后提醒 AI；默认 5 分钟") },
+                trailingContent = {
+                    OutlinedTextField(
+                        value = assistant.timeReminderIntervalMinutes.toString(),
+                        onValueChange = { text ->
+                            text.toIntOrNull()?.coerceIn(1, 1440)?.let { minutes ->
+                                onUpdateAssistant(assistant.copy(timeReminderIntervalMinutes = minutes))
+                            }
+                        },
+                        enabled = assistant.enableTimeReminder,
+                        suffix = { Text("分钟") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.width(120.dp),
+                    )
+                },
             )
             item(
                 headlineContent = { Text("外置记忆库") },

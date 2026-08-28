@@ -57,7 +57,7 @@ class TimeReminderTransformerTest {
     }
 
     @Test
-    fun `time disabled injects one stable no guessing policy`() {
+    fun `time disabled injects nothing`() {
         val messages = listOf(
             message(MessageRole.USER, "现在几点", LocalDateTime(2026, 8, 25, 10, 0)),
         )
@@ -66,9 +66,8 @@ class TimeReminderTransformerTest {
             currentTimeEnabled = false,
             replyIntervalEnabled = false,
         )
-        assertEquals(2, result.size)
-        assertEquals(1, result.count { text(it).contains("<time_policy>") })
-        assertTrue(text(result[0]).contains("不要根据历史"))
+        assertEquals(messages, result)
+        assertFalse(result.any { text(it).contains("<time_") })
     }
 
     @Test
@@ -83,8 +82,7 @@ class TimeReminderTransformerTest {
             replyIntervalEnabled = true,
             thresholdSeconds = 3600,
         )
-        assertEquals(4, result.size)
-        assertEquals(1, result.count { text(it).contains("<time_policy>") })
+        assertEquals(3, result.size)
         assertEquals(1, result.count { text(it).contains("<reply_interval>") })
         assertTrue(result.any { text(it).contains("2小时0分0秒") })
         assertFalse(result.any { text(it).contains("<time_context>") })

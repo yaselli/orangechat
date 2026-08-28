@@ -17,6 +17,18 @@ internal data class ProactiveDecision(
 )
 
 internal fun parseProactiveDecision(rawText: String, jumpDetectedDuringStreaming: Boolean): ProactiveDecision {
+    return parseProactiveDecision(
+        rawText = rawText,
+        reasoningText = "",
+        jumpDetectedDuringStreaming = jumpDetectedDuringStreaming,
+    )
+}
+
+internal fun parseProactiveDecision(
+    rawText: String,
+    reasoningText: String,
+    jumpDetectedDuringStreaming: Boolean,
+): ProactiveDecision {
     val finalLine = rawText.lineSequence().lastOrNull { it.isNotBlank() }.orEmpty()
     val bracketWaitRegex = Regex("\\[WAIT(?:\\s*[:：]\\s*(\\d+))?]", RegexOption.IGNORE_CASE)
     val bareWaitRegex = Regex("^\\s*WAIT(?:\\s*[:：]?\\s*(\\d+))?\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE)
@@ -31,11 +43,17 @@ internal fun parseProactiveDecision(rawText: String, jumpDetectedDuringStreaming
 
     val bracketPass = Regex("\\[PASS]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
     val barePass = Regex("^\\s*PASS\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE).matches(finalLine)
-    val pass = bracketPass || barePass
+    // Some thinking providers occasionally reason "选 PASS" and then still emit a visible
+    // sentence. Treat an affirmative, explicit decision in reasoning as authoritative, while
+    // avoiding phrases such as "不选 PASS" / "不能 PASS".
+    val reasoningPass = Regex(
+        "(?im)(?<!不)(?<!不能)(?<!不要)(?:选择|选|决定|最终|本轮|这轮)\\s*(?:为|是|[:：])?\\s*\\[?PASS]?\\b",
+    ).containsMatchIn(reasoningText)
+    val pass = bracketPass || barePass || reasoningPass
     val jump = jumpDetectedDuringStreaming ||
         Regex("\\[JUMP]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
 
-    val cleaned = if (bareStop || barePass || bareWaitMatch != null) {
+    val cleaned = if (bareStop || barePass || reasoningPass || bareWaitMatch != null) {
         ""
     } else rawText
         .replace(Regex("\\[(?:PASS|STOP|JUMP)]", RegexOption.IGNORE_CASE), "")

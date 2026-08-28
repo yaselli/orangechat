@@ -208,6 +208,11 @@
 
     <!-- Proactive Message Trigger Service -->
     <service
+      android:name="androidx.work.impl.foreground.SystemForegroundService"
+      android:foregroundServiceType="dataSync"
+      tools:node="merge" />
+
+    <service
       android:name=".data.service.ProactiveMessageTriggerService"
       android:exported="false"
       android:foregroundServiceType="specialUse">
