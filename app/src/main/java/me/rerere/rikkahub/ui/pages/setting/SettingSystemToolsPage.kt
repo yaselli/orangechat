@@ -1145,7 +1145,7 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
                 item(
                     leadingContent = { Icon(imageVector = HugeIcons.SmartPhone01, contentDescription = null) },
                     headlineContent = { Text("启用应用切换工具") },
-                    supportingContent = { Text("允许 AI 启动其他应用、把橘瓣拉到前台、或用浏览器打开 URL") },
+                    supportingContent = { Text("允许 AI 启动其他应用、把西瓜瓣拉到前台、或用浏览器打开 URL") },
                     trailingContent = {
                         Switch(
                             checked = systemToolsSetting.appSwitchEnabled,
@@ -1176,7 +1176,7 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
                 ) {
                     item(
                         headlineContent = { Text("⚠ 无障碍服务未启用") },
-                        supportingContent = { Text("App 锁定依赖无障碍服务检测前台应用切换，请在系统设置中开启橘瓣的无障碍权限") },
+                        supportingContent = { Text("App 锁定依赖无障碍服务检测前台应用切换，请在系统设置中开启西瓜瓣的无障碍权限") },
                         trailingContent = {
                             FilledTonalButton(onClick = {
                                 try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) {}

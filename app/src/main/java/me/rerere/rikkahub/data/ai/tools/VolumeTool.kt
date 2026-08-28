@@ -157,7 +157,7 @@ fun createSetVolumeTool(context: Context): Tool = Tool(
                     put("error", "SecurityException: ${e.message}")
                     if (needsDnd) {
                         put("needs_permission", "NOTIFICATION_POLICY_ACCESS")
-                        put("hint", "Changing $streamName volume requires Do Not Disturb access. Go to Settings > Do Not Disturb > Allow access for 橘瓣.")
+                        put("hint", "Changing $streamName volume requires Do Not Disturb access. Go to Settings > Do Not Disturb > Allow access for 西瓜瓣.")
                     }
                 }.toString()
             ))

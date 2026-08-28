@@ -226,7 +226,7 @@ private fun PinUnlockContent(
 
     fun submit(candidate: String) {
         if (!hasPin) {
-            errorMessage = "还没有设置解锁密码,请先让橘瓣设置密码"
+            errorMessage = "还没有设置解锁密码,请先让西瓜瓣设置密码"
             return
         }
         if (AppLockStore.verifyPin(context, candidate)) {

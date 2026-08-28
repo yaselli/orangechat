@@ -221,7 +221,7 @@ private fun AssistantLocalToolContent(
             )
             item(
                 headlineContent = { Text("屏幕自动化") },
-                supportingContent = { Text("点击/滑动/输入/读取界面元素/截图。需在系统设置->无障碍中启用橘瓣") },
+                supportingContent = { Text("点击/滑动/输入/读取界面元素/截图。需在系统设置->无障碍中启用西瓜瓣") },
                 trailingContent = {
                     Switch(
                         checked = assistant.localTools.contains(LocalToolOption.ScreenAutomation),

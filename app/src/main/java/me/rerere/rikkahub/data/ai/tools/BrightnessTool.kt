@@ -105,7 +105,7 @@ fun createSetBrightnessTool(context: Context): Tool = Tool(
                         put("success", false)
                         put("error", "WRITE_SETTINGS not granted")
                         put("needs_permission", "WRITE_SETTINGS")
-                        put("hint", "Go to Settings > Apps > 橘瓣 > Modify system settings to grant this permission")
+                        put("hint", "Go to Settings > Apps > 西瓜瓣 > Modify system settings to grant this permission")
                     }.toString()
                 ))
             }
