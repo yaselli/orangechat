@@ -137,8 +137,8 @@ class ProactiveMessageWorker(
             return Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "ProactiveMessageWorker failed", e)
-            // Schedule next even on failure
-            scheduleNext(applicationContext, proactiveSetting)
+            // Let WorkManager own retry/backoff. Scheduling a new unique Worker here and also
+            // returning retry would create two competing recovery paths.
             return Result.retry()
         }
     }

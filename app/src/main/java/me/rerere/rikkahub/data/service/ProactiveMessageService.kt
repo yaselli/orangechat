@@ -367,6 +367,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             var nextDelayOverrideMinutes: Int? = null
             var outcome = "completed"
             var failure: Throwable? = null
+            val runAssistantMessageIds = linkedSetOf<Uuid>()
             try {
                 val settings = settingsStore.settingsFlow.first()
                 val proactiveSetting = settings.proactiveMessageSetting
@@ -399,7 +400,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         outcome = "duplicate_trigger"
                         trace.event("dedupe", "skipped=true")
                         Log.d(TAG, "Duplicate trigger within min interval, skipping")
-                        ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
                         return@launch
                     }
                 } else {
@@ -418,7 +418,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 if (model == null) {
                     outcome = "no_model"
                     Log.e(ProactiveMessageService.TAG, "No model found for proactive message")
-                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
                     return@launch
                 }
 
@@ -503,10 +502,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
                 // 主动消息只在双重授权后暴露应用使用工具；关闭时连 schema 都不发送。
                 var tools = buildTools(settings, proactiveSetting)
-                val deepSeekThinkingWithTools = isOfficialDeepSeek(providerSetting) &&
+                val deepSeekThinkingWithTools = isDeepSeekCompatible(providerSetting, model) &&
                     assistant.reasoningLevel.isEnabled && tools.isNotEmpty()
                 val missingReasoningHistory = deepSeekThinkingWithTools && rawHistoryMessages.any { message ->
                     message.role == MessageRole.ASSISTANT &&
+                        message.getTools().isNotEmpty() &&
                         message.parts.none { it is UIMessagePart.Reasoning && it.reasoning.isNotBlank() }
                 }
                 if (missingReasoningHistory) {
@@ -521,7 +521,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     sanitizeProactiveHistory(
                         messages = rawHistoryMessages,
                         proactiveMessageIds = proactiveState.recentProactiveMessageIds,
-                        preserveReasoning = isOfficialDeepSeek(providerSetting) && tools.isNotEmpty(),
+                        preserveReasoning = isDeepSeekCompatible(providerSetting, model) && tools.isNotEmpty(),
                     ),
                 ).let { messages ->
                     if (tools.isEmpty()) stripHistoricalToolParts(messages) else messages
@@ -616,6 +616,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     assistant = assistant,
                     settings = settings,
                     trace = trace,
+                    runAssistantMessageIds = runAssistantMessageIds,
                 )
 
                 // 部分 thinking 模型会结束在 Reasoning/Tool 上而没有 Text 正文。
@@ -646,7 +647,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     ).collect { chunk ->
                         finalized = finalized.handleMessageChunk(chunk = chunk, model = model)
                         finalized.lastOrNull { it.role == MessageRole.ASSISTANT }?.let { message ->
-                            updateOrAppendAiMessage(conversationId, message, trace)
+                            updateOrAppendAiMessage(
+                                conversationId,
+                                message,
+                                trace,
+                                runAssistantMessageIds,
+                            )
                         }
                     }
                     finalized.lastOrNull { it.role == MessageRole.ASSISTANT }?.let { message ->
@@ -675,7 +681,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             "preservedTools=${originalThinkingTrace.count { it is UIMessagePart.Tool }} " +
                                 "shape=${ProactiveMessageTrace.messageShape(completed)}",
                         )
-                        updateOrAppendAiMessage(conversationId, completed, trace)
+                        updateOrAppendAiMessage(
+                            conversationId,
+                            completed,
+                            trace,
+                            runAssistantMessageIds,
+                        )
                         if (message.id != completed.id) {
                             val session = chatService.getOrCreateSession(conversationId)
                             session.saveMutex.withLock {
@@ -741,7 +752,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             }
                         }
                     )
-                    updateOrAppendAiMessage(conversationId, cleanedAiMessage, trace)
+                    updateOrAppendAiMessage(
+                        conversationId,
+                        cleanedAiMessage,
+                        trace,
+                        runAssistantMessageIds,
+                    )
                 }
                 trace.event(
                     "decision",
@@ -750,7 +766,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         "shape=${ProactiveMessageTrace.messageShape(aiMessage)}",
                 )
 
-                Log.d(TAG, "Proactive message generated: '${replyText.take(100)}...' (${replyText.length} chars), hasToolCalls=$hasToolCalls, shouldJump=$shouldJump")
+                Log.d(
+                    TAG,
+                    "Proactive message generated: length=${replyText.length}, " +
+                        "hasToolCalls=$hasToolCalls, shouldJump=$shouldJump",
+                )
 
                 if (!decision.shouldSend) {
                     outcome = when {
@@ -760,31 +780,26 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     }
                     // AI 选择跳过，移除本次生成的 aiMessage node（基于 id 匹配，不误删历史）
                     Log.d(ProactiveMessageService.TAG, "AI chose to skip proactive message")
-                    val aiId = aiMessage.id
-                    val session = chatService.getOrCreateSession(conversationId)
-                    session.saveMutex.withLock {
-                        val conv = chatService.getConversationFlow(conversationId).value
-                        trace.conversation("skip_before", conv)
-                        chatService.updateConversation(
-                            conversationId,
-                            conv.copy(
-                                messageNodes = conv.messageNodes.filterNot { node ->
-                                    node.messages.any { it.id == aiId }
-                                }
-                            )
-                        )
-                        chatService.saveConversation(conversationId, chatService.getConversationFlow(conversationId).value)
-                        trace.conversation("skip_after", chatService.getConversationFlow(conversationId).value)
-                    }
+                    removeProactiveRunMessages(
+                        conversationId = conversationId,
+                        messageIds = runAssistantMessageIds + aiMessage.id,
+                        trace = trace,
+                        label = "skip",
+                    )
                 } else {
                     // 有效回复：session 里已有 aiMessage（流式过程已追加），持久化并发通知
                     saveProactiveMessage(
                         assistant, conversationId, conversation, trace
                     )
                     outcome = "sent"
+                    val persistedRunIds = chatService.getConversationFlow(conversationId).value.currentMessages
+                        .asSequence()
+                        .filter { it.id in runAssistantMessageIds }
+                        .map { it.id.toString() }
+                        .toSet()
                     stateStore.recordSent(
                         state = proactiveState,
-                        messageId = aiMessage.id.toString(),
+                        messageIds = persistedRunIds.ifEmpty { setOf(aiMessage.id.toString()) },
                         text = replyText,
                     )
                     // 同步保存 AI 主动消息 / 激进模式回复到外置记忆库（Supabase）
@@ -860,33 +875,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 if (cause != null) {
                     Log.e(ProactiveMessageService.TAG, "Underlying cause: ${cause::class.simpleName}: ${cause.message}", cause)
                 }
-                // 清理本次触发中流式写入的不完整/错误 AI 消息, 防止它们污染历史导致下一轮请求失败
-                conversationId?.let { cid ->
-                    try {
-                        val session = chatService.getOrCreateSession(cid)
-                        session.saveMutex.withLock {
-                            val conv = chatService.getConversationFlow(cid).value
-                            // 移除包含网关错误信息的消息 (防止污染下一轮请求)
-                            val updatedNodes = conv.messageNodes.filterNot { node ->
-                                node.messages.any { msg ->
-                                    msg.parts.any { part ->
-                                        (part is UIMessagePart.Text && (
-                                            part.text.contains("呼叫大模型时被拒绝了") ||
-                                            part.text.contains("Invalid request body")
-                                        ))
-                                    }
-                                }
-                            }
-                            if (updatedNodes.size != conv.messageNodes.size) {
-                                chatService.updateConversation(cid, conv.copy(messageNodes = updatedNodes))
-                                chatService.saveConversation(cid, chatService.getConversationFlow(cid).value)
-                                Log.d(ProactiveMessageService.TAG, "Cleaned up error messages from conversation history")
-                            }
-                        }
-                    } catch (cleanupErr: Exception) {
-                        Log.w(ProactiveMessageService.TAG, "Failed to cleanup error messages", cleanupErr)
-                    }
-                }
             } finally {
                 // 确保无论成功/失败/取消都安排下一次，避免一次 API 错误或用户打断永久中断定时链。
                 // 激进模式设备事件触发时不需要安排下一次定时主动消息（由 DeviceEventAiTriggerService 自己驱动）。
@@ -894,6 +882,24 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // (settingsFlow.first()) 会立刻抛 CancellationException，导致 scheduleNext 被跳过、
                 // 定时链断裂。NonCancellable 保证这段收尾逻辑跑完。
                 withContext(NonCancellable) {
+                    if ((outcome == "failed" || outcome == "cancelled") &&
+                        conversationId != null && runAssistantMessageIds.isNotEmpty()
+                    ) {
+                        runCatching {
+                            removeProactiveRunMessages(
+                                conversationId = conversationId!!,
+                                messageIds = runAssistantMessageIds,
+                                trace = trace,
+                                label = outcome,
+                            )
+                        }.onFailure { cleanupError ->
+                            Log.w(
+                                ProactiveMessageService.TAG,
+                                "Failed to clean exact proactive run messages",
+                                cleanupError,
+                            )
+                        }
+                    }
                     try {
                         val currentSettings = settingsStore.settingsFlow.first()
                         ProactiveMessageService.scheduleNext(
@@ -1161,9 +1167,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             .takeIf { it.parts.isNotEmpty() }
     }
 
-    private fun isOfficialDeepSeek(providerSetting: ProviderSetting): Boolean {
+    private fun isDeepSeekCompatible(providerSetting: ProviderSetting, model: Model): Boolean {
         val openAi = providerSetting as? ProviderSetting.OpenAI ?: return false
-        return openAi.baseUrl.contains("api.deepseek.com", ignoreCase = true)
+        return openAi.baseUrl.contains("deepseek", ignoreCase = true) ||
+            model.modelId.contains("deepseek", ignoreCase = true) ||
+            Regex("(^|[-_/])ds(?:[-_/]|$)", RegexOption.IGNORE_CASE).containsMatchIn(model.modelId)
     }
 
     /**
@@ -1177,7 +1185,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         conversationId: Uuid,
         aiMessage: UIMessage,
         trace: ProactiveMessageTrace,
+        runAssistantMessageIds: MutableSet<Uuid>,
     ) {
+        runAssistantMessageIds += aiMessage.id
         val session = chatService.getOrCreateSession(conversationId)
         session.saveMutex.withLock {
             val conv = chatService.getConversationFlow(conversationId).value
@@ -1211,6 +1221,37 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             }
             chatService.updateConversation(conversationId, updated)
             chatService.saveConversation(conversationId, updated)
+        }
+    }
+
+    /** Remove only assistant nodes created by this exact proactive run. */
+    private suspend fun removeProactiveRunMessages(
+        conversationId: Uuid,
+        messageIds: Collection<Uuid>,
+        trace: ProactiveMessageTrace,
+        label: String,
+    ) {
+        if (messageIds.isEmpty()) return
+        val ids = messageIds.toSet()
+        val session = chatService.getOrCreateSession(conversationId)
+        session.saveMutex.withLock {
+            val conversation = chatService.getConversationFlow(conversationId).value
+            trace.conversation("${label}_before", conversation)
+            val updated = conversation.copy(
+                messageNodes = conversation.messageNodes.filterNot { node ->
+                    node.messages.any { it.id in ids }
+                },
+            )
+            if (updated.messageNodes.size != conversation.messageNodes.size) {
+                chatService.updateConversation(conversationId, updated)
+                chatService.saveConversation(conversationId, updated)
+            }
+            trace.event(
+                "run_cleanup",
+                "label=$label requested=${ids.size} " +
+                    "removed=${conversation.messageNodes.size - updated.messageNodes.size}",
+            )
+            trace.conversation("${label}_after", updated)
         }
     }
 
@@ -1282,6 +1323,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         assistant: Assistant,
         settings: Settings,
         trace: ProactiveMessageTrace,
+        runAssistantMessageIds: MutableSet<Uuid>,
     ): Triple<List<UIMessage>, Boolean, Boolean> {
         var messages = initialMessages.toMutableList()
         var hasToolCalls = false
@@ -1308,7 +1350,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val currentAiMessage = streamMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
                 if (currentAiMessage != null) {
                     // 用 id 匹配就地更新（保留 node id，避免思考链闪烁 / 覆盖上一条 assistant）
-                    updateOrAppendAiMessage(conversationId, currentAiMessage, trace)
+                    updateOrAppendAiMessage(
+                        conversationId,
+                        currentAiMessage,
+                        trace,
+                        runAssistantMessageIds,
+                    )
                 }
             }
 
@@ -1358,7 +1405,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 )
                 messages[messages.lastIndex] = finalMessage
                 // 最终更新 session 状态（用 id 匹配就地更新）
-                updateOrAppendAiMessage(conversationId, finalMessage, trace)
+                updateOrAppendAiMessage(
+                    conversationId,
+                    finalMessage,
+                    trace,
+                    runAssistantMessageIds,
+                )
                 break
             }
 
@@ -1398,15 +1450,23 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             json.parseToJsonElement(toolCall.input.ifBlank { "{}" })
                         } catch (e: Exception) {
                             // toolCall.input 可能因为流式截断而是不完整的 JSON, 回退为空对象
-                            Log.w(TAG, "Tool ${toolCall.toolName} input JSON is incomplete, falling back to empty object: ${toolCall.input.take(200)}")
+                            Log.w(
+                                TAG,
+                                "Tool ${toolCall.toolName} input JSON is incomplete; " +
+                                    "falling back to empty object (length=${toolCall.input.length})",
+                            )
                             JsonObject(emptyMap())
                         }
-                        Log.d(TAG, "Executing tool ${toolDef.name} with args: $args")
+                        Log.d(TAG, "Executing tool ${toolDef.name}, inputLength=${toolCall.input.length}")
                         val result = toolDef.execute(args)
                         executedTools.add(toolCall.copy(output = result))
                         trace.event("tool_result", "name=${toolDef.name} success=true outputParts=${result.size}")
                     } catch (e: Exception) {
-                        Log.e(TAG, "Tool execution failed: ${toolCall.toolName}, args=${toolCall.input}", e)
+                        Log.e(
+                            TAG,
+                            "Tool execution failed: ${toolCall.toolName}, inputLength=${toolCall.input.length}",
+                            e,
+                        )
                         executedTools.add(toolCall.copy(
                             output = listOf(UIMessagePart.Text("""{"error":"${e.message}"}"""))
                         ))
@@ -1425,7 +1485,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             val updatedMessage = processedMessage.copy(parts = updatedParts)
             messages[messages.lastIndex] = updatedMessage
             // 更新 session 状态（带工具结果的消息，用 id 匹配就地更新）
-            updateOrAppendAiMessage(conversationId, updatedMessage, trace)
+            updateOrAppendAiMessage(
+                conversationId,
+                updatedMessage,
+                trace,
+                runAssistantMessageIds,
+            )
         }
 
         return Triple(messages, hasToolCalls, hasJumpFlag)

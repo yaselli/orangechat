@@ -254,12 +254,13 @@ class ChatCompletionsAPI(
                 data: String
             ) {
                 if (data == "[DONE]") {
-                    println("[onEvent] (done) 结束流: $data")
+                    Log.v(TAG, "onEvent: stream completed")
                     completedNormally.set(true)
                     close()
                     return
                 }
-                Log.d(TAG, "onEvent: $data")
+                // Never dump SSE payloads here: they contain reply/reasoning text and tool data.
+                Log.v(TAG, "onEvent: chunkLength=${data.length}")
                 // okhttp-sse 的 onEvent 拿到的 data 已经是按 SSE 协议规范拼好的完整
                 // 消息(网关把一条 data: 物理拆成多行发送时, okHttp 会用 '\n' 还原)。
                 // 这里直接当一个完整 JSON 解析即可, 不能再按 '\n' 二次拆分 —— 否则当
@@ -268,16 +269,11 @@ class ChatCompletionsAPI(
                 val chunkJson = try {
                     json.parseToJsonElement(data).jsonObject
                 } catch (e: Throwable) {
-                    // 上游真的发了坏数据时不要让整个流直接崩掉裸抛 Unexpected EOF。
-                    // 记录长度和前后片段便于定位, 但避免把整个超长内容打进日志。
-                    val preview = if (data.length > 200) {
-                        "${data.take(100)}...(${data.length} chars)...${data.takeLast(100)}"
-                    } else {
-                        data
-                    }
+                    // Upstream sent malformed data. Record only its size; a preview can contain
+                    // private reply/reasoning text or tool output.
                     Log.w(
                         TAG,
-                        "onEvent: failed to parse SSE data (len=${data.length}, preview=$preview)",
+                        "onEvent: failed to parse SSE data (len=${data.length})",
                         e
                     )
                     close(
@@ -286,15 +282,12 @@ class ChatCompletionsAPI(
                     return
                 }
                 if (chunkJson["error"] != null) {
-                    // 流式响应中携带了 error 字段 (HTTP 连接本身是200, 但错误包在流数据里)
-                    // 记录完整的原始 error JSON 内容, 便于排查上游返回的具体错误原因
-                    val errorRawJson = chunkJson["error"].toString()
+                    // HTTP can be 200 while the stream itself contains a structured error.
                     val model = chunkJson["model"]?.jsonPrimitive?.contentOrNull ?: "unknown"
-                    val errorMsg = "onEvent stream error | model=$model | time=${System.currentTimeMillis()} | raw error JSON: $errorRawJson"
+                    val error = chunkJson["error"]!!.parseErrorDetail()
+                    val errorMsg = "onEvent stream error | model=$model | detail=${sanitizeDiagnosticText(error.message)}"
                     Log.e(TAG, errorMsg)
                     Logging.log(TAG, errorMsg)
-                    val error = chunkJson["error"]!!.parseErrorDetail()
-                    Logging.log(TAG, "onEvent stream error parsed: $error")
                     close(error)
                     return
                 }
@@ -306,9 +299,10 @@ class ChatCompletionsAPI(
                     val errorContent = chunkJson["choices"]?.jsonArray?.getOrNull(0)
                         ?.jsonObject?.get("delta")?.jsonObject?.get("content")
                         ?.jsonPrimitive?.contentOrNull ?: "unknown gateway error"
-                    Log.e(TAG, "onEvent: gateway returned error disguised as content: $errorContent")
-                    Logging.log(TAG, "onEvent: gateway error disguised as content: $errorContent")
-                    close(Exception("Gateway error: $errorContent"))
+                    val safeError = sanitizeDiagnosticText(errorContent)
+                    Log.e(TAG, "onEvent: gateway returned disguised error: $safeError")
+                    Logging.log(TAG, "onEvent: gateway returned disguised error: $safeError")
+                    close(Exception("Gateway error: $safeError"))
                     return
                 }
                 val id = chunkJson["id"]?.jsonPrimitive?.contentOrNull ?: ""
@@ -353,7 +347,7 @@ class ChatCompletionsAPI(
                     Log.d(TAG, "Ignoring EventSource cancellation after normal [DONE]")
                     return
                 }
-                var exception = t
+                var exception: Throwable = t ?: Exception("HTTP ${response?.code ?: "unknown"} stream failure")
 
                 t?.printStackTrace()
                 val failureMsg = "onFailure: ${t?.javaClass?.name} ${t?.message} / response=$response"
@@ -361,25 +355,25 @@ class ChatCompletionsAPI(
                 Logging.log(TAG, failureMsg)
 
                 val bodyRaw = response?.body?.stringSafe()
-                // 记录上游返回的原始响应体, 便于排查 400/500 等错误的具体原因
-                if (!bodyRaw.isNullOrBlank()) {
-                    val bodyMsg = "onFailure: raw response body (HTTP ${response?.code}): $bodyRaw"
-                    Log.e(TAG, bodyMsg)
-                    Logging.log(TAG, bodyMsg)
-                }
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
                         exception = bodyElement.parseErrorDetail()
-                        val detailMsg = "onFailure: parsed error detail: $exception"
+                        val detailMsg = "onFailure: HTTP ${response?.code} detail=" +
+                            sanitizeDiagnosticText(exception.message)
                         Log.e(TAG, detailMsg)
                         Logging.log(TAG, detailMsg)
                     }
                 } catch (e: Throwable) {
-                    val parseMsg = "onFailure: failed to parse error body: $bodyRaw"
+                    // Plain-text gateways still expose their real reason, but cap and redact it.
+                    // Keep it as the request failure instead of replacing it with a JSON parser error.
+                    val safeBody = sanitizeDiagnosticText(bodyRaw)
+                    val parseMsg = "onFailure: HTTP ${response?.code} non-JSON body=$safeBody"
                     Log.w(TAG, parseMsg, e)
                     Logging.log(TAG, parseMsg)
-                    exception = e
+                    if (safeBody.isNotBlank()) {
+                        exception = Exception("HTTP ${response?.code}: $safeBody", t)
+                    }
                 } finally {
                     close(exception)
                 }
@@ -394,7 +388,7 @@ class ChatCompletionsAPI(
         val eventSource = EventSources.createFactory(client).newEventSource(request, listener)
 
         awaitClose {
-            println("[awaitClose] 关闭eventSource ")
+            Log.v(TAG, "awaitClose: closing EventSource")
             if (!completedNormally.get()) eventSource.cancel()
         }
         // trySend 在缓冲满时会静默丢弃 delta, 导致回复中间缺字 (#1295), 因此缓冲必须无界。
@@ -418,7 +412,8 @@ class ChatCompletionsAPI(
             // moonshot/deepseek 的 thinking 字段结构与智谱一致, 一并处理。
             val thinkingEnabled = params.model.abilities.contains(ModelAbility.REASONING) &&
                 params.reasoningLevel.isEnabled &&
-                host in setOf("open.bigmodel.cn", "api.moonshot.cn", "api.deepseek.com")
+                (host in setOf("open.bigmodel.cn", "api.moonshot.cn", "api.deepseek.com") ||
+                    isDeepSeekModelId(params.model.modelId))
             if (isModelAllowTemperature(params.model) && !thinkingEnabled) {
                 if (params.temperature != null) put("temperature", params.temperature)
                 if (params.topP != null) put("top_p", params.topP)
@@ -604,6 +599,35 @@ class ChatCompletionsAPI(
         return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) &&
             !ModelRegistry.GPT_5.match(model.modelId) &&
             !isMoonshotRestricted
+    }
+
+    private fun isDeepSeekModelId(modelId: String): Boolean {
+        return modelId.contains("deepseek", ignoreCase = true) ||
+            Regex("(^|[-_/])ds(?:[-_/]|$)", RegexOption.IGNORE_CASE).containsMatchIn(modelId)
+    }
+
+    private fun sanitizeDiagnosticText(value: String?, maxLength: Int = 2_000): String {
+        return value.orEmpty()
+            .replace(Regex("(?i)bearer\\s+[^\\s,}]+"), "Bearer <redacted>")
+            .replace(
+                Regex("(?i)(api[_-]?key|authorization|access[_-]?token)([\\\"']?\\s*[:=]\\s*[\\\"']?)[^\\s,}\\\"']+"),
+                "\$1\$2<redacted>",
+            )
+            .replace(Regex("(?i)\\bsk-[a-z0-9_-]{8,}"), "sk-<redacted>")
+            .replace(
+                Regex(
+                    "(?is)(\\\"(?:messages|prompt|input|content|reasoning_content)\\\"\\s*:\\s*)" +
+                        "\\\"(?:\\\\.|[^\\\"])*\\\"",
+                ),
+                "\$1\"<redacted>\"",
+            )
+            .replace(
+                Regex(
+                    "(?is)(\\\"(?:messages|input)\\\"\\s*:\\s*)\\[[^]]*]",
+                ),
+                "\$1[<redacted>]",
+            )
+            .take(maxLength)
     }
 
     private fun buildMessages(messages: List<UIMessage>, model: Model) = buildJsonArray {

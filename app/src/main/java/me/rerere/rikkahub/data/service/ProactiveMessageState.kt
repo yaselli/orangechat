@@ -43,12 +43,11 @@ internal fun parseProactiveDecision(
 
     val bracketPass = Regex("\\[PASS]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
     val barePass = Regex("^\\s*PASS\\s*[。.!！]?\\s*$", RegexOption.IGNORE_CASE).matches(finalLine)
-    // Some thinking providers occasionally reason "选 PASS" and then still emit a visible
-    // sentence. Treat an affirmative, explicit decision in reasoning as authoritative, while
-    // avoiding phrases such as "不选 PASS" / "不能 PASS".
-    val reasoningPass = Regex(
-        "(?im)(?<!不)(?<!不能)(?<!不要)(?:选择|选|决定|最终|本轮|这轮)\\s*(?:为|是|[:：])?\\s*\\[?PASS]?\\b",
-    ).containsMatchIn(reasoningText)
+    // Some thinking providers occasionally decide "选 PASS" and still emit an accidental
+    // visible sentence. Only accept a complete affirmative clause as a reasoning decision.
+    // A loose substring match would incorrectly swallow replies such as
+    // "我不打算选择 PASS，还是发一句吧" or "如果选择 PASS 就会错".
+    val reasoningPass = hasExplicitReasoningPass(reasoningText)
     val pass = bracketPass || barePass || reasoningPass
     val jump = jumpDetectedDuringStreaming ||
         Regex("\\[JUMP]", RegexOption.IGNORE_CASE).containsMatchIn(rawText)
@@ -67,6 +66,25 @@ internal fun parseProactiveDecision(
         waitMinutes = waitMinutes,
         stopUntilUserReturns = stop,
     )
+}
+
+private fun hasExplicitReasoningPass(reasoningText: String): Boolean {
+    if (reasoningText.isBlank()) return false
+    val affirmativeClause = Regex(
+        pattern = "^(?:" +
+            "(?:(?:所以|因此|那么|最终|本轮|这轮)\\s*)?" +
+            "(?:我\\s*)?(?:选择|选|决定(?:采用|输出)?|采用|输出)\\s*" +
+            "(?:为|是|[:：])?\\s*\\[?PASS]?" +
+            "|(?:最终|本轮|这轮)\\s*(?:决定)?\\s*(?:为|是|[:：])?\\s*\\[?PASS]?" +
+            ")\\s*$",
+        option = RegexOption.IGNORE_CASE,
+    )
+    return reasoningText
+        .split(Regex("[\\n。！？!?，,；;]+"))
+        .asSequence()
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .any(affirmativeClause::matches)
 }
 
 internal data class ProactiveSessionState(
@@ -92,12 +110,18 @@ internal class ProactiveMessageStateStore(context: Context) {
         return current
     }
 
-    fun recordSent(state: ProactiveSessionState, messageId: String, text: String): ProactiveSessionState {
+    fun recordSent(
+        state: ProactiveSessionState,
+        messageIds: Collection<String>,
+        text: String,
+    ): ProactiveSessionState {
         val updated = state.copy(
             followUpCount = state.followUpCount + 1,
-            recentProactiveMessageIds = (state.recentProactiveMessageIds + messageId)
+            // One proactive run can contain several assistant nodes when tools are used.
+            // Keep every persisted node id so the next run can sanitize the whole chain.
+            recentProactiveMessageIds = (state.recentProactiveMessageIds + messageIds)
                 .toList()
-                .takeLast(8)
+                .takeLast(MAX_RECENT_PROACTIVE_MESSAGE_IDS)
                 .toSet(),
             lastProactiveText = text.take(500),
             stopUntilUserReturns = false,
@@ -133,6 +157,7 @@ internal class ProactiveMessageStateStore(context: Context) {
     }
 
     private companion object {
+        const val MAX_RECENT_PROACTIVE_MESSAGE_IDS = 64
         const val KEY_ANCHOR_USER_ID = "state_anchor_user_id"
         const val KEY_FOLLOW_UP_COUNT = "state_follow_up_count"
         const val KEY_RECENT_PROACTIVE_IDS = "state_recent_proactive_ids"

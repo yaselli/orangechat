@@ -99,4 +99,38 @@ class ProactiveMessageStateTest {
         )
         assertTrue(decision.shouldSend)
     }
+
+    @Test
+    fun `indirect negative pass phrase in reasoning does not swallow reply`() {
+        val decision = parseProactiveDecision(
+            rawText = "我还是来问问你在干嘛。",
+            reasoningText = "我不打算选择 PASS，还是发一句吧。",
+            jumpDetectedDuringStreaming = false,
+        )
+        assertTrue(decision.shouldSend)
+        assertEquals("我还是来问问你在干嘛。", decision.message)
+    }
+
+    @Test
+    fun `hypothetical pass phrase in reasoning does not swallow reply`() {
+        val decision = parseProactiveDecision(
+            rawText = "我还是想叫她一声。",
+            reasoningText = "如果选择 PASS 就会错过这次关心，应该发消息。",
+            jumpDetectedDuringStreaming = false,
+        )
+        assertTrue(decision.shouldSend)
+    }
+
+    @Test
+    fun `explicit final pass clause in reasoning still overrides accidental text`() {
+        listOf("决定：PASS。", "最终 PASS。", "所以我选择 [PASS]，之后再看看。").forEach { reasoning ->
+            val decision = parseProactiveDecision(
+                rawText = "这句正文不应该发出去。",
+                reasoningText = reasoning,
+                jumpDetectedDuringStreaming = false,
+            )
+            assertFalse(reasoning, decision.shouldSend)
+            assertEquals(reasoning, "", decision.message)
+        }
+    }
 }
