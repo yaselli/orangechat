@@ -370,6 +370,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             var outcome = "completed"
             var failure: Throwable? = null
             val runAssistantMessageIds = linkedSetOf<Uuid>()
+            val protectedMessageIds = linkedSetOf<Uuid>()
             try {
                 val settings = settingsStore.settingsFlow.first()
                 val proactiveSetting = settings.proactiveMessageSetting
@@ -440,6 +441,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     return@launch
                 }
                 val activeConversation = requireNotNull(conversation)
+                // Cleanup must never be allowed to delete anything that existed before this run.
+                // Protect every branch alternative, not only currentMessages.
+                activeConversation.messageNodes
+                    .flatMapTo(protectedMessageIds) { node -> node.messages.map { it.id } }
                 val stateStore = ProactiveMessageStateStore(this@ProactiveMessageTriggerService)
                 val proactiveState = stateStore.synchronizeWithUser(latestUserMessage.id.toString())
                 val maxFollowUps = proactiveSetting.maxFollowUpMessages.coerceIn(1, 8)
@@ -657,6 +662,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     settings = settings,
                     trace = trace,
                     runAssistantMessageIds = runAssistantMessageIds,
+                    protectedMessageIds = protectedMessageIds,
                 )
 
                 // 部分 thinking 模型会结束在 Reasoning/Tool 上而没有 Text 正文。
@@ -692,6 +698,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                                 message,
                                 trace,
                                 runAssistantMessageIds,
+                                protectedMessageIds,
                             )
                         }
                     }
@@ -726,6 +733,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             completed,
                             trace,
                             runAssistantMessageIds,
+                            protectedMessageIds,
                         )
                         if (message.id != completed.id) {
                             val session = chatService.getOrCreateSession(conversationId)
@@ -766,6 +774,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     removeProactiveRunMessages(
                         conversationId = conversationId,
                         messageIds = runAssistantMessageIds + aiMessage.id,
+                        protectedMessageIds = protectedMessageIds,
                         trace = trace,
                         label = "user_returned",
                     )
@@ -818,6 +827,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         cleanedAiMessage,
                         trace,
                         runAssistantMessageIds,
+                        protectedMessageIds,
                     )
                 }
                 trace.event(
@@ -844,6 +854,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     removeProactiveRunMessages(
                         conversationId = conversationId,
                         messageIds = runAssistantMessageIds + aiMessage.id,
+                        protectedMessageIds = protectedMessageIds,
                         trace = trace,
                         label = "skip",
                     )
@@ -950,6 +961,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             removeProactiveRunMessages(
                                 conversationId = conversationId!!,
                                 messageIds = runAssistantMessageIds,
+                                protectedMessageIds = protectedMessageIds,
                                 trace = trace,
                                 label = outcome,
                             )
@@ -1259,8 +1271,20 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         aiMessage: UIMessage,
         trace: ProactiveMessageTrace,
         runAssistantMessageIds: MutableSet<Uuid>,
+        protectedMessageIds: Set<Uuid>,
     ) {
-        runAssistantMessageIds += aiMessage.id
+        if (!registerProactiveRunMessageId(
+                messageId = aiMessage.id,
+                protectedMessageIds = protectedMessageIds,
+                runMessageIds = runAssistantMessageIds,
+            )
+        ) {
+            trace.event(
+                "ownership_collision",
+                "message=${ProactiveMessageTrace.safeId(aiMessage.id)} protected=true",
+            )
+            error("Proactive generation attempted to overwrite a pre-existing message")
+        }
         val session = chatService.getOrCreateSession(conversationId)
         session.saveMutex.withLock {
             val conv = chatService.getConversationFlow(conversationId).value
@@ -1301,11 +1325,20 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private suspend fun removeProactiveRunMessages(
         conversationId: Uuid,
         messageIds: Collection<Uuid>,
+        protectedMessageIds: Set<Uuid>,
         trace: ProactiveMessageTrace,
         label: String,
     ) {
         if (messageIds.isEmpty()) return
-        val ids = messageIds.toSet()
+        val requestedIds = messageIds.toSet()
+        val ids = ownedProactiveCleanupIds(requestedIds, protectedMessageIds)
+        if (ids.isEmpty()) {
+            trace.event(
+                "run_cleanup",
+                "label=$label requested=${requestedIds.size} removed=0 protected=${requestedIds.size}",
+            )
+            return
+        }
         val session = chatService.getOrCreateSession(conversationId)
         session.saveMutex.withLock {
             val conversation = chatService.getConversationFlow(conversationId).value
@@ -1321,7 +1354,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             }
             trace.event(
                 "run_cleanup",
-                "label=$label requested=${ids.size} " +
+                "label=$label requested=${requestedIds.size} protected=${requestedIds.size - ids.size} " +
                     "removed=${conversation.messageNodes.size - updated.messageNodes.size}",
             )
             trace.conversation("${label}_after", updated)
@@ -1397,6 +1430,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         settings: Settings,
         trace: ProactiveMessageTrace,
         runAssistantMessageIds: MutableSet<Uuid>,
+        protectedMessageIds: Set<Uuid>,
     ): Triple<List<UIMessage>, Boolean, Boolean> {
         var messages = initialMessages.toMutableList()
         var hasToolCalls = false
@@ -1406,15 +1440,23 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             Log.d(TAG, "generateWithTools: step $step/${MAX_TOOL_STEPS}")
             trace.event("generation_step", "step=$step")
 
-            // 防御性：每轮调用前合并相邻同角色（尤其 assistant）消息，
-            // 避免工具调用多步生成产生相邻 assistant 消息触发 API 400
-            messages = mergeAdjacentSameRoleMessages(messages).toMutableList()
-
             // 流式调用 AI（替代非流式 generateText，兼容 thinking 模型）
-            var streamMessages = messages.toList()
+            // The provider-only copy may merge adjacent roles for API compatibility. Never merge
+            // the local streaming list: doing so can fold this run's assistant into the previous
+            // persisted assistant and transfer ownership back to the old message id.
+            val requestMessages = mergeAdjacentSameRoleMessages(messages)
+            // A proactive request may legitimately end with an existing ASSISTANT message. Seed a
+            // fresh assistant placeholder locally so handleMessageChunk cannot append the new
+            // stream to that old message and reuse its id. Do not send the placeholder upstream.
+            var streamMessages = beginProactiveAssistantTurn(messages.toList(), model.id)
+            val turnMessageId = streamMessages.last().id
+            trace.event(
+                "assistant_turn",
+                "step=$step message=${ProactiveMessageTrace.safeId(turnMessageId)} fresh=true",
+            )
             providerImpl.streamText(
                 providerSetting = providerSetting,
-                messages = messages,
+                messages = requestMessages,
                 params = params
             ).collect { chunk ->
                 streamMessages = streamMessages.handleMessageChunk(chunk = chunk, model = model)
@@ -1428,6 +1470,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         currentAiMessage,
                         trace,
                         runAssistantMessageIds,
+                        protectedMessageIds,
                     )
                 }
             }
@@ -1483,6 +1526,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     finalMessage,
                     trace,
                     runAssistantMessageIds,
+                    protectedMessageIds,
                 )
                 break
             }
@@ -1555,6 +1599,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 updatedMessage,
                 trace,
                 runAssistantMessageIds,
+                protectedMessageIds,
             )
         }
 
