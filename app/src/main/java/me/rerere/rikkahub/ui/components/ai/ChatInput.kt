@@ -655,28 +655,35 @@ fun ChatInput(
                                     )
                                 }
 
-                            }
+                                // Secondary actions belong to the scrollable area. On compact,
+                                // split-screen, or large-display-scale layouts they may scroll,
+                                // while voice and send remain pinned and can never be pushed out.
+                                ActionIconButton(
+                                    onClick = {
+                                        dismissExpand()
+                                        showStickerPicker = true
+                                    },
+                                ) {
+                                    Text(
+                                        text = "🙂",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                }
 
-                            ActionIconButton(
-                                onClick = {
-                                    dismissExpand()
-                                    showStickerPicker = true
-                                },
-                            ) {
-                                Text(
-                                    text = "🙂",
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                            }
-
-                            ActionIconButton(
-                                onClick = {
-                                    expandToggle(ExpandState.Files)
-                                }) {
-                                Icon(
-                                    imageVector = if (expand == ExpandState.Files) HugeIcons.Cancel01 else HugeIcons.Add01,
-                                    contentDescription = stringResource(R.string.more_options)
-                                )
+                                ActionIconButton(
+                                    onClick = {
+                                        expandToggle(ExpandState.Files)
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = if (expand == ExpandState.Files) {
+                                            HugeIcons.Cancel01
+                                        } else {
+                                            HugeIcons.Add01
+                                        },
+                                        contentDescription = stringResource(R.string.more_options),
+                                    )
+                                }
                             }
 
                             // Voice button: click to record, click again to stop and send
