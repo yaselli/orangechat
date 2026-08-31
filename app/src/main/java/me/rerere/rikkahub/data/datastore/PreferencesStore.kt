@@ -10,6 +10,8 @@ import android.content.Context
 import android.util.Log
 import androidx.datastore.core.IOException
 import androidx.datastore.preferences.SharedPreferencesMigration
+import androidx.datastore.preferences.core.MutablePreferences
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
@@ -48,6 +51,7 @@ import me.rerere.rikkahub.data.model.MiniApp
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
+import me.rerere.rikkahub.data.security.SecretCrypto
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
 import me.rerere.rikkahub.ui.theme.PresetThemes
@@ -189,9 +193,46 @@ class SettingsStore(
 
         // 自动批准所有工具调用（懒人模式）
         val AUTO_APPROVE_ALL_TOOLS = booleanPreferencesKey("auto_approve_all_tools")
+
+        /** Composite settings that contain credentials or authentication tokens. */
+        private val ENCRYPTED_STRING_KEYS: Set<Preferences.Key<String>> = setOf(
+            PROVIDERS,
+            ASSISTANTS,
+            SEARCH_SERVICES,
+            MCP_SERVERS,
+            WEBDAV_CONFIG,
+            S3_CONFIG,
+            TTS_PROVIDERS,
+            ASR_PROVIDERS,
+            WEB_SERVER_ACCESS_PASSWORD,
+            SYSTEM_TOOLS_SETTING,
+            WECHAT_BOT_SETTING,
+            QQ_BOT_SETTING,
+            EXTERNAL_MEMORIES,
+            MINI_APPS,
+        )
     }
 
     private val dataStore = context.settingsStore
+
+    init {
+        // Existing installs used plaintext strings. Upgrade them in place on first launch while
+        // still allowing the read path below to understand plaintext during the migration.
+        scope.launch {
+            runCatching {
+                dataStore.edit { preferences ->
+                    ENCRYPTED_STRING_KEYS.forEach { key ->
+                        val storedValue = preferences[key]
+                        if (!storedValue.isNullOrEmpty() && !SecretCrypto.isEncrypted(storedValue)) {
+                            preferences.putSecret(key, storedValue)
+                        }
+                    }
+                }
+            }.onFailure { error ->
+                Log.e(TAG, "Failed to migrate stored credentials to encrypted storage", error)
+            }
+        }
+    }
 
     // 用于检测 assistants 列表是否真正变化，避免无关设置写入触发 Pebble 模板缓存清空
     @Volatile
@@ -234,8 +275,8 @@ class SettingsStore(
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
-                providers = JsonInstant.decodeFromString(preferences[PROVIDERS] ?: "[]"),
-                assistants = JsonInstant.decodeFromString(preferences[ASSISTANTS] ?: "[]"),
+                providers = JsonInstant.decodeFromString(preferences.getSecret(PROVIDERS) ?: "[]"),
+                assistants = JsonInstant.decodeFromString(preferences.getSecret(ASSISTANTS) ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
                 themeId = preferences[THEME_ID] ?: PresetThemes[0].id,
                 customThemes = preferences[CUSTOM_THEMES]?.let {
@@ -243,28 +284,28 @@ class SettingsStore(
                 } ?: emptyList(),
                 developerMode = preferences[DEVELOPER_MODE] == true,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
-                searchServices = preferences[SEARCH_SERVICES]?.let {
+                searchServices = preferences.getSecret(SEARCH_SERVICES)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: listOf(SearchServiceOptions.DEFAULT),
                 searchCommonOptions = preferences[SEARCH_COMMON]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: SearchCommonOptions(),
                 searchServiceSelected = preferences[SEARCH_SELECTED] ?: 0,
-                mcpServers = preferences[MCP_SERVERS]?.let {
+                mcpServers = preferences.getSecret(MCP_SERVERS)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
-                webDavConfig = preferences[WEBDAV_CONFIG]?.let {
+                webDavConfig = preferences.getSecret(WEBDAV_CONFIG)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: WebDavConfig(),
-                s3Config = preferences[S3_CONFIG]?.let {
+                s3Config = preferences.getSecret(S3_CONFIG)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: S3Config(),
-                ttsProviders = preferences[TTS_PROVIDERS]?.let {
+                ttsProviders = preferences.getSecret(TTS_PROVIDERS)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 selectedTTSProviderId = preferences[SELECTED_TTS_PROVIDER]?.let { Uuid.parse(it) }
                     ?: DEFAULT_SYSTEM_TTS_ID,
-                asrProviders = preferences[ASR_PROVIDERS]?.let {
+                asrProviders = preferences.getSecret(ASR_PROVIDERS)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 selectedASRProviderId = preferences[SELECTED_ASR_PROVIDER]?.let { Uuid.parse(it) },
@@ -280,30 +321,30 @@ class SettingsStore(
                 webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
-                webServerAccessPassword = preferences[WEB_SERVER_ACCESS_PASSWORD] ?: "",
+                webServerAccessPassword = preferences.getSecret(WEB_SERVER_ACCESS_PASSWORD) ?: "",
                 webServerLocalhostOnly = preferences[WEB_SERVER_LOCALHOST_ONLY] == true,
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: BackupReminderConfig(),
                 launchCount = preferences[LAUNCH_COUNT] ?: 0,
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
-                systemToolsSetting = preferences[SYSTEM_TOOLS_SETTING]?.let {
+                systemToolsSetting = preferences.getSecret(SYSTEM_TOOLS_SETTING)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: SystemToolsSetting(),
                 proactiveMessageSetting = preferences[PROACTIVE_MESSAGE_SETTING]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: ProactiveMessageSetting(),
-                wechatBotSetting = preferences[WECHAT_BOT_SETTING]?.let {
+                wechatBotSetting = preferences.getSecret(WECHAT_BOT_SETTING)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: WechatBotSetting(),
-                qqBotSetting = preferences[QQ_BOT_SETTING]?.let {
+                qqBotSetting = preferences.getSecret(QQ_BOT_SETTING)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: QqBotSetting(),
                 keepAliveEnabled = preferences[KEEP_ALIVE_ENABLED] == true,
-                externalMemories = preferences[EXTERNAL_MEMORIES]?.let {
+                externalMemories = preferences.getSecret(EXTERNAL_MEMORIES)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
-                miniApps = preferences[MINI_APPS]?.let {
+                miniApps = preferences.getSecret(MINI_APPS)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 forceConfirmToolCalls = preferences[FORCE_CONFIRM_TOOL_CALLS] != false,
@@ -448,24 +489,24 @@ class SettingsStore(
             preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
-            preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
+            preferences.putSecret(PROVIDERS, JsonInstant.encodeToString(settings.providers))
 
-            preferences[ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
+            preferences.putSecret(ASSISTANTS, JsonInstant.encodeToString(settings.assistants))
             preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
             preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
 
-            preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
+            preferences.putSecret(SEARCH_SERVICES, JsonInstant.encodeToString(settings.searchServices))
             preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
             preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
 
-            preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
-            preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
-            preferences[S3_CONFIG] = JsonInstant.encodeToString(settings.s3Config)
-            preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
+            preferences.putSecret(MCP_SERVERS, JsonInstant.encodeToString(settings.mcpServers))
+            preferences.putSecret(WEBDAV_CONFIG, JsonInstant.encodeToString(settings.webDavConfig))
+            preferences.putSecret(S3_CONFIG, JsonInstant.encodeToString(settings.s3Config))
+            preferences.putSecret(TTS_PROVIDERS, JsonInstant.encodeToString(settings.ttsProviders))
             settings.selectedTTSProviderId?.let {
                 preferences[SELECTED_TTS_PROVIDER] = it.toString()
             } ?: preferences.remove(SELECTED_TTS_PROVIDER)
-            preferences[ASR_PROVIDERS] = JsonInstant.encodeToString(settings.asrProviders)
+            preferences.putSecret(ASR_PROVIDERS, JsonInstant.encodeToString(settings.asrProviders))
             settings.selectedASRProviderId?.let {
                 preferences[SELECTED_ASR_PROVIDER] = it.toString()
             } ?: preferences.remove(SELECTED_ASR_PROVIDER)
@@ -475,18 +516,18 @@ class SettingsStore(
             preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
             preferences[WEB_SERVER_PORT] = settings.webServerPort
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
-            preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
+            preferences.putSecret(WEB_SERVER_ACCESS_PASSWORD, settings.webServerAccessPassword)
             preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
-            preferences[SYSTEM_TOOLS_SETTING] = JsonInstant.encodeToString(settings.systemToolsSetting)
+            preferences.putSecret(SYSTEM_TOOLS_SETTING, JsonInstant.encodeToString(settings.systemToolsSetting))
             preferences[PROACTIVE_MESSAGE_SETTING] = JsonInstant.encodeToString(settings.proactiveMessageSetting)
-            preferences[WECHAT_BOT_SETTING] = JsonInstant.encodeToString(settings.wechatBotSetting)
-            preferences[QQ_BOT_SETTING] = JsonInstant.encodeToString(settings.qqBotSetting)
+            preferences.putSecret(WECHAT_BOT_SETTING, JsonInstant.encodeToString(settings.wechatBotSetting))
+            preferences.putSecret(QQ_BOT_SETTING, JsonInstant.encodeToString(settings.qqBotSetting))
             preferences[KEEP_ALIVE_ENABLED] = settings.keepAliveEnabled
-            preferences[EXTERNAL_MEMORIES] = JsonInstant.encodeToString(settings.externalMemories)
-            preferences[MINI_APPS] = JsonInstant.encodeToString(settings.miniApps)
+            preferences.putSecret(EXTERNAL_MEMORIES, JsonInstant.encodeToString(settings.externalMemories))
+            preferences.putSecret(MINI_APPS, JsonInstant.encodeToString(settings.miniApps))
             preferences[FORCE_CONFIRM_TOOL_CALLS] = settings.forceConfirmToolCalls
             preferences[WORKFLOW_HEADLESS_BLOCK_SENSITIVE] = settings.workflowHeadlessBlockSensitive
             preferences[AUTO_APPROVE_ALL_TOOLS] = settings.autoApproveAllTools
@@ -567,6 +608,19 @@ class SettingsStore(
             )
         }
     }
+}
+
+private fun Preferences.getSecret(key: Preferences.Key<String>): String? {
+    val storedValue = this[key] ?: return null
+    return runCatching {
+        SecretCrypto.decrypt(storedValue, key.name)
+    }.onFailure { error ->
+        Log.e(TAG, "Failed to decrypt protected setting '${key.name}'", error)
+    }.getOrNull()
+}
+
+private fun MutablePreferences.putSecret(key: Preferences.Key<String>, plaintext: String) {
+    this[key] = SecretCrypto.encrypt(plaintext, key.name).orEmpty()
 }
 
 @Serializable
