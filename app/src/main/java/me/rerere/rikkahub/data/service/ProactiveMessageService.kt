@@ -785,18 +785,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     .joinToString("\n") { it.text }.trim()
                 val reasoningText = aiMessage.parts.filterIsInstance<UIMessagePart.Reasoning>()
                     .joinToString("\n") { it.reasoning }
-                var decision = parseProactiveDecision(rawText, reasoningText, hasJumpFlag)
-                val latestAssistantText = rawHistoryMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
-                    ?.parts?.filterIsInstance<UIMessagePart.Text>()
-                    ?.joinToString("\n") { it.text }.orEmpty()
-                if (decision.shouldSend && isDuplicateReply(
-                        decision.message,
-                        listOf(proactiveState.lastProactiveText, latestAssistantText),
-                    )
-                ) {
-                    trace.event("duplicate_reply", "blocked=true")
-                    decision = decision.copy(message = "", shouldSend = false, waitMinutes = 240)
-                }
+                val decision = parseProactiveDecision(rawText, reasoningText, hasJumpFlag)
                 val replyText = decision.message
                 val shouldJump = decision.shouldJump
                 nextDelayOverrideMinutes = decision.waitMinutes
@@ -1396,21 +1385,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             } else {
                 acc + msg
             }
-        }
-    }
-
-    private fun isDuplicateReply(candidate: String, previousTexts: List<String>): Boolean {
-        fun normalize(value: String): String = value.lowercase()
-            .replace(Regex("[\\s\\p{P}\\p{S}]+"), "")
-        val normalized = normalize(candidate)
-        if (normalized.length < 2) return false
-        return previousTexts.any { previous ->
-            val old = normalize(previous)
-            old.isNotBlank() && (
-                normalized == old ||
-                    (minOf(normalized.length, old.length) >= 3 &&
-                        (normalized.contains(old) || old.contains(normalized)))
-                )
         }
     }
 
