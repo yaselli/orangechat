@@ -17,9 +17,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import me.rerere.asr.ASRController
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.asr.ASRState
@@ -103,7 +111,9 @@ internal class CustomAsrStateImpl(
     private val httpClient: OkHttpClient
 ) : CustomAsrState {
     private var controller: ASRController? = null
-    private val idleState = MutableStateFlow(ASRState())
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val mutableState = MutableStateFlow(ASRState())
+    private var controllerStateJob: Job? = null
  
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
@@ -116,19 +126,32 @@ internal class CustomAsrStateImpl(
         .setAcceptsDelayedFocusGain(false)
         .build()
  
-    override val state: StateFlow<ASRState>
-        get() = controller?.state ?: idleState
- 
+    // Always expose the same StateFlow instance. The old dynamic getter returned idleState when
+    // ChatInput first composed, then silently switched to controller.state after settings loaded.
+    // Compose remained subscribed to the original idle flow, leaving isAvailable=false forever
+    // on devices where provider initialization happened slightly later.
+    override val state: StateFlow<ASRState> = mutableState.asStateFlow()
+
     fun updateProvider(provider: ASRProviderSetting?) {
+        controllerStateJob?.cancel()
+        controllerStateJob = null
         try {
             controller?.dispose()
         } catch (e: Exception) {
             Log.e(ASR_TAG, "updateProvider: 释放旧 controller 失败", e)
         }
-        controller = provider?.let { createController(it) }
-        if (controller == null) {
-            idleState.value = ASRState()
+        val newController = provider?.let { createController(it) }
+        controller = newController
+        if (newController == null) {
+            mutableState.value = ASRState()
             Log.w(ASR_TAG, "updateProvider: provider 为空或不合法, controller 未创建, provider=$provider")
+        } else {
+            mutableState.value = newController.state.value
+            controllerStateJob = scope.launch {
+                newController.state.collect { controllerState ->
+                    mutableState.value = controllerState
+                }
+            }
         }
     }
  
@@ -167,12 +190,16 @@ internal class CustomAsrStateImpl(
     }
  
     override fun cleanup() {
+        controllerStateJob?.cancel()
+        controllerStateJob = null
         try {
             controller?.dispose()
         } catch (e: Exception) {
             Log.e(ASR_TAG, "cleanup: dispose controller 失败", e)
         }
         controller = null
+        mutableState.value = ASRState()
+        scope.cancel()
         try {
             audioManager.abandonAudioFocusRequest(audioFocusRequest)
         } catch (e: Exception) {
