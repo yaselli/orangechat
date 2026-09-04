@@ -104,6 +104,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.data.ai.transformers.isExtraInfoInjectionPart
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
@@ -148,21 +149,7 @@ fun ChatMessage(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
-    val message = node.messages[node.selectIndex].let { original ->
-        if (original.role == MessageRole.USER && original.parts.any {
-                it is UIMessagePart.Text && it.text.startsWith("\u2063[orange-watch-auto]")
-            }
-        ) {
-            original.copy(
-                parts = original.parts.filterNot {
-                    it is UIMessagePart.Text && it.text.startsWith("\u2063[orange-watch-auto]")
-                }
-            )
-        } else {
-            original
-        }
-    }
-    if (message.parts.isEmptyUIMessage()) return
+    val message = node.messages[node.selectIndex]
     val settings = LocalDisplaySettings.current
     val textStyle = LocalTextStyle.current.copy(
         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
@@ -283,6 +270,7 @@ fun ChatMessage(
             onWebViewPreview = {
                 val textContent = message.parts
                     .filterIsInstance<UIMessagePart.Text>()
+                    .filterNot { it.isExtraInfoInjectionPart() }
                     .joinToString("\n\n") { it.text }
                     .trim()
                 if (textContent.isNotBlank()) {
@@ -362,7 +350,11 @@ private fun MessagePartsBlock(
     }
 
     // Render parts in original order (group thinking/tool as chain-of-thought)
-    val groupedParts = remember(parts) { parts.groupMessageParts() }
+    // Persisted extra information remains available to the model but must not appear as
+    // another user bubble or expose sensitive device context in the normal chat UI.
+    val groupedParts = remember(parts) {
+        parts.filterNot { it.isExtraInfoInjectionPart() }.groupMessageParts()
+    }
     groupedParts.fastForEach { block ->
         when (block) {
             is MessagePartBlock.ThinkingBlock -> {

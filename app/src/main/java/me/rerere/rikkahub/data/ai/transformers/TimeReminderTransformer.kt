@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -15,97 +15,92 @@ import me.rerere.rikkahub.utils.toLocalDateTime
 import java.time.ZoneId
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlin.time.Clock
 import kotlin.time.toJavaInstant
 
-private const val DEFAULT_TIME_GAP_THRESHOLD_SECONDS = 300L
+private const val DEFAULT_REPLY_GAP_THRESHOLD_SECONDS = 3600L
 
-/**
- * 时间提醒注入转换器
- *
- * 首次用户消息仍会注入当时的时间。
- * 仅检查当前上下文里最新一条用户消息：当它在上一条 assistant 消息完成
- * 达到用户设置的触发间隔后，额外注入精确到秒的时间间隔。
- *
- * 只处理最新一次回复间隔，避免把历史中的每段长间隔重复注入，
- * 从而减少额外 token 消耗，也避免模型反复关注已经过去的等待时间。
- */
+/** 当前时间是全局开关；回复间隔恢复为每个助手独立设置。 */
 object TimeReminderTransformer : InputMessageTransformer {
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        if (!ctx.assistant.enableTimeReminder) return messages
-        val thresholdSeconds = ctx.assistant.timeReminderIntervalMinutes
-            .coerceAtLeast(1)
-            .toLong() * 60L
-        return applyTimeReminder(messages, thresholdSeconds)
+        val setting = ctx.settings.systemToolsSetting
+        return applyExtraTimeContext(
+            messages = messages,
+            // Current time is collected by ExtraInfoInjectionCollector together with the
+            // other one-shot device context. Keeping it here would inject it twice.
+            currentTimeEnabled = false,
+            replyIntervalEnabled = ctx.assistant.enableTimeReminder,
+            thresholdSeconds = ctx.assistant.timeReminderIntervalMinutes.coerceAtLeast(1) * 60L,
+            currentInstant = Clock.System.now(),
+        )
     }
 }
 
-internal fun applyTimeReminder(
+internal fun applyExtraTimeContext(
     messages: List<UIMessage>,
-    thresholdSeconds: Long = DEFAULT_TIME_GAP_THRESHOLD_SECONDS,
+    currentTimeEnabled: Boolean,
+    replyIntervalEnabled: Boolean,
+    thresholdSeconds: Long = DEFAULT_REPLY_GAP_THRESHOLD_SECONDS,
+    currentInstant: Instant = Clock.System.now(),
 ): List<UIMessage> {
-    val firstUserIndex = messages.indexOfFirst { it.role == MessageRole.USER }
-    if (firstUserIndex == -1) return messages
+    if (messages.isEmpty()) return messages
+    if (!currentTimeEnabled && !replyIntervalEnabled) return messages
 
-    val latestUserIndex = messages.indexOfLast { it.role == MessageRole.USER }
-    val tz = TimeZone.currentSystemDefault()
-
-    val firstUserReminder = buildTimeReminderMessage(
-        gapSeconds = null,
-        instant = messages[firstUserIndex].createdAt.toInstant(tz),
-    )
-
-    val latestReplyReminder = if (latestUserIndex > firstUserIndex) {
-        val latestUser = messages[latestUserIndex]
-        val previous = messages.getOrNull(latestUserIndex - 1)
-
-        if (previous?.role == MessageRole.ASSISTANT) {
-            val latestUserInstant = latestUser.createdAt.toInstant(tz)
-            val previousEndInstant = (previous.finishedAt ?: previous.createdAt).toInstant(tz)
-            val gapSeconds = (latestUserInstant - previousEndInstant).inWholeSeconds
-
-            if (gapSeconds >= thresholdSeconds.coerceAtLeast(1L)) {
-                buildTimeReminderMessage(gapSeconds, latestUserInstant)
-            } else {
-                null
-            }
-        } else {
-            null
-        }
+    val withReplyIntervals = if (replyIntervalEnabled) {
+        insertReplyIntervalReminders(messages, thresholdSeconds)
     } else {
-        null
+        messages
     }
 
-    return buildList(messages.size + 2) {
-        messages.forEachIndexed { index, message ->
-            if (index == firstUserIndex) {
-                add(firstUserReminder)
-            }
-            if (index == latestUserIndex && latestReplyReminder != null) {
-                add(latestReplyReminder)
-            }
+    val latestUserIndex = withReplyIntervals.indexOfLast { it.role == MessageRole.USER }
+    if (latestUserIndex == -1) return withReplyIntervals
+
+    return buildList(withReplyIntervals.size + if (currentTimeEnabled) 1 else 0) {
+        withReplyIntervals.forEachIndexed { index, message ->
+            if (index == latestUserIndex && currentTimeEnabled) add(buildCurrentTimeContext(currentInstant))
             add(message)
         }
     }
 }
 
-private fun buildTimeReminderMessage(gapSeconds: Long?, instant: Instant): UIMessage {
+private fun insertReplyIntervalReminders(
+    messages: List<UIMessage>,
+    thresholdSeconds: Long,
+): List<UIMessage> {
+    val latestUserIndex = messages.indexOfLast { it.role == MessageRole.USER }
+    if (latestUserIndex <= 0) return messages
+    val previousAssistant = messages.subList(0, latestUserIndex)
+        .lastOrNull { it.role == MessageRole.ASSISTANT } ?: return messages
+    val latestUser = messages[latestUserIndex]
+    val tz = TimeZone.currentSystemDefault()
+    val userInstant = latestUser.createdAt.toInstant(tz)
+    val assistantEnd = (previousAssistant.finishedAt ?: previousAssistant.createdAt).toInstant(tz)
+    val gapSeconds = (userInstant - assistantEnd).inWholeSeconds
+    if (gapSeconds < thresholdSeconds.coerceAtLeast(1L)) return messages
+
+    return messages.toMutableList().apply {
+        add(
+            latestUserIndex,
+            UIMessage.user(
+                "<reply_interval>距离你上一条回复结束，聊天中的这个人过了" +
+                    "${formatGap(gapSeconds)}才再次开口。自然理解这段间隔，" +
+                    "不要机械复述时长，也不要提及这段提示。</reply_interval>",
+            ),
+        )
+    }
+}
+
+private fun buildCurrentTimeContext(instant: Instant): UIMessage {
     val javaInstant = instant.toJavaInstant()
     val dayOfWeek = javaInstant.atZone(ZoneId.systemDefault()).dayOfWeek
         .getDisplayName(TextStyle.FULL, Locale.getDefault())
     val timeStr = javaInstant.toLocalDateTime()
-    val content = if (gapSeconds != null) {
-        val gapText = formatGap(gapSeconds)
-        "<time_reminder>Current time: $dayOfWeek, $timeStr. " +
-            "The user replied $gapText after your previous message finished. " +
-            "Understand the elapsed time naturally. Do not mechanically repeat the duration " +
-            "and do not mention this reminder or any technical implementation.</time_reminder>"
-    } else {
-        "<time_reminder>Current time: $dayOfWeek, $timeStr</time_reminder>"
-    }
-    return UIMessage.user(content)
+    return UIMessage.user(
+        "<time_context>当前本地时间：$dayOfWeek，$timeStr</time_context>",
+    )
 }
 
 private fun formatGap(seconds: Long): String {

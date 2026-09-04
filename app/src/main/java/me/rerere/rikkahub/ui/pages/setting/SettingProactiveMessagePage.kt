@@ -10,8 +10,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,10 +33,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RiskConfirmDialog
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.ProactiveMessageWorker
 import org.koin.compose.koinInject
@@ -51,7 +50,6 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     var showProactiveRiskDialog by remember { mutableStateOf(false) }
-    var showAggressiveRiskDialog by remember { mutableStateOf(false) }
 
     if (showProactiveRiskDialog) {
         RiskConfirmDialog(
@@ -65,26 +63,6 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                 ProactiveMessageService.triggerNow(context, newSetting)
             },
             onDismiss = { showProactiveRiskDialog = false }
-        )
-    }
-
-    if (showAggressiveRiskDialog) {
-        RiskConfirmDialog(
-            title = stringResource(R.string.risk_proactive_message_title),
-            message = stringResource(R.string.risk_proactive_message_message),
-            onConfirm = {
-                showAggressiveRiskDialog = false
-                val newSetting = settings.proactiveMessageSetting.copy(aggressiveModeEnabled = true, enabled = false)
-                vm.updateSettings(settings.copy(proactiveMessageSetting = newSetting))
-                ProactiveMessageService.cancel(context)
-                try {
-                    val intent = android.content.Intent(context, me.rerere.rikkahub.data.service.DeviceEventAiTriggerService::class.java)
-                    context.startForegroundService(intent)
-                } catch (e: Exception) {
-                    android.util.Log.e("SettingProactiveMessage", "Failed to start aggressive mode service", e)
-                }
-            },
-            onDismiss = { showAggressiveRiskDialog = false }
         )
     }
 
@@ -105,6 +83,13 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
         ) {
             item {
                 CardGroup {
+                    item(
+                        headlineContent = { Text("吃醋巡检") },
+                        supportingContent = {
+                            Text("查看 TA 的情绪、固定阈值、受管应用与永不锁定白名单")
+                        },
+                        onClick = { navController.navigate(Screen.JealousyInspection) },
+                    )
                     item(
                         headlineContent = { Text("启用主动消息") },
                         supportingContent = { Text("开启后AI立即主动发一条消息，之后按设定间隔循环") },
@@ -146,54 +131,6 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                                 } else {
                                     Text("等待调度中...")
                                 }
-                            }
-                        )
-                    }
-                    // 悬浮球开关（仅在主动消息启用时显示）
-                    if (settings.proactiveMessageSetting.enabled) {
-                        val overlayPermissionLauncher = rememberLauncherForActivityResult(
-                            contract = ActivityResultContracts.StartActivityForResult()
-                        ) { }
-                        val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            Settings.canDrawOverlays(context)
-                        } else true
-
-                        item(
-                            headlineContent = { Text("悬浮球提醒") },
-                            supportingContent = {
-                                Text(
-                                    if (hasOverlayPermission) {
-                                        "主动消息到达时以悬浮球形式提醒，点击直接进入聊天页"
-                                    } else {
-                                        "需要先授予「显示在其他应用上层」权限才能显示悬浮球"
-                                    }
-                                )
-                            },
-                            trailingContent = {
-                                Switch(
-                                    checked = settings.proactiveMessageSetting.floatingBubbleEnabled,
-                                    onCheckedChange = { enabled ->
-                                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
-                                            // 无 overlay 权限，引导用户去系统设置授权
-                                            val intent = Intent(
-                                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                                Uri.parse("package:${context.packageName}")
-                                            )
-                                            overlayPermissionLauncher.launch(intent)
-                                            return@Switch
-                                        }
-                                        vm.updateSettings(
-                                            settings.copy(
-                                                proactiveMessageSetting = settings.proactiveMessageSetting.copy(
-                                                    floatingBubbleEnabled = enabled
-                                                )
-                                            )
-                                        )
-                                        if (!enabled) {
-                                            me.rerere.rikkahub.data.service.FloatingBubbleService.dismiss(context)
-                                        }
-                                    }
-                                )
                             }
                         )
                     }
@@ -247,80 +184,95 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                             )
                         },
                     )
-                }
-            }
-            // 激进模式开关（与主动消息互斥）
-            item {
-                CardGroup {
                     item(
-                        headlineContent = { Text("激进模式") },
+                        headlineContent = { Text("最多连续追问") },
                         supportingContent = {
-                            Text("开启后，每次手机切换应用、开屏锁屏、回到桌面都会触发 AI 思考。AI 会根据用户的手机动向自主决定是否主动发消息或切屏。\n\n可以独立开启，不需要同时开启主动消息。\n\n这是一个常驻前台服务，会持续小幅耗电。需要开启使用情况访问权限。\n\nAI 大多数时候会选择 [PASS] 跳过，只在觉得有话要说时才会发消息。")
+                            OutlinedTextField(
+                                value = settings.proactiveMessageSetting.maxFollowUpMessages.toString(),
+                                onValueChange = { value ->
+                                    value.toIntOrNull()?.takeIf { it in 1..8 }?.let { count ->
+                                        vm.updateSettings(
+                                            settings.copy(
+                                                proactiveMessageSetting = settings.proactiveMessageSetting.copy(
+                                                    maxFollowUpMessages = count,
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                },
+                                placeholder = { Text("2") },
+                                singleLine = true,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                            Text("同一次沉默后最多发送几次，可设置 1～8 次；重新开口后自动清零。")
+                        },
+                    )
+                    item(
+                        headlineContent = { Text("允许主动消息查岗") },
+                        supportingContent = {
+                            Text(
+                                "开启后，AI 可在主动消息判断确有需要时调用应用使用工具；" +
+                                    "关闭后，主动消息不会读取应用使用情况。此设置不影响正常聊天中的工具使用。",
+                            )
                         },
                         trailingContent = {
                             Switch(
-                                checked = settings.proactiveMessageSetting.aggressiveModeEnabled,
+                                checked = settings.proactiveMessageSetting.allowProactiveAppUsage,
                                 onCheckedChange = { enabled ->
-                                    if (enabled) {
-                                        showAggressiveRiskDialog = true
-                                    } else {
-                                        val newSetting = settings.proactiveMessageSetting.copy(aggressiveModeEnabled = false)
-                                        vm.updateSettings(settings.copy(proactiveMessageSetting = newSetting))
-                                        me.rerere.rikkahub.data.service.DeviceEventAiTriggerService.stop(context)
-                                    }
-                                }
+                                    vm.updateSettings(
+                                        settings.copy(
+                                            proactiveMessageSetting = settings.proactiveMessageSetting.copy(
+                                                allowProactiveAppUsage = enabled,
+                                            ),
+                                        ),
+                                    )
+                                },
                             )
-                        }
+                        },
                     )
-                    // 最小间隔设置（仅当激进模式开启时显示）
-                    if (settings.proactiveMessageSetting.aggressiveModeEnabled) {
+                    item(
+                        headlineContent = { Text("定时屏幕 OCR") },
+                        supportingContent = {
+                            Text(
+                                "达到单独设定的沉默时间后，由系统直接截图识别，" +
+                                    "再交给 AI 判断是否发消息。",
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.proactiveMessageSetting.proactiveScreenOcrEnabled,
+                                onCheckedChange = { enabled ->
+                                    vm.updateSettings(
+                                        settings.copy(
+                                            proactiveMessageSetting = settings.proactiveMessageSetting.copy(
+                                                proactiveScreenOcrEnabled = enabled,
+                                            ),
+                                        ),
+                                    )
+                                },
+                            )
+                        },
+                    )
+                    if (settings.proactiveMessageSetting.proactiveScreenOcrEnabled) {
                         item(
-                            headlineContent = { Text("激进模式最小间隔 (秒)") },
+                            headlineContent = { Text("OCR 等待时间（分钟）") },
                             supportingContent = {
                                 OutlinedTextField(
-                                    value = settings.proactiveMessageSetting.aggressiveMinIntervalSeconds.toString(),
+                                    value = settings.proactiveMessageSetting.proactiveScreenOcrDelayMinutes.toString(),
                                     onValueChange = { value ->
-                                        val seconds = value.toIntOrNull()
-                                        if (seconds != null && seconds >= 10) {
+                                        value.toIntOrNull()?.takeIf { it in 1..1440 }?.let { minutes ->
                                             vm.updateSettings(
                                                 settings.copy(
                                                     proactiveMessageSetting = settings.proactiveMessageSetting.copy(
-                                                        aggressiveMinIntervalSeconds = seconds
-                                                    )
-                                                )
+                                                        proactiveScreenOcrDelayMinutes = minutes,
+                                                    ),
+                                                ),
                                             )
                                         }
                                     },
-                                    placeholder = { Text("60") },
                                     singleLine = true,
                                     modifier = Modifier.padding(top = 8.dp),
                                 )
-                                Text("两次 AI 思考之间的最小间隔（秒）。防抖+限流，避免频繁触发浪费 token。最小10秒。")
-                            },
-                        )
-                        // 防抖等待时间设置（仅当激进模式开启时显示）
-                        item(
-                            headlineContent = { Text("激进模式防抖等待 (秒)") },
-                            supportingContent = {
-                                OutlinedTextField(
-                                    value = settings.proactiveMessageSetting.aggressiveDebounceSeconds.toString(),
-                                    onValueChange = { value ->
-                                        val seconds = value.toIntOrNull()
-                                        if (seconds != null && seconds >= 3) {
-                                            vm.updateSettings(
-                                                settings.copy(
-                                                    proactiveMessageSetting = settings.proactiveMessageSetting.copy(
-                                                        aggressiveDebounceSeconds = seconds
-                                                    )
-                                                )
-                                            )
-                                        }
-                                    },
-                                    placeholder = { Text("30") },
-                                    singleLine = true,
-                                    modifier = Modifier.padding(top = 8.dp),
-                                )
-                                Text("检测到切换应用/开关屏/回桌面等操作后，等待多少秒再让 AI 思考（期间的新操作会重新计时）。设多少就是精确多少秒，不是随机值。最小3秒。")
                             },
                         )
                     }
@@ -389,7 +341,7 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                     item(
                         headlineContent = { Text("说明") },
                         supportingContent = {
-                            Text("启用后，AI 会在设定的最小和最大间隔之间随机一个时间点主动给你发消息。你回复后计时器重置，重新开始随机计时；不回复则继续循环发消息。AI 可以自己思考选择要不要回复，如果觉得没什么好说的可以跳过。\n\n提示：同时使用 AlarmManager + WorkManager 双重调度，确保消息能准时触发。\n\n强制跳转：开启后 AI 会自行判断是否需要拉起屏幕。")
+                            Text("AI 会先判断聊天中的人是突然离开、明确去忙，还是对话已经结束，再决定发送、等待或停止。上一轮主动消息会作为真实交流保留，达到连续追问上限后会等待再次开口。\n\n只有同时开启系统里的应用使用工具和本页的查岗权限，主动消息才可以按需查看；未调用就不会附带这份数据。AI 也可以自行用 JUMP 拉起聊天页。\n\nAlarmManager 与 WorkManager 会共同保证后台调度。")
                         },
                     )
                 }

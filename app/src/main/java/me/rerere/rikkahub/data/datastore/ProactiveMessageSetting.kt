@@ -13,9 +13,16 @@ data class ProactiveMessageSetting(
     val enabled: Boolean = false,
     val minIntervalMinutes: Int = 30,
     val maxIntervalMinutes: Int = 90,
+    // 同一条真实用户消息之后，最多允许几次主动追问；用户一回复即清零。
+    val maxFollowUpMessages: Int = 2,
     val assistantId: String = "",
     // 是否允许 AI 根据上下文判断后强制跳转屏幕到聊天界面
     val allowForceJump: Boolean = false,
+    // 主动消息是否可以按需调用应用使用情况工具；正常聊天不受影响。
+    val allowProactiveAppUsage: Boolean = false,
+    // 普通主动消息达到独立等待时间后，由系统直接截图 OCR，再交给 AI 判断。
+    val proactiveScreenOcrEnabled: Boolean = false,
+    val proactiveScreenOcrDelayMinutes: Int = 45,
     val jumpIdleThresholdMinutes: Int = 120, // 用户多久没回复(分钟)才允许跳转屏幕，默认2小时
     // 激进模式：每次手机切换应用/开屏锁屏/回桌面都触发AI思考
     val aggressiveModeEnabled: Boolean = false,
@@ -25,5 +32,6 @@ data class ProactiveMessageSetting(
     // 等待多少秒的防抖时间才真正触发 AI 思考。原来硬编码 30 秒，现在可调节。
     val aggressiveDebounceSeconds: Int = 30,
     // 悬浮球：主动消息到达时以 Telegram 风格悬浮球提醒，点击直接进入聊天页
+    // Deprecated compatibility field. The proactive floating bubble is no longer used.
     val floatingBubbleEnabled: Boolean = false,
 )

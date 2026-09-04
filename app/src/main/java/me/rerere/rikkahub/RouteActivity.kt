@@ -145,6 +145,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingDisplayNotificationPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayTransparencyPage
+import me.rerere.rikkahub.ui.pages.setting.SettingExtraInjectionPage
 import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
@@ -160,6 +161,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSystemToolsPage
 import me.rerere.rikkahub.ui.pages.setting.SecuritySettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProactiveMessagePage
+import me.rerere.rikkahub.ui.pages.setting.JealousyInspectionPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWeixinBotPage
 import me.rerere.rikkahub.ui.pages.setting.SettingQqBotPage
 import me.rerere.rikkahub.plugin.webview.PluginWebViewPage
@@ -167,6 +169,7 @@ import me.rerere.rikkahub.ui.pages.memory.MemoryBankPage
 import me.rerere.rikkahub.ui.components.ui.EmojiPickerPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
+import me.rerere.rikkahub.ui.pages.anniversary.AnniversaryPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
  import me.rerere.rikkahub.ui.pages.voice.IncomingCallPage
  import me.rerere.rikkahub.ui.pages.voice.VoiceCallPage
@@ -683,6 +686,10 @@ entry<Screen.Extensions> {
                                 StatsPage()
                             }
 
+                            entry<Screen.Anniversary> {
+                                AnniversaryPage()
+                            }
+
                             entry<Screen.SettingSystemTools> {
                                 SettingSystemToolsPage()
                             }
@@ -693,6 +700,14 @@ entry<Screen.Extensions> {
 
                             entry<Screen.SettingProactiveMessage> {
                                 SettingProactiveMessagePage()
+                            }
+
+                            entry<Screen.JealousyInspection> {
+                                JealousyInspectionPage()
+                            }
+
+                            entry<Screen.SettingExtraInjection> {
+                                SettingExtraInjectionPage()
                             }
 
                             entry<Screen.SettingWeixinBot> {
@@ -767,7 +782,6 @@ entry<Screen.Extensions> {
                                 PluginWebViewPage(
                                     pluginId = key.pluginId,
                                     htmlEntryPath = key.entryPath,
-                                    initialConversationId = key.conversationId,
                                     pluginManager = pluginManager,
                                     onNavigateBack = { backStack.removeLastOrNull() }
                                 )
@@ -1065,6 +1079,9 @@ sealed interface Screen : NavKey {
     data object Stats : Screen
 
     @Serializable
+    data object Anniversary : Screen
+
+    @Serializable
     data object SettingSystemTools : Screen
 
     @Serializable
@@ -1072,6 +1089,12 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingProactiveMessage : Screen
+
+    @Serializable
+    data object JealousyInspection : Screen
+
+    @Serializable
+    data object SettingExtraInjection : Screen
 
     @Serializable
     data object SettingWeixinBot : Screen
@@ -1098,7 +1121,7 @@ sealed interface Screen : NavKey {
     data class PluginFolder(val folderId: String) : Screen
 
     @Serializable
-    data class PluginWebView(val pluginId: String, val entryPath: String, val conversationId: String = "") : Screen
+    data class PluginWebView(val pluginId: String, val entryPath: String) : Screen
 
     @Serializable
     data class PluginDeclarativeUI(val pluginId: String) : Screen

@@ -129,8 +129,8 @@ class RikkaHubApp : Application() {
         // Start App Lock guard (intercepts locked apps when opened) if any app is locked
         startAppLockGuardIfEnabled()
 
-        // Start aggressive mode (device event AI trigger) if enabled
-        startAggressiveModeIfEnabled()
+        // 激进模式已退役：迁移期间主动停止旧版本遗留的常驻服务。
+        stopLegacyAggressiveMode()
 
         // Reschedule daily_cron alarm if plugins need it
         rescheduleDailyCronIfEnabled()
@@ -184,6 +184,13 @@ class RikkaHubApp : Application() {
                     ProactiveMessageService.scheduleNext(this@RikkaHubApp, settings.proactiveMessageSetting)
                     Log.i(TAG, "Rescheduled proactive message alarm on app start")
                 }
+                val jealousyState = me.rerere.rikkahub.data.service.JealousyInspectionStore.read(this@RikkaHubApp)
+                if (jealousyState.enabled && !jealousyState.reconciling && !jealousyState.forcedOpen) {
+                    me.rerere.rikkahub.data.service.JealousyInspectionWorker.schedule(
+                        this@RikkaHubApp,
+                        me.rerere.rikkahub.data.service.JealousyInspectionStore.INSPECTION_INTERVAL_MINUTES,
+                    )
+                }
             }.onFailure {
                 Log.e(TAG, "rescheduleProactiveMessageIfEnabled failed", it)
             }
@@ -229,11 +236,11 @@ class RikkaHubApp : Application() {
         }
     }
 
-    private fun startAggressiveModeIfEnabled() {
+    private fun stopLegacyAggressiveMode() {
         runCatching {
-            DeviceEventAiTriggerService.startIfEnabled(this)
+            DeviceEventAiTriggerService.stop(this)
         }.onFailure {
-            Log.e(TAG, "startAggressiveModeIfEnabled failed", it)
+            Log.e(TAG, "stopLegacyAggressiveMode failed", it)
         }
     }
 

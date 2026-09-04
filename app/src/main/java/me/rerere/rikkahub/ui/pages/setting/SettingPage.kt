@@ -8,7 +8,10 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.widget.Toast
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -36,11 +39,14 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -70,6 +76,7 @@ import me.rerere.hugeicons.stroke.Shield02
 import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Share04
 import me.rerere.hugeicons.stroke.Sun01
+import me.rerere.hugeicons.stroke.Time02
 import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.hugeicons.stroke.MessageMultiple01
 import me.rerere.hugeicons.stroke.Message01
@@ -92,6 +99,7 @@ import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import java.io.File
 
 @Composable
 fun SettingPage(vm: SettingVM = koinViewModel()) {
@@ -99,6 +107,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val filesManager: FilesManager = koinInject()
+    val settingsBackground = settings.displaySetting.settingsBackgroundPath
+        .takeIf { it.isNotBlank() && File(it).exists() }
+    val settingsUiAlpha = settings.displaySetting.settingsUiAlpha.coerceIn(0.25f, 1f)
+    val settingsCardColors = ListItemDefaults.colors(
+        containerColor = MaterialTheme.colorScheme.surfaceBright.copy(alpha = settingsUiAlpha)
+    )
 
     if (settings.launchCount > 100 && (settings.launchCount - settings.sponsorAlertDismissedAt) >= 50) {
         AlertDialog(
@@ -126,6 +140,19 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
         )
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
+        settingsBackground?.let { path ->
+            val bitmap = remember(path) { BitmapFactory.decodeFile(path) }
+            bitmap?.let {
+                Image(
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+        }
+
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -138,11 +165,17 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 scrollBehavior = scrollBehavior,
                 actions = {
                 },
-                colors = CustomColors.topBarColors
+                colors = if (settingsBackground != null) {
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = settingsUiAlpha),
+                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = settingsUiAlpha),
+                    )
+                } else CustomColors.topBarColors
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = CustomColors.topBarColors.containerColor
+        containerColor = if (settingsBackground != null) Color.Transparent
+        else CustomColors.topBarColors.containerColor
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -165,6 +198,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_general_settings)) },
+                    colors = settingsCardColors,
                 ) {
                     item(
                         leadingContent = { Icon(HugeIcons.Sun01, null) },
@@ -230,6 +264,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_model_and_services)) },
+                    colors = settingsCardColors,
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.SettingModels) },
@@ -280,6 +315,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text("主动消息") },
                     )
                     item(
+                        onClick = { navController.navigate(Screen.SettingExtraInjection) },
+                        leadingContent = { Icon(HugeIcons.Time02, null) },
+                        supportingContent = { Text("时间、天气、位置、屏幕、通知和记忆等上下文") },
+                        headlineContent = { Text("额外注入") },
+                    )
+                    item(
                         onClick = { navController.navigate(Screen.SettingWeixinBot) },
                         leadingContent = { Icon(HugeIcons.MessageMultiple01, null) },
                         supportingContent = { Text("把微信号变成 AI 入口，扫码登录后用微信收发消息") },
@@ -313,6 +354,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_data_settings)) },
+                    colors = settingsCardColors,
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.Backup) },
@@ -349,6 +391,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_about)) },
+                    colors = settingsCardColors,
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.SettingAbout) },
@@ -427,6 +470,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
         }
+    }
     }
 }
 
