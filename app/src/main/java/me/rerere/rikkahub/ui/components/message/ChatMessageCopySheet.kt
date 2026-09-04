@@ -39,6 +39,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.transformers.isExtraInfoInjectionPart
 import me.rerere.rikkahub.utils.copyMessageToClipboard
 
 @Composable
@@ -96,7 +97,9 @@ fun ChatMessageCopySheet(
 
             // Content
             val textParts =
-                message.parts.filterIsInstance<UIMessagePart.Text>().filter { it.text.isNotBlank() }
+                message.parts.filterIsInstance<UIMessagePart.Text>()
+                    .filterNot { it.isExtraInfoInjectionPart() }
+                    .filter { it.text.isNotBlank() }
 
             if (textParts.isEmpty()) {
                 // No text content available

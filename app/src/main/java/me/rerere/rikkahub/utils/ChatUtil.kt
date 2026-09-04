@@ -10,7 +10,9 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.transformers.isExtraInfoInjectionPart
 import me.rerere.rikkahub.ui.context.Navigator
 import kotlin.uuid.Uuid
 
@@ -35,5 +37,9 @@ fun navigateToChatPage(
 }
 
 fun Context.copyMessageToClipboard(message: UIMessage) {
-    this.writeClipboardText(message.toText())
+    val visibleText = message.parts
+        .filterIsInstance<UIMessagePart.Text>()
+        .filterNot { it.isExtraInfoInjectionPart() }
+        .joinToString("\n") { it.text }
+    this.writeClipboardText(visibleText)
 }

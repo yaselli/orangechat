@@ -23,6 +23,22 @@ data class SystemToolsSetting(
     // Lightweight time context injection. This is deliberately independent
     // from individual assistants so the user has one predictable switch.
     val timeContextInjectionEnabled: Boolean = false,
+    // Extra information collected immediately before a normal chat request.
+    // Sensitive items are opt-in and are never collected by proactive messages here.
+    val extraInfoInjectionEnabled: Boolean = true,
+    val persistExtraInfoInjection: Boolean = false,
+    val batteryContextInjectionEnabled: Boolean = false,
+    val weatherContextInjectionEnabled: Boolean = false,
+    val locationContextInjectionEnabled: Boolean = false,
+    val preciseLocationContextInjectionEnabled: Boolean = false,
+    val currentScreenAppContextInjectionEnabled: Boolean = false,
+    val recentAppUsageContextInjectionEnabled: Boolean = false,
+    val screenTextContextInjectionEnabled: Boolean = false,
+    val notificationsContextInjectionEnabled: Boolean = false,
+    val memoryContextInjectionEnabled: Boolean = false,
+    val allowRepeatedMemoryContextSearch: Boolean = false,
+    val memoryContextInjectionLimit: Int = 3,
+    val extraInfoInjectionTimeoutSeconds: Int = 8,
     // Insert a compact elapsed-time marker before messages that follow a long pause.
     // Kept separate from current-time injection so either feature can be used alone.
     val replyIntervalReminderEnabled: Boolean = false,

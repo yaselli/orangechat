@@ -94,9 +94,14 @@ internal class ProactiveMessageStateStore(context: Context) {
         state: ProactiveSessionState,
         messageIds: Collection<String>,
         text: String,
+        countTowardFollowUps: Boolean = true,
     ): ProactiveSessionState {
         val updated = state.copy(
-            followUpCount = state.followUpCount + 1,
+            followUpCount = if (countTowardFollowUps) {
+                state.followUpCount + 1
+            } else {
+                state.followUpCount
+            },
             // One proactive run can contain several assistant nodes when tools are used.
             // Keep every persisted node id so the next run can sanitize the whole chain.
             recentProactiveMessageIds = (state.recentProactiveMessageIds + messageIds)
@@ -104,7 +109,7 @@ internal class ProactiveMessageStateStore(context: Context) {
                 .takeLast(MAX_RECENT_PROACTIVE_MESSAGE_IDS)
                 .toSet(),
             lastProactiveText = text.take(500),
-            stopUntilUserReturns = false,
+            stopUntilUserReturns = if (countTowardFollowUps) false else state.stopUntilUserReturns,
         )
         write(updated)
         return updated

@@ -143,6 +143,7 @@ val appModule = module {
             workspaceRepository = get(),
             memoryBankService = get(),
             folderRepository = get(),
+            okHttpClient = get(),
         )
     }
 

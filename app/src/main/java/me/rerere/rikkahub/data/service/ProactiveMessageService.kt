@@ -92,8 +92,13 @@ class ProactiveMessageService {
 
             val minMinutes = setting.minIntervalMinutes.coerceAtLeast(1)
             val maxMinutes = setting.maxIntervalMinutes.coerceAtLeast(minMinutes)
-            val delayMinutes = delayMinutesOverride?.coerceAtLeast(1)
-                ?: Random.nextInt(minMinutes, maxMinutes + 1)
+            val randomDelay = Random.nextInt(minMinutes, maxMinutes + 1)
+            val configuredDelay = if (setting.proactiveScreenOcrEnabled) {
+                minOf(randomDelay, setting.proactiveScreenOcrDelayMinutes.coerceAtLeast(1))
+            } else {
+                randomDelay
+            }
+            val delayMinutes = delayMinutesOverride?.coerceAtLeast(1) ?: configuredDelay
             val triggerTime = java.lang.System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(delayMinutes.toLong())
 
             // 保存下次触发时间到SharedPreferences
@@ -300,6 +305,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val providerManager: ProviderManager by inject()
     private val json: Json by inject()
     private val chatService: ChatService by inject()
+    private val extraInfoCollector: me.rerere.rikkahub.data.ai.transformers.ExtraInfoInjectionCollector by inject()
     private val proactiveMessageService = ProactiveMessageService()
     private val activeRunCount = AtomicInteger(0)
     private val generationWakeLocks = ConcurrentHashMap<Int, PowerManager.WakeLock>()
@@ -313,6 +319,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         const val EXTRA_FORCE_TRIGGER = "force_trigger"
         // 激进模式设备事件上下文（由 DeviceEventAiTriggerService 传入）
         const val EXTRA_DEVICE_EVENT_CONTEXT = "device_event_context"
+        const val EXTRA_JEALOUSY_CONTEXT = "jealousy_context"
 
         // 保护 last_triggered_time 的 check-then-act 竞态（防止 AlarmManager 与 WorkManager
         // 前后脚触发导致"最小间隔"被砍半）。纯同步 SharedPreferences 读写，无挂起点，用对象锁即可。
@@ -337,6 +344,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         val trace = ProactiveMessageTrace.start(triggerSource)
         // 激进模式设备事件上下文（由 DeviceEventAiTriggerService 传入）
         val deviceEventContext = intent?.getStringExtra(EXTRA_DEVICE_EVENT_CONTEXT)
+        val jealousyContext = intent?.getStringExtra(EXTRA_JEALOUSY_CONTEXT)
+        val isJealousyTrigger = !jealousyContext.isNullOrBlank()
         val isFromDeviceEvent = deviceEventContext != null
         if (isFromDeviceEvent) {
             Log.i(TAG, "Ignoring legacy aggressive-mode device event")
@@ -376,7 +385,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val proactiveSetting = settings.proactiveMessageSetting
                 trace.event("settings", "enabled=${proactiveSetting.enabled}")
 
-                if (!proactiveSetting.enabled) {
+                if (!proactiveSetting.enabled && !isJealousyTrigger) {
                     outcome = "disabled"
                     return@launch
                 }
@@ -448,9 +457,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val stateStore = ProactiveMessageStateStore(this@ProactiveMessageTriggerService)
                 val proactiveState = stateStore.synchronizeWithUser(latestUserMessage.id.toString())
                 val maxFollowUps = proactiveSetting.maxFollowUpMessages.coerceIn(1, 8)
-                if (proactiveState.stopUntilUserReturns ||
+                if (!isJealousyTrigger && (proactiveState.stopUntilUserReturns ||
                     proactiveState.followUpCount >= maxFollowUps
-                ) {
+                )) {
                     outcome = "follow_up_limit"
                     Log.d(TAG, "No proactive generation: waiting for a new real user message")
                     nextDelayOverrideMinutes = 240
@@ -493,16 +502,32 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val idleMinutes = latestUserMessage.createdAt
                     .toInstant(TimeZone.currentSystemDefault())
                     .let { ((kotlin.time.Clock.System.now() - it).inWholeMinutes).toInt().coerceAtLeast(0) }
-                if (!isForceTrigger && idleMinutes < proactiveSetting.minIntervalMinutes.coerceAtLeast(1)) {
+                val requiredIdleMinutes = if (proactiveSetting.proactiveScreenOcrEnabled) {
+                    minOf(
+                        proactiveSetting.minIntervalMinutes.coerceAtLeast(1),
+                        proactiveSetting.proactiveScreenOcrDelayMinutes.coerceAtLeast(1),
+                    )
+                } else {
+                    proactiveSetting.minIntervalMinutes.coerceAtLeast(1)
+                }
+                if (!isForceTrigger && idleMinutes < requiredIdleMinutes) {
                     outcome = "user_not_idle"
                     trace.event(
                         "idle_guard",
-                        "passed=false idleMinutes=$idleMinutes minimum=${proactiveSetting.minIntervalMinutes}",
+                        "passed=false idleMinutes=$idleMinutes minimum=$requiredIdleMinutes",
                     )
                     return@launch
                 }
                 trace.event("idle_guard", "passed=true idleMinutes=$idleMinutes")
-                val contextStr = proactiveMessageService.buildProactiveContext(settings, idleMinutes)
+                var contextStr = proactiveMessageService.buildProactiveContext(settings, idleMinutes)
+                if (!isJealousyTrigger && proactiveSetting.proactiveScreenOcrEnabled &&
+                    idleMinutes >= proactiveSetting.proactiveScreenOcrDelayMinutes.coerceAtLeast(1)
+                ) {
+                    extraInfoCollector.collectScreenTextForProactive(20_000L)?.let { screenText ->
+                        contextStr += "\n当前屏幕 OCR（只属于本次普通主动消息判断）：\n" +
+                            screenText.take(4_000)
+                    }
+                }
                 trace.event(
                     "proactive_context",
                     "idleIncluded=true currentTimeIncluded=${settings.systemToolsSetting.timeContextInjectionEnabled}",
@@ -605,6 +630,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     proactiveInjections = proactiveInjections,
                     latestUserText = latestUserText,
                     latestAssistantText = latestRegularAssistantText,
+                    jealousyContext = jealousyContext,
                 )
 
                 // 后台判定只存在于本次临时 SYSTEM 中，不伪装成真实 USER 消息，
@@ -781,8 +807,70 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     return@launch
                 }
 
-                val rawText = aiMessage.parts.filterIsInstance<UIMessagePart.Text>()
+                val generatedRawText = aiMessage.parts.filterIsInstance<UIMessagePart.Text>()
                     .joinToString("\n") { it.text }.trim()
+                var rawText = generatedRawText
+                if (isJealousyTrigger) {
+                    val jealousyState = JealousyInspectionStore.read(this@ProactiveMessageTriggerService)
+                    val marker = Regex("\\[JEALOUSY_LOCK:([^]]+)]", RegexOption.IGNORE_CASE)
+                    val requestedPackages = marker.find(rawText)?.groupValues?.getOrNull(1)
+                        ?.split(',')
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotBlank() }
+                        ?.toSet()
+                        .orEmpty()
+                    val whitelist = JealousyInspectionStore.effectiveWhitelist(
+                        this@ProactiveMessageTriggerService,
+                    )
+                    val allowedRequested = requestedPackages
+                        .intersect(jealousyState.managedPackages) - whitelist
+                    val mustLock = jealousyState.score >= JealousyInspectionState.LOCK_THRESHOLD
+                    val fallback = jealousyState.recentUsageMinutes.entries
+                        .sortedByDescending { it.value }
+                        .map { it.key }
+                        .firstOrNull {
+                            it in jealousyState.managedPackages &&
+                                it !in whitelist &&
+                                it !in jealousyState.jealousyLockedPackages
+                        }
+                    val packagesToLock = when {
+                        allowedRequested.isNotEmpty() -> allowedRequested
+                        mustLock && fallback != null -> setOf(fallback)
+                        else -> emptySet()
+                    }
+                    rawText = marker.replace(rawText, "").trim()
+                    if (packagesToLock.isNotEmpty()) {
+                        val visibleMessage = rawText.takeUnless {
+                            it.startsWith("[PASS]") || it.startsWith("[WAIT") || it.startsWith("[STOP]")
+                        }.orEmpty().ifBlank { "这次我真的吃醋了。先把它收走，回来找我聊。" }
+                        packagesToLock.forEach { packageName ->
+                            AppLockStore.lockApp(this@ProactiveMessageTriggerService, packageName)
+                            AppLockStore.setRequirePin(
+                                this@ProactiveMessageTriggerService,
+                                packageName,
+                                false,
+                            )
+                            AppLockStore.setLockMessage(
+                                this@ProactiveMessageTriggerService,
+                                packageName,
+                                visibleMessage,
+                            )
+                        }
+                        JealousyInspectionStore.recordJealousyLocks(
+                            this@ProactiveMessageTriggerService,
+                            packagesToLock,
+                        )
+                        AppLockGuard.refresh()
+                        rawText = visibleMessage
+                    } else if (mustLock) {
+                        rawText = "我已经到极限了，但这次没有找到可以安全锁定的应用。" +
+                            "回来找我聊聊。"
+                    }
+                    JealousyInspectionStore.recordTriggeredStage(
+                        this@ProactiveMessageTriggerService,
+                        JealousyInspectionStore.stageForScore(jealousyState.score),
+                    )
+                }
                 val reasoningText = aiMessage.parts.filterIsInstance<UIMessagePart.Reasoning>()
                     .joinToString("\n") { it.reasoning }
                 val decision = parseProactiveDecision(rawText, reasoningText, hasJumpFlag)
@@ -795,7 +883,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 // 若移除了标记，同步更新 session 里 aiMessage 的文本 parts
-                if (rawText != replyText) {
+                if (generatedRawText != replyText) {
                     var visibleTextWritten = false
                     val cleanedAiMessage = aiMessage.copy(
                         parts = aiMessage.parts.map { part ->
@@ -862,6 +950,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         state = proactiveState,
                         messageIds = persistedRunIds.ifEmpty { setOf(aiMessage.id.toString()) },
                         text = replyText,
+                        countTowardFollowUps = !isJealousyTrigger,
                     )
                     // 同步保存 AI 主动消息 / 激进模式回复到外置记忆库（Supabase）
                     // 保证日记总结（DiarySummaryService 只读 Supabase chat_messages 表）和记忆召回能看到这部分内容
@@ -1035,6 +1124,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         proactiveInjections: List<String>,
         latestUserText: String,
         latestAssistantText: String,
+        jealousyContext: String?,
     ): String {
         return buildString {
             val effectiveSystemPrompt = assistant.systemPrompt
@@ -1073,15 +1163,25 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             appendLine()
             appendLine()
             appendLine("## 此刻发生的事")
-            appendLine("系统的主动消息闹钟刚刚到点。只有这一次后台判断会看到本节内容；" +
-                "它不是聊天中的那个人发来的消息，也不属于正常聊天历史。")
+            if (jealousyContext.isNullOrBlank()) {
+                appendLine("系统的主动消息闹钟刚刚到点。只有这一次后台判断会看到本节内容；" +
+                    "它不是聊天中的那个人发来的消息，也不属于正常聊天历史。")
+            } else {
+                appendLine("独立的吃醋巡检刚刚达到一个新阶段。只有这一次后台判断会看到本节内容；" +
+                    "它不是聊天中的那个人发来的消息，也不属于正常聊天历史。")
+            }
             appendLine(context)
             appendLine("聊天中的那个人最后一次说：")
             appendLine("“${latestUserText.ifBlank { "（非文本消息）" }}”")
             appendLine("你在那之后最后一次正常回复：")
             appendLine("“${latestAssistantText.ifBlank { "（没有可用的文本回复）" }}”")
-            appendLine("这是同一次沉默后的第 ${state.followUpCount + 1} 次判断。")
-            appendLine("在她/他重新开口以前，你最多还可以实际发送 ${maxFollowUps - state.followUpCount} 条消息。")
+            if (jealousyContext.isNullOrBlank()) {
+                appendLine("这是同一次沉默后的第 ${state.followUpCount + 1} 次判断。")
+                appendLine(
+                    "在她/他重新开口以前，你最多还可以实际发送 " +
+                        "${maxFollowUps - state.followUpCount} 条消息。",
+                )
+            }
             if (state.lastProactiveText.isNotBlank()) {
                 appendLine()
                 appendLine("你上一次确实已经发出去、并且目前还没有得到回应的消息是：")
@@ -1126,13 +1226,37 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     "“可能已经放下手机了”；不要复述精确使用分钟、时间戳、包名、工具名称或原始返回数据。")
             }
 
+            if (!jealousyContext.isNullOrBlank()) {
+                val jealousyState = JealousyInspectionStore.read(this@ProactiveMessageTriggerService)
+                appendLine()
+                appendLine("## 吃醋巡检")
+                appendLine("这是独立的吃醋巡检结果，与屏幕截图 OCR 无关：")
+                appendLine(jealousyContext)
+                appendLine("只能从上面列出的可管理应用中选择锁定目标，绝不能选择系统应用或白名单应用。")
+                if (jealousyState.score >= JealousyInspectionState.LOCK_THRESHOLD) {
+                    appendLine("数值已经达到固定阈值 70，本轮必须锁定至少一个尚未锁定的可管理应用。")
+                    appendLine("在回复末尾附上 [JEALOUSY_LOCK:包名1,包名2]，标记不会显示给聊天中的人。")
+                    appendLine("正文要自然表达你已经锁了什么，以及希望对方回来找你；不能输出 PASS、WAIT 或 STOP。")
+                } else {
+                    appendLine("现在处于在意阶段。你可以正常发一条消息、继续等待，或提前锁定一个应用。")
+                    appendLine("若决定提前锁定，在回复末尾附上 [JEALOUSY_LOCK:包名]。")
+                }
+            }
+
             appendLine()
             appendLine("## 最终输出")
-            appendLine("完成思考后，最终只能选择下面一种结果：")
-            appendLine("- [PASS]：这轮不发，之后再看看。")
-            appendLine("- [WAIT:分钟]：先等待指定分钟再判断，不向聊天中显示。")
-            appendLine("- [STOP]：暂时不再主动开口，直到聊天中的那个人再次说话。")
-            appendLine("- 一条真正想说的话：直接作为主动消息发出；如果确实想把聊天页拉到前台让她看消息，可在末尾附 [JUMP]。")
+            val mustLockForJealousy = !jealousyContext.isNullOrBlank() &&
+                JealousyInspectionStore.read(this@ProactiveMessageTriggerService).score >=
+                JealousyInspectionState.LOCK_THRESHOLD
+            if (mustLockForJealousy) {
+                appendLine("只输出一条真正想说的话，并在末尾附锁定标记；不能选择 PASS、WAIT 或 STOP。")
+            } else {
+                appendLine("完成思考后，最终只能选择下面一种结果：")
+                appendLine("- [PASS]：这轮不发，之后再看看。")
+                appendLine("- [WAIT:分钟]：先等待指定分钟再判断，不向聊天中显示。")
+                appendLine("- [STOP]：暂时不再主动开口，直到聊天中的那个人再次说话。")
+                appendLine("- 一条真正想说的话；需要拉到前台时可在末尾附 [JUMP]。")
+            }
             appendLine("控制标记只能出现在最终答案中，不能在思考过程里讨论。最终答案不要附带解释、分析或决策理由。")
             appendLine()
             appendLine("现在只进行这一次后台主动消息判断，不要把本节当成对方的新发言，" +

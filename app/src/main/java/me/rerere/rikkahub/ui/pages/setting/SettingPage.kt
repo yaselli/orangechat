@@ -317,7 +317,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     item(
                         onClick = { navController.navigate(Screen.SettingExtraInjection) },
                         leadingContent = { Icon(HugeIcons.Time02, null) },
-                        supportingContent = { Text("分别管理当前时间与回复间隔信息") },
+                        supportingContent = { Text("时间、天气、位置、屏幕、通知和记忆等上下文") },
                         headlineContent = { Text("额外注入") },
                     )
                     item(

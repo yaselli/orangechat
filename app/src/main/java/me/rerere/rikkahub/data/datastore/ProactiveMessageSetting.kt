@@ -20,6 +20,9 @@ data class ProactiveMessageSetting(
     val allowForceJump: Boolean = false,
     // 主动消息是否可以按需调用应用使用情况工具；正常聊天不受影响。
     val allowProactiveAppUsage: Boolean = false,
+    // 普通主动消息达到独立等待时间后，由系统直接截图 OCR，再交给 AI 判断。
+    val proactiveScreenOcrEnabled: Boolean = false,
+    val proactiveScreenOcrDelayMinutes: Int = 45,
     val jumpIdleThresholdMinutes: Int = 120, // 用户多久没回复(分钟)才允许跳转屏幕，默认2小时
     // 激进模式：每次手机切换应用/开屏锁屏/回桌面都触发AI思考
     val aggressiveModeEnabled: Boolean = false,

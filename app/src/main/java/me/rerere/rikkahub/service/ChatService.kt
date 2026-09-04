@@ -80,6 +80,8 @@ import me.rerere.rikkahub.plugin.loader.PluginLoader
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
+import me.rerere.rikkahub.data.ai.transformers.ExtraInfoInjectionCollector
+import me.rerere.rikkahub.data.ai.transformers.JealousyReconciliationTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
@@ -89,6 +91,8 @@ import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
 import me.rerere.rikkahub.data.ai.transformers.VoiceMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.extraInfoMessagePart
+import me.rerere.rikkahub.data.ai.transformers.isExtraInfoInjectionPart
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -115,6 +119,7 @@ import me.rerere.rikkahub.utils.cancelNotification
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import okhttp3.OkHttpClient
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
@@ -148,6 +153,7 @@ private val outputTransformers by lazy {
         ThinkTagTransformer,
         Base64ImageToLocalFileTransformer,
         RegexOutputTransformer,
+        JealousyReconciliationTransformer,
     )
 }
 
@@ -169,9 +175,23 @@ class ChatService(
     private val workspaceRepository: WorkspaceRepository,
     private val memoryBankService: MemoryBankService,
     private val folderRepository: FolderRepository,
+    private val okHttpClient: OkHttpClient,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
+    private val extraInfoInjectionCollector = ExtraInfoInjectionCollector(
+        context = context,
+        memoryBankService = memoryBankService,
+        okHttpClient = okHttpClient,
+    )
+
+    private data class ExtraInfoCacheEntry(
+        val userMessageId: Uuid,
+        val settingsHash: Int,
+        val content: String?,
+    )
+
+    private val extraInfoCache = ConcurrentHashMap<Uuid, ExtraInfoCacheEntry>()
 
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -409,6 +429,8 @@ class ChatService(
         if (currentProactiveSetting.enabled) {
             me.rerere.rikkahub.data.service.ProactiveMessageService.cancel(context)
         }
+        me.rerere.rikkahub.data.service.JealousyInspectionWorker.cancel(context)
+        me.rerere.rikkahub.data.service.JealousyInspectionStore.recordUserReturn(context)
 
         val job = appScope.launch {
             try {
@@ -504,6 +526,16 @@ class ChatService(
                 val proactiveSetting = settingsStore.settingsFlow.value.proactiveMessageSetting
                 if (proactiveSetting.enabled) {
                     me.rerere.rikkahub.data.service.ProactiveMessageService.resetTimer(context, proactiveSetting)
+                }
+                val jealousyState = me.rerere.rikkahub.data.service.JealousyInspectionStore.read(context)
+                if (jealousyState.enabled && jealousyState.jealousyLockedPackages.isEmpty() &&
+                    !jealousyState.reconciling && !jealousyState.forcedOpen
+                ) {
+                    me.rerere.rikkahub.data.service.JealousyInspectionStore.startSilenceCycle(context)
+                    me.rerere.rikkahub.data.service.JealousyInspectionWorker.schedule(
+                        context,
+                        me.rerere.rikkahub.data.service.JealousyInspectionStore.START_DELAY_MINUTES,
+                    )
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -700,6 +732,88 @@ class ChatService(
         }
     }
 
+    private suspend fun collectExtraInfoForRequest(
+        conversationId: Uuid,
+        userMessage: UIMessage,
+        assistant: Assistant,
+        settings: me.rerere.rikkahub.data.datastore.Settings,
+        processingStatus: MutableStateFlow<String?>,
+    ): String? {
+        val option = settings.systemToolsSetting
+        if (!option.extraInfoInjectionEnabled) return null
+        val hasEnabledItem = option.timeContextInjectionEnabled ||
+            option.batteryContextInjectionEnabled ||
+            option.weatherContextInjectionEnabled ||
+            option.locationContextInjectionEnabled ||
+            option.currentScreenAppContextInjectionEnabled ||
+            option.recentAppUsageContextInjectionEnabled ||
+            option.screenTextContextInjectionEnabled ||
+            option.notificationsContextInjectionEnabled ||
+            option.memoryContextInjectionEnabled
+        if (!hasEnabledItem) return null
+
+        if (!option.allowRepeatedMemoryContextSearch) {
+            extraInfoCache[conversationId]
+                ?.takeIf {
+                    it.userMessageId == userMessage.id && it.settingsHash == option.hashCode()
+                }
+                ?.let { return it.content }
+        }
+
+        val queryText = userMessage.parts
+            .filterIsInstance<UIMessagePart.Text>()
+            .filterNot { it.isExtraInfoInjectionPart() }
+            .joinToString("\n") { it.text }
+            .trim()
+
+        processingStatus.value = "正在注入额外信息…"
+        return try {
+            extraInfoInjectionCollector.collect(
+                settings = settings,
+                assistantId = assistant.id.toString(),
+                queryText = queryText,
+            ).also { content ->
+                extraInfoCache[conversationId] = ExtraInfoCacheEntry(
+                    userMessageId = userMessage.id,
+                    settingsHash = option.hashCode(),
+                    content = content,
+                )
+            }
+        } finally {
+            processingStatus.value = null
+        }
+    }
+
+    private suspend fun persistExtraInfoPart(
+        conversationId: Uuid,
+        userMessageId: Uuid,
+        content: String,
+    ): Conversation {
+        val session = getOrCreateSession(conversationId)
+        return session.saveMutex.withLock {
+            val current = session.state.value
+            var changed = false
+            val updated = current.copy(
+                messageNodes = current.messageNodes.map { node ->
+                    node.copy(
+                        messages = node.messages.map { message ->
+                            if (message.id != userMessageId ||
+                                message.parts.any { it.isExtraInfoInjectionPart() }
+                            ) {
+                                message
+                            } else {
+                                changed = true
+                                message.copy(parts = message.parts + extraInfoMessagePart(content))
+                            }
+                        },
+                    )
+                },
+            )
+            if (changed) saveConversation(conversationId, updated)
+            if (changed) updated else current
+        }
+    }
+
     // ---- 重新生成消息 ----
 
     fun regenerateAtMessage(
@@ -852,7 +966,38 @@ class ChatService(
 
             // check invalid messages
             checkInvalidMessages(conversationId)
-            val conversation = getConversationFlow(conversationId).value
+            var conversation = getConversationFlow(conversationId).value
+            val requestMessages = conversation.currentMessages.let {
+                if (messageRange != null) {
+                    it.subList(messageRange.start, messageRange.endInclusive + 1)
+                } else {
+                    it
+                }
+            }
+            val latestUserMessage = requestMessages.lastOrNull { it.role == MessageRole.USER }
+            var transientExtraInfo: String? = null
+            if (latestUserMessage != null &&
+                latestUserMessage.parts.none { it.isExtraInfoInjectionPart() }
+            ) {
+                val collected = collectExtraInfoForRequest(
+                    conversationId = conversationId,
+                    userMessage = latestUserMessage,
+                    assistant = assistant,
+                    settings = settings,
+                    processingStatus = session.processingStatus,
+                )
+                if (!collected.isNullOrBlank()) {
+                    if (settings.systemToolsSetting.persistExtraInfoInjection && messageRange == null) {
+                        conversation = persistExtraInfoPart(
+                            conversationId = conversationId,
+                            userMessageId = latestUserMessage.id,
+                            content = collected,
+                        )
+                    } else {
+                        transientExtraInfo = collected
+                    }
+                }
+            }
 
             // start generating
             generationHandler.generateText(
@@ -890,6 +1035,8 @@ class ChatService(
                 pluginPromptInjections = buildList {
                     addAll(pluginToolProvider.getPluginPromptInjections())
                     settings.displaySetting.buildAnniversaryPrompt()?.let(::add)
+                    transientExtraInfo?.let(::add)
+                    JealousyReconciliationTransformer.buildPrompt(context)?.let(::add)
                 },
                 conversationId = conversationId.toString(),
             ).onCompletion {
@@ -1227,7 +1374,13 @@ class ChatService(
                         prompt = settings.titlePrompt.applyPlaceholders(
                             "locale" to Locale.getDefault().displayName,
                             "content" to conversation.currentMessages
-                                .takeLast(4).joinToString("\n\n") { it.summaryAsText() })
+                                .takeLast(4).joinToString("\n\n") { message ->
+                                    val visibleText = message.parts
+                                        .filterIsInstance<UIMessagePart.Text>()
+                                        .filterNot { it.isExtraInfoInjectionPart() }
+                                        .joinToString("\n") { it.text }
+                                    "[${message.role.name}]: $visibleText"
+                                })
                     ),
                 ),
                 params = TextGenerationParams(
@@ -1601,6 +1754,7 @@ class ChatService(
                 val settings = settingsStore.settingsFlow.first()
 
                 val messageText = message.parts.filterIsInstance<UIMessagePart.Text>()
+                    .filterNot { it.isExtraInfoInjectionPart() }
                     .joinToString("\n\n") { it.text }
                     .trim()
 

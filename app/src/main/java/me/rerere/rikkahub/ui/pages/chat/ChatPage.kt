@@ -73,6 +73,7 @@ import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.ai.transformers.isExtraInfoInjectionPart
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.service.ChatError
@@ -476,7 +477,7 @@ private fun ChatPageContent(
                 },
                 onEdit = {
                     inputState.editingMessage = it.id
-                    inputState.setContents(it.parts)
+                    inputState.setContents(it.parts.filterNot { part -> part.isExtraInfoInjectionPart() })
                 },
                 onForkMessage = {
                     scope.launch {

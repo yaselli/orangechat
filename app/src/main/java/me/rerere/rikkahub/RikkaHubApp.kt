@@ -184,6 +184,13 @@ class RikkaHubApp : Application() {
                     ProactiveMessageService.scheduleNext(this@RikkaHubApp, settings.proactiveMessageSetting)
                     Log.i(TAG, "Rescheduled proactive message alarm on app start")
                 }
+                val jealousyState = me.rerere.rikkahub.data.service.JealousyInspectionStore.read(this@RikkaHubApp)
+                if (jealousyState.enabled && !jealousyState.reconciling && !jealousyState.forcedOpen) {
+                    me.rerere.rikkahub.data.service.JealousyInspectionWorker.schedule(
+                        this@RikkaHubApp,
+                        me.rerere.rikkahub.data.service.JealousyInspectionStore.INSPECTION_INTERVAL_MINUTES,
+                    )
+                }
             }.onFailure {
                 Log.e(TAG, "rescheduleProactiveMessageIfEnabled failed", it)
             }

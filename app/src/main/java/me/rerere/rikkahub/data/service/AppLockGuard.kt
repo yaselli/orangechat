@@ -61,10 +61,16 @@ object AppLockGuard {
     private fun onForegroundChange(pkg: String?) {
         if (pkg.isNullOrBlank()) return
         if (!::appContext.isInitialized) return
-        if (pkg == appContext.packageName) return
+        if (pkg == appContext.packageName) {
+            RikkaAccessibilityService.instance?.hideJealousyLockOverlay()
+            return
+        }
 
         val locked = AppLockStore.getLockedPackages(appContext)
-        if (pkg !in locked) return
+        if (pkg !in locked) {
+            RikkaAccessibilityService.instance?.hideJealousyLockOverlay()
+            return
+        }
         if (pkg in unlockedPackages) return
 
         val now = System.currentTimeMillis()
@@ -72,6 +78,10 @@ object AppLockGuard {
         lastInterceptAt = now
 
         Log.i(TAG, "Intercepting locked app: $pkg")
+        if (pkg in JealousyInspectionStore.read(appContext).jealousyLockedPackages) {
+            RikkaAccessibilityService.instance?.showJealousyLockOverlay(pkg)
+            return
+        }
         runCatching {
             val intent = Intent(appContext, AppLockUnlockActivity::class.java).apply {
                 addFlags(
