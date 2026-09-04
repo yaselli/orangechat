@@ -228,7 +228,8 @@ class ExtraInfoInjectionCollector(
             val info = context.packageManager.getApplicationInfo(packageName, 0)
             context.packageManager.getApplicationLabel(info).toString()
         }.getOrElse { packageName }
-        return "应用：$appName\n包名：$packageName\n窗口：${root.window?.title.orEmpty()}"
+        val windowTitle = root.window?.title?.toString().orEmpty()
+        return "应用：$appName\n包名：$packageName\n窗口：$windowTitle"
     }
 
     private suspend fun recentAppUsage(): String {
