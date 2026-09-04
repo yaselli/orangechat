@@ -78,6 +78,8 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.service.AppLockGuard
+import me.rerere.rikkahub.data.service.AppLockStore
 import me.rerere.rikkahub.data.service.JealousyInspectionState
 import me.rerere.rikkahub.data.service.JealousyInspectionStore
 import me.rerere.rikkahub.data.service.JealousyMood
