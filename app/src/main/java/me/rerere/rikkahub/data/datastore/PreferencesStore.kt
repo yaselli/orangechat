@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -19,6 +19,11 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.pebbletemplates.pebble.PebbleEngine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -218,7 +223,7 @@ class SettingsStore(
     init {
         // Existing installs used plaintext strings. Upgrade them in place on first launch while
         // still allowing the read path below to understand plaintext during the migration.
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             runCatching {
                 dataStore.edit { preferences ->
                     ENCRYPTED_STRING_KEYS.forEach { key ->
@@ -452,90 +457,103 @@ class SettingsStore(
                 get<PebbleEngine>().templateCache.invalidateAll()
             }
         }
+        .flowOn(Dispatchers.IO)
 
+    // Decode/decrypt/normalize preferences away from the UI thread, even when
+    // a screen or AppScope (Main) subscribes to settingsFlowRaw directly.
     val settingsFlow = settingsFlowRaw
         .distinctUntilChanged()
         .toMutableStateFlow(scope, Settings.dummy())
 
+    private val updateMutex = Mutex()
+
     suspend fun update(settings: Settings) {
+        updateMutex.withLock { persistSettings(settings) }
+    }
+
+    private suspend fun persistSettings(settings: Settings) {
         if(settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
         settingsFlow.value = settings
-        dataStore.edit { preferences ->
-            preferences[DYNAMIC_COLOR] = settings.dynamicColor
-            preferences[THEME_ID] = settings.themeId
-            preferences[CUSTOM_THEMES] = JsonInstant.encodeToString(settings.customThemes)
-            preferences[DEVELOPER_MODE] = settings.developerMode
-            preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
+        withContext(Dispatchers.IO) {
+            dataStore.edit { preferences ->
+                preferences[DYNAMIC_COLOR] = settings.dynamicColor
+                preferences[THEME_ID] = settings.themeId
+                preferences[CUSTOM_THEMES] = JsonInstant.encodeToString(settings.customThemes)
+                preferences[DEVELOPER_MODE] = settings.developerMode
+                preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
 
-            preferences[DISCLAIMER_ACCEPTED] = settings.disclaimerAccepted
-            preferences[DISCLAIMER_ACCEPTED_AT] = settings.disclaimerAcceptedAt
+                preferences[DISCLAIMER_ACCEPTED] = settings.disclaimerAccepted
+                preferences[DISCLAIMER_ACCEPTED_AT] = settings.disclaimerAcceptedAt
 
-            preferences[ENABLE_WEB_SEARCH] = settings.enableWebSearch
-            preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
-            preferences[SELECT_MODEL] = settings.chatModelId.toString()
-            preferences[TITLE_MODEL] = settings.titleModelId.toString()
-            preferences[TRANSLATE_MODEL] = settings.translateModeId.toString()
-            preferences[SUGGESTION_MODEL] = settings.suggestionModelId.toString()
-            preferences[IMAGE_GENERATION_MODEL] = settings.imageGenerationModelId.toString()
-            preferences[TITLE_PROMPT] = settings.titlePrompt
-            preferences[TRANSLATION_PROMPT] = settings.translatePrompt
-            preferences[TRANSLATE_THINKING_BUDGET] = settings.translateThinkingBudget
-            preferences[SUGGESTION_PROMPT] = settings.suggestionPrompt
-            preferences[OCR_MODEL] = settings.ocrModelId.toString()
-            preferences[OCR_PROMPT] = settings.ocrPrompt
-            preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
-            preferences[COMPRESS_PROMPT] = settings.compressPrompt
+                preferences[ENABLE_WEB_SEARCH] = settings.enableWebSearch
+                preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
+                preferences[SELECT_MODEL] = settings.chatModelId.toString()
+                preferences[TITLE_MODEL] = settings.titleModelId.toString()
+                preferences[TRANSLATE_MODEL] = settings.translateModeId.toString()
+                preferences[SUGGESTION_MODEL] = settings.suggestionModelId.toString()
+                preferences[IMAGE_GENERATION_MODEL] = settings.imageGenerationModelId.toString()
+                preferences[TITLE_PROMPT] = settings.titlePrompt
+                preferences[TRANSLATION_PROMPT] = settings.translatePrompt
+                preferences[TRANSLATE_THINKING_BUDGET] = settings.translateThinkingBudget
+                preferences[SUGGESTION_PROMPT] = settings.suggestionPrompt
+                preferences[OCR_MODEL] = settings.ocrModelId.toString()
+                preferences[OCR_PROMPT] = settings.ocrPrompt
+                preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
+                preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
-            preferences.putSecret(PROVIDERS, JsonInstant.encodeToString(settings.providers))
+                preferences.putSecret(PROVIDERS, JsonInstant.encodeToString(settings.providers))
 
-            preferences.putSecret(ASSISTANTS, JsonInstant.encodeToString(settings.assistants))
-            preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
-            preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
+                preferences.putSecret(ASSISTANTS, JsonInstant.encodeToString(settings.assistants))
+                preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
+                preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
 
-            preferences.putSecret(SEARCH_SERVICES, JsonInstant.encodeToString(settings.searchServices))
-            preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
-            preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
+                preferences.putSecret(SEARCH_SERVICES, JsonInstant.encodeToString(settings.searchServices))
+                preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
+                preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
 
-            preferences.putSecret(MCP_SERVERS, JsonInstant.encodeToString(settings.mcpServers))
-            preferences.putSecret(WEBDAV_CONFIG, JsonInstant.encodeToString(settings.webDavConfig))
-            preferences.putSecret(S3_CONFIG, JsonInstant.encodeToString(settings.s3Config))
-            preferences.putSecret(TTS_PROVIDERS, JsonInstant.encodeToString(settings.ttsProviders))
-            settings.selectedTTSProviderId?.let {
-                preferences[SELECTED_TTS_PROVIDER] = it.toString()
-            } ?: preferences.remove(SELECTED_TTS_PROVIDER)
-            preferences.putSecret(ASR_PROVIDERS, JsonInstant.encodeToString(settings.asrProviders))
-            settings.selectedASRProviderId?.let {
-                preferences[SELECTED_ASR_PROVIDER] = it.toString()
-            } ?: preferences.remove(SELECTED_ASR_PROVIDER)
-            preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
-            preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
-            preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
-            preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
-            preferences[WEB_SERVER_PORT] = settings.webServerPort
-            preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
-            preferences.putSecret(WEB_SERVER_ACCESS_PASSWORD, settings.webServerAccessPassword)
-            preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
-            preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
-            preferences[LAUNCH_COUNT] = settings.launchCount
-            preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
-            preferences.putSecret(SYSTEM_TOOLS_SETTING, JsonInstant.encodeToString(settings.systemToolsSetting))
-            preferences[PROACTIVE_MESSAGE_SETTING] = JsonInstant.encodeToString(settings.proactiveMessageSetting)
-            preferences.putSecret(WECHAT_BOT_SETTING, JsonInstant.encodeToString(settings.wechatBotSetting))
-            preferences.putSecret(QQ_BOT_SETTING, JsonInstant.encodeToString(settings.qqBotSetting))
-            preferences[KEEP_ALIVE_ENABLED] = settings.keepAliveEnabled
-            preferences.putSecret(EXTERNAL_MEMORIES, JsonInstant.encodeToString(settings.externalMemories))
-            preferences.putSecret(MINI_APPS, JsonInstant.encodeToString(settings.miniApps))
-            preferences[FORCE_CONFIRM_TOOL_CALLS] = settings.forceConfirmToolCalls
-            preferences[WORKFLOW_HEADLESS_BLOCK_SENSITIVE] = settings.workflowHeadlessBlockSensitive
-            preferences[AUTO_APPROVE_ALL_TOOLS] = settings.autoApproveAllTools
+                preferences.putSecret(MCP_SERVERS, JsonInstant.encodeToString(settings.mcpServers))
+                preferences.putSecret(WEBDAV_CONFIG, JsonInstant.encodeToString(settings.webDavConfig))
+                preferences.putSecret(S3_CONFIG, JsonInstant.encodeToString(settings.s3Config))
+                preferences.putSecret(TTS_PROVIDERS, JsonInstant.encodeToString(settings.ttsProviders))
+                settings.selectedTTSProviderId?.let {
+                    preferences[SELECTED_TTS_PROVIDER] = it.toString()
+                } ?: preferences.remove(SELECTED_TTS_PROVIDER)
+                preferences.putSecret(ASR_PROVIDERS, JsonInstant.encodeToString(settings.asrProviders))
+                settings.selectedASRProviderId?.let {
+                    preferences[SELECTED_ASR_PROVIDER] = it.toString()
+                } ?: preferences.remove(SELECTED_ASR_PROVIDER)
+                preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
+                preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
+                preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
+                preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
+                preferences[WEB_SERVER_PORT] = settings.webServerPort
+                preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
+                preferences.putSecret(WEB_SERVER_ACCESS_PASSWORD, settings.webServerAccessPassword)
+                preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
+                preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
+                preferences[LAUNCH_COUNT] = settings.launchCount
+                preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+                preferences.putSecret(SYSTEM_TOOLS_SETTING, JsonInstant.encodeToString(settings.systemToolsSetting))
+                preferences[PROACTIVE_MESSAGE_SETTING] = JsonInstant.encodeToString(settings.proactiveMessageSetting)
+                preferences.putSecret(WECHAT_BOT_SETTING, JsonInstant.encodeToString(settings.wechatBotSetting))
+                preferences.putSecret(QQ_BOT_SETTING, JsonInstant.encodeToString(settings.qqBotSetting))
+                preferences[KEEP_ALIVE_ENABLED] = settings.keepAliveEnabled
+                preferences.putSecret(EXTERNAL_MEMORIES, JsonInstant.encodeToString(settings.externalMemories))
+                preferences.putSecret(MINI_APPS, JsonInstant.encodeToString(settings.miniApps))
+                preferences[FORCE_CONFIRM_TOOL_CALLS] = settings.forceConfirmToolCalls
+                preferences[WORKFLOW_HEADLESS_BLOCK_SENSITIVE] = settings.workflowHeadlessBlockSensitive
+                preferences[AUTO_APPROVE_ALL_TOOLS] = settings.autoApproveAllTools
+            }
         }
     }
 
     suspend fun update(fn: (Settings) -> Settings) {
-        update(fn(settingsFlow.value))
+        updateMutex.withLock {
+            persistSettings(fn(settingsFlow.value))
+        }
     }
 
     suspend fun updateAssistant(assistantId: Uuid) {
@@ -620,6 +638,10 @@ private fun Preferences.getSecret(key: Preferences.Key<String>): String? {
 }
 
 private fun MutablePreferences.putSecret(key: Preferences.Key<String>, plaintext: String) {
+    // Preserve existing ciphertext for unchanged values. Encryption uses a fresh
+    // nonce, so rewriting identical plaintext otherwise changes every secret key.
+    val stored = this[key]
+    if (SecretCrypto.isEncrypted(stored) && getSecret(key) == plaintext) return
     this[key] = SecretCrypto.encrypt(plaintext, key.name).orEmpty()
 }
 
