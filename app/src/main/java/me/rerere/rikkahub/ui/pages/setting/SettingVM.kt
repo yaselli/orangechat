@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -24,9 +24,9 @@ class SettingVM(
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, Settings(init = true, providers = emptyList()))
 
-    fun updateSettings(settings: Settings) {
+    fun updateSettings(settings: Settings, previous: Settings = this.settings.value) {
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.updateFrom(previous, settings)
         }
     }
 

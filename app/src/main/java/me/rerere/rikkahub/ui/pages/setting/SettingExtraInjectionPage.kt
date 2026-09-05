@@ -38,7 +38,7 @@ fun SettingExtraInjectionPage(vm: SettingVM = koinViewModel()) {
     val option = settings.systemToolsSetting
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val update: (SystemToolsSetting) -> Unit = { next ->
-        vm.updateSettings(settings.copy(systemToolsSetting = next))
+        vm.updateSettings(settings.copy(systemToolsSetting = next), previous = settings)
     }
 
     Scaffold(

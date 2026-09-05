@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -93,16 +93,10 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
     val context = LocalContext.current
     val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
-    var systemToolsSetting by remember(settings) {
-        mutableStateOf(settings.systemToolsSetting)
-    }
-    LaunchedEffect(settings) {
-        systemToolsSetting = settings.systemToolsSetting
-    }
+    val systemToolsSetting = settings.systemToolsSetting
 
     fun updateSystemToolsSetting(setting: SystemToolsSetting) {
-        systemToolsSetting = setting
-        vm.updateSettings(settings.copy(systemToolsSetting = setting))
+        vm.updateSettings(settings.copy(systemToolsSetting = setting), previous = settings)
     }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -201,7 +195,7 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
                             checked = keepAliveEnabled,
                             onCheckedChange = { enabled ->
                                 keepAliveEnabled = enabled
-                                vm.updateSettings(settings.copy(keepAliveEnabled = enabled))
+                                vm.updateSettings(settings.copy(keepAliveEnabled = enabled), previous = settings)
                                 if (enabled) {
                                     // Android 13+ 需要先请求 POST_NOTIFICATIONS 权限
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU

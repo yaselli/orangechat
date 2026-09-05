@@ -23,6 +23,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -476,7 +479,8 @@ class SettingsStore(
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
-        settingsFlow.value = settings
+        // Publish only through the committed DataStore stream. An optimistic
+        // snapshot here can be overwritten by an older in-flight disk emission.
         withContext(Dispatchers.IO) {
             dataStore.edit { preferences ->
                 preferences[DYNAMIC_COLOR] = settings.dynamicColor
@@ -552,14 +556,29 @@ class SettingsStore(
 
     suspend fun update(fn: (Settings) -> Settings) {
         updateMutex.withLock {
-            persistSettings(fn(settingsFlow.value))
+            // The UI collector may lag behind a completed disk write. Read the
+            // latest committed snapshot under the write lock, never that cache.
+            persistSettings(fn(settingsFlowRaw.first()))
+        }
+    }
+
+    suspend fun updateFrom(previous: Settings, desired: Settings) {
+        if (previous.init || desired.init) return
+        updateMutex.withLock {
+            withContext(Dispatchers.IO) {
+                val current = settingsFlowRaw.first()
+                val merged = mergeSettingChanges(
+                    previous = JsonInstant.encodeToJsonElement(previous),
+                    desired = JsonInstant.encodeToJsonElement(desired),
+                    current = JsonInstant.encodeToJsonElement(current),
+                )
+                persistSettings(JsonInstant.decodeFromJsonElement<Settings>(merged))
+            }
         }
     }
 
     suspend fun updateAssistant(assistantId: Uuid) {
-        dataStore.edit { preferences ->
-            preferences[SELECT_ASSISTANT] = assistantId.toString()
-        }
+        update { it.copy(assistantId = assistantId) }
     }
 
     suspend fun updateAssistantModel(assistantId: Uuid, modelId: Uuid) {
