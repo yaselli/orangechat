@@ -36,8 +36,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -390,21 +388,13 @@ private fun StatsRow(state: JealousyInspectionState) {
 
 @Composable
 private fun StatTile(title: String, value: String, modifier: Modifier) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-        ),
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                title,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium,
-            )
-            Text(value, modifier = Modifier.padding(top = 6.dp), fontWeight = FontWeight.Bold)
-        }
+    GlassCard(modifier = modifier, compact = true) {
+        Text(
+            title,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        Text(value, modifier = Modifier.padding(top = 6.dp), fontWeight = FontWeight.Bold)
     }
 }
 
@@ -479,28 +469,35 @@ private fun RuleItem(title: String, value: String) {
 @Composable
 private fun GlassCard(
     accent: Boolean = false,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(
-        modifier = Modifier
+    val shape = RoundedCornerShape(if (compact) 20.dp else 24.dp)
+    val colors = MaterialTheme.colorScheme
+    // Draw one clipped background on the content container itself. Avoid nesting
+    // a Material Card surface inside the glass decoration.
+    Column(
+        modifier = modifier
             .fillMaxWidth()
+            .clip(shape)
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        colors.surface.copy(alpha = if (accent) 0.52f else 0.42f),
+                        colors.surfaceContainerLow.copy(alpha = 0.28f),
+                    ),
+                ),
+                shape = shape,
+            )
             .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.72f),
-                shape = RoundedCornerShape(28.dp),
-            ),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (accent) {
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)
-            } else {
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.68f)
-            },
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (accent) 5.dp else 2.dp),
-    ) {
-        Column(modifier = Modifier.padding(20.dp), content = content)
-    }
+                width = 0.6.dp,
+                color = colors.outlineVariant.copy(alpha = 0.3f),
+                shape = shape,
+            )
+            .padding(if (compact) 14.dp else 20.dp),
+        content = content,
+    )
 }
 
 @Composable
