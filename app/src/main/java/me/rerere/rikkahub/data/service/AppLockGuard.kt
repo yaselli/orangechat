@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -73,15 +73,17 @@ object AppLockGuard {
         }
         if (pkg in unlockedPackages) return
 
-        val now = System.currentTimeMillis()
-        if (now - lastInterceptAt < REENTRY_GUARD_MS) return
-        lastInterceptAt = now
-
-        Log.i(TAG, "Intercepting locked app: $pkg")
+        // The overlay is idempotent per package. A quick return to a locked app
+        // must not be skipped by the activity-launch throttle.
         if (pkg in JealousyInspectionStore.read(appContext).jealousyLockedPackages) {
             RikkaAccessibilityService.instance?.showJealousyLockOverlay(pkg)
             return
         }
+
+        val now = System.currentTimeMillis()
+        if (now - lastInterceptAt < REENTRY_GUARD_MS) return
+        lastInterceptAt = now
+        Log.i(TAG, "Intercepting locked app: $pkg")
         runCatching {
             val intent = Intent(appContext, AppLockUnlockActivity::class.java).apply {
                 addFlags(

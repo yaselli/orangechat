@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -23,6 +23,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityWindowInfo
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Button
 import android.widget.FrameLayout
@@ -83,6 +84,8 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
+        mainHandler.removeCallbacksAndMessages(null)
+        removeJealousyOverlayNow()
         instance = null
         _running.value = false
         _lastActions.value = emptyList()
@@ -91,6 +94,7 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null)
         removeJealousyOverlayNow()
         instance = null
         _running.value = false
@@ -100,16 +104,16 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Phase 12 — feed foreground-app transitions to the workflow trigger dispatcher.
-        // We only care about TYPE_WINDOW_STATE_CHANGED and only when the package name is
-        // present. The dispatcher itself de-dupes (skips no-op transitions) and dispatches
-        // off-thread, so this stays fast on the AccessibilityService dispatcher.
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val pkg = event.packageName?.toString()
-            if (!pkg.isNullOrBlank()) {
-                me.rerere.rikkahub.workflow.trigger.AppForegroundDispatcher.onForegroundChange(pkg)
-            }
-        }
+        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val pkg = event.packageName?.toString()?.takeIf { it.isNotBlank() } ?: return
+        // Window events also come from our lock overlay, keyboards and system UI.
+        // Only application windows represent an actual foreground-app transition.
+        val eventWindow = windows.firstOrNull { it.id == event.windowId }
+        if (eventWindow != null && eventWindow.type != AccessibilityWindowInfo.TYPE_APPLICATION) return
+        // Some devices briefly omit the event window while adding an overlay.
+        // Do not interpret that unclassified event as leaving the locked app.
+        if (eventWindow == null && jealousyOverlay != null) return
+        me.rerere.rikkahub.workflow.trigger.AppForegroundDispatcher.onForegroundChange(pkg)
     }
 
     override fun onInterrupt() {
@@ -118,6 +122,9 @@ class RikkaAccessibilityService : AccessibilityService() {
 
     fun showJealousyLockOverlay(packageName: String) {
         mainHandler.post {
+            if (instance !== this) return@post
+            if (!me.rerere.rikkahub.data.service.AppLockStore.isLocked(this, packageName)) return@post
+            if (me.rerere.rikkahub.workflow.trigger.AppForegroundLastKnown.value != packageName) return@post
             if (jealousyOverlay != null && jealousyOverlayPackage == packageName) return@post
             removeJealousyOverlayNow()
             val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager

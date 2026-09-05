@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -31,6 +31,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterIsInstance
@@ -111,6 +113,7 @@ class McpManager(
         appScope.launch {
             settingsStore.settingsFlow
                 .map { settings -> settings.mcpServers }
+                .distinctUntilChanged()
                 .collect { mcpServerConfigs ->
                     runCatching {
                         Log.i(TAG, "update configs: $mcpServerConfigs")
@@ -365,7 +368,9 @@ class McpManager(
             runCatching {
                 sync(config)
             }.onFailure {
-                it.printStackTrace()
+                if (it is CancellationException) throw it
+                Log.w(TAG, "MCP refresh failed: ${config.id}", it)
+                setStatus(config, McpStatus.Error(it.message ?: it.javaClass.name))
             }
         }
     }
@@ -379,7 +384,7 @@ class McpManager(
             }.onFailure {
                 it.printStackTrace()
             }
-            syncingStatus.emit(syncingStatus.value.toMutableMap().apply { remove(config.id) })
+            syncingStatus.update { it - config.id }
             Log.i(TAG, "removeClient: ${entry.first} / ${entry.first.commonOptions.name}")
         }
         reconnectAttempts.remove(config.id)
@@ -499,9 +504,7 @@ class McpManager(
     }
 
     private suspend fun setStatus(config: McpServerConfig, status: McpStatus) {
-        syncingStatus.emit(syncingStatus.value.toMutableMap().apply {
-            put(config.id, status)
-        })
+        syncingStatus.update { it + (config.id to status) }
     }
 
     fun getStatus(config: McpServerConfig): Flow<McpStatus> {

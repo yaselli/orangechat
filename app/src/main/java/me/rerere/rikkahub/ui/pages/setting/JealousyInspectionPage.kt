@@ -359,10 +359,10 @@ private fun HeroCard(
                 .padding(top = 2.dp),
             horizontalArrangement = Arrangement.End,
         ) {
-            Text("锁定阈值 70", color = JealousyAccent, style = MaterialTheme.typography.labelMedium)
+            Text("提醒阈值 70", color = JealousyAccent, style = MaterialTheme.typography.labelMedium)
         }
         Text(
-            text = if (state.score < 70) "距离锁定阈值还差 ${70 - state.score}" else "已达到锁定阈值",
+            text = if (state.score < 70) "距离提醒阈值还差 ${70 - state.score}" else "已达到提醒阈值",
             modifier = Modifier.padding(top = 14.dp),
             style = MaterialTheme.typography.bodyLarge,
         )
@@ -411,7 +411,7 @@ private fun RuleCard() {
             RuleItem("30 分钟后", "开始")
             RuleItem("每分钟", "+1")
             RuleItem("连续 15 分钟", "+10")
-            RuleItem("固定阈值", "70")
+            RuleItem("提醒阈值", "70")
         }
     }
 }

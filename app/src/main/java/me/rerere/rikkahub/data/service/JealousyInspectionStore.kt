@@ -84,8 +84,10 @@ object JealousyInspectionStore {
             lastInspectionAt = values.getLong(LAST_INSPECTION_AT, 0L),
             managedPackages = values.getStringSet(MANAGED_PACKAGES, emptySet())?.toSet().orEmpty(),
             whitelistPackages = values.getStringSet(WHITELIST_PACKAGES, emptySet())?.toSet().orEmpty(),
+            // Older versions retained returned apps here. Reconcile with actual
+            // locks so existing installations can leave the locked stage as well.
             jealousyLockedPackages = values.getStringSet(JEALOUSY_LOCKED_PACKAGES, emptySet())
-                ?.toSet().orEmpty(),
+                ?.toSet().orEmpty().intersect(AppLockStore.getLockedPackages(context)),
             recentUsageMinutes = decodeUsage(values.getString(RECENT_USAGE, null)),
             lastTriggeredStage = values.getInt(LAST_TRIGGERED_STAGE, 0),
             reconciling = values.getBoolean(RECONCILING, false),
@@ -175,6 +177,7 @@ object JealousyInspectionStore {
     fun beginReconciliation(context: Context) {
         prefs(context).edit()
             .putInt(SCORE, 20)
+            .putStringSet(JEALOUSY_LOCKED_PACKAGES, emptySet())
             .putBoolean(RECONCILING, true)
             .putBoolean(FORCED_OPEN, false)
             .apply()
@@ -192,6 +195,7 @@ object JealousyInspectionStore {
 
     fun recordForcedOpen(context: Context) {
         prefs(context).edit()
+            .putStringSet(JEALOUSY_LOCKED_PACKAGES, emptySet())
             .putBoolean(FORCED_OPEN, true)
             .putBoolean(RECONCILING, false)
             .putLong(SILENCE_STARTED_AT, 0L)

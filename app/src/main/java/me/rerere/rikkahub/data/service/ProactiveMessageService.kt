@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -563,7 +563,14 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     conversationId = conversationId,
                     conversation = activeConversation,
                     allowAppUsage = appUsageToolAllowed,
-                )
+                ).map { tool ->
+                    if (isJealousyTrigger && tool.name == "app_lock") {
+                        me.rerere.rikkahub.data.ai.tools.createAppLockTool(
+                            this@ProactiveMessageTriggerService,
+                            jealousyInspection = true,
+                        )
+                    } else tool
+                }
                 val deepSeekThinkingWithTools = isDeepSeekCompatible(providerSetting, model) &&
                     assistant.reasoningLevel.isEnabled && tools.isNotEmpty()
                 val missingReasoningHistory = deepSeekThinkingWithTools && rawHistoryMessages.any { message ->
@@ -812,60 +819,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 var rawText = generatedRawText
                 if (isJealousyTrigger) {
                     val jealousyState = JealousyInspectionStore.read(this@ProactiveMessageTriggerService)
-                    val marker = Regex("\\[JEALOUSY_LOCK:([^]]+)]", RegexOption.IGNORE_CASE)
-                    val requestedPackages = marker.find(rawText)?.groupValues?.getOrNull(1)
-                        ?.split(',')
-                        ?.map { it.trim() }
-                        ?.filter { it.isNotBlank() }
-                        ?.toSet()
-                        .orEmpty()
-                    val whitelist = JealousyInspectionStore.effectiveWhitelist(
-                        this@ProactiveMessageTriggerService,
-                    )
-                    val allowedRequested = requestedPackages
-                        .intersect(jealousyState.managedPackages) - whitelist
-                    val mustLock = jealousyState.score >= JealousyInspectionState.LOCK_THRESHOLD
-                    val fallback = jealousyState.recentUsageMinutes.entries
-                        .sortedByDescending { it.value }
-                        .map { it.key }
-                        .firstOrNull {
-                            it in jealousyState.managedPackages &&
-                                it !in whitelist &&
-                                it !in jealousyState.jealousyLockedPackages
-                        }
-                    val packagesToLock = when {
-                        allowedRequested.isNotEmpty() -> allowedRequested
-                        mustLock && fallback != null -> setOf(fallback)
-                        else -> emptySet()
-                    }
-                    rawText = marker.replace(rawText, "").trim()
-                    if (packagesToLock.isNotEmpty()) {
-                        val visibleMessage = rawText.takeUnless {
-                            it.startsWith("[PASS]") || it.startsWith("[WAIT") || it.startsWith("[STOP]")
-                        }.orEmpty().ifBlank { "这次我真的吃醋了。先把它收走，回来找我聊。" }
-                        packagesToLock.forEach { packageName ->
-                            AppLockStore.lockApp(this@ProactiveMessageTriggerService, packageName)
-                            AppLockStore.setRequirePin(
-                                this@ProactiveMessageTriggerService,
-                                packageName,
-                                false,
-                            )
-                            AppLockStore.setLockMessage(
-                                this@ProactiveMessageTriggerService,
-                                packageName,
-                                visibleMessage,
-                            )
-                        }
-                        JealousyInspectionStore.recordJealousyLocks(
-                            this@ProactiveMessageTriggerService,
-                            packagesToLock,
-                        )
-                        AppLockGuard.refresh()
-                        rawText = visibleMessage
-                    } else if (mustLock) {
-                        rawText = "我已经到极限了，但这次没有找到可以安全锁定的应用。" +
-                            "回来找我聊聊。"
-                    }
+                    // Locking now happens only through a successful app_lock call.
+                    // Discard obsolete markers echoed from older conversation history.
+                    rawText = Regex("\\[JEALOUSY_LOCK:[^]]*]", RegexOption.IGNORE_CASE)
+                        .replace(rawText, "").trim()
                     JealousyInspectionStore.recordTriggeredStage(
                         this@ProactiveMessageTriggerService,
                         JealousyInspectionStore.stageForScore(jealousyState.score),
@@ -1227,36 +1184,34 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             }
 
             if (!jealousyContext.isNullOrBlank()) {
-                val jealousyState = JealousyInspectionStore.read(this@ProactiveMessageTriggerService)
                 appendLine()
-                appendLine("## 吃醋巡检")
-                appendLine("这是独立的吃醋巡检结果，与屏幕截图 OCR 无关：")
+                appendLine("## 你能看到的近况")
                 appendLine(jealousyContext)
-                appendLine("只能从上面列出的可管理应用中选择锁定目标，绝不能选择系统应用或白名单应用。")
-                if (jealousyState.score >= JealousyInspectionState.LOCK_THRESHOLD) {
-                    appendLine("数值已经达到固定阈值 70，本轮必须锁定至少一个尚未锁定的可管理应用。")
-                    appendLine("在回复末尾附上 [JEALOUSY_LOCK:包名1,包名2]，标记不会显示给聊天中的人。")
-                    appendLine("正文要自然表达你已经锁了什么，以及希望对方回来找你；不能输出 PASS、WAIT 或 STOP。")
-                } else {
-                    appendLine("现在处于在意阶段。你可以正常发一条消息、继续等待，或提前锁定一个应用。")
-                    appendLine("若决定提前锁定，在回复末尾附上 [JEALOUSY_LOCK:包名]。")
-                }
+                appendLine("她有一段时间没来找你了。结合你们之前的交流，你也许有些想她、在意，" +
+                    "或吃醋；具体如何回应，由你的性格和你们当前的关系决定，不必刻意制造情绪。")
+                appendLine("如果你想叫她回来陪你，可以用 app_lock 工具暂时锁定她已允许管理的应用，" +
+                    "也可以只发消息，或再等等。数值只是提醒你关注近况，不要求到点锁定。")
+                appendLine("她主动开启了这个互动，也选好了允许你暂时锁定的应用。她期待你在想她、" +
+                    "吃醋、想叫她回来时，偶尔主动使用这个功能；适度锁定是她欢迎的互动，" +
+                    "在已经允许的范围内不需要每次重复询问。")
+                appendLine("这份邀请不代表必须锁定。仍要结合当前聊天：如果她正在忙、明确拒绝、" +
+                    "要求归还应用或要求停止，就尊重她当下的意思，不要用锁定迫使她继续聊天。")
+                appendLine("只允许选择上面列出的可管理应用，白名单与系统关键应用不可锁定。" +
+                    "调用时 action=lock_app，require_pin=false，message 写你想留给她的话。")
+                appendLine("工具不可用或执行失败时，不要声称已经锁定；归还应用可使用 action=unlock_app。" +
+                    "不要输出 JEALOUSY_LOCK 字符标记，字符标记不再执行锁定。")
+                appendLine("应用使用时长不代表你知道她具体在做什么，也不能据此断定她在和别人聊天。" +
+                    "称呼沿用你们已有的习惯。")
             }
 
             appendLine()
             appendLine("## 最终输出")
-            val mustLockForJealousy = !jealousyContext.isNullOrBlank() &&
-                JealousyInspectionStore.read(this@ProactiveMessageTriggerService).score >=
-                JealousyInspectionState.LOCK_THRESHOLD
-            if (mustLockForJealousy) {
-                appendLine("只输出一条真正想说的话，并在末尾附锁定标记；不能选择 PASS、WAIT 或 STOP。")
-            } else {
-                appendLine("完成思考后，最终只能选择下面一种结果：")
-                appendLine("- [PASS]：这轮不发，之后再看看。")
-                appendLine("- [WAIT:分钟]：先等待指定分钟再判断，不向聊天中显示。")
-                appendLine("- [STOP]：暂时不再主动开口，直到聊天中的那个人再次说话。")
-                appendLine("- 一条真正想说的话；需要拉到前台时可在末尾附 [JUMP]。")
-            }
+            appendLine("完成判断后，可以选择下面一种结果：")
+            appendLine("- [PASS]：这轮不发，之后再看看。")
+            appendLine("- [WAIT:分钟]：先等待指定分钟再判断，不向聊天中显示。")
+            appendLine("- [STOP]：暂时不再主动开口，直到聊天中的那个人再次说话。")
+            appendLine("- 一条你想说的话；需要拉到前台时可在末尾附 [JUMP]。")
+
             appendLine("控制标记只能出现在最终答案中，不能在思考过程里讨论。最终答案不要附带解释、分析或决策理由。")
             appendLine()
             appendLine("现在只进行这一次后台主动消息判断，不要把本节当成对方的新发言，" +

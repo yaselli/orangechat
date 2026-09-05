@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -69,7 +69,9 @@ fun McpPickerButton(
 ) {
     var showMcpPicker by remember { mutableStateOf(false) }
     val status by mcpManager.syncingStatus.collectAsStateWithLifecycle()
-    val loading = status.values.any { it == McpStatus.Connecting }
+    val loading = servers.any {
+        it.commonOptions.enable && status[it.id] == McpStatus.Connecting
+    }
     val enabledServers = servers.fastFilter {
         it.commonOptions.enable && assistant.mcpServers.contains(it.id)
     }
@@ -173,7 +175,9 @@ fun McpPickerListItem(
 ) {
     var showMcpPicker by remember { mutableStateOf(false) }
     val status by mcpManager.syncingStatus.collectAsStateWithLifecycle()
-    val loading = status.values.any { it == McpStatus.Connecting }
+    val loading = servers.any {
+        it.commonOptions.enable && status[it.id] == McpStatus.Connecting
+    }
     val enabledServers = servers.fastFilter {
         it.commonOptions.enable && assistant.mcpServers.contains(it.id)
     }

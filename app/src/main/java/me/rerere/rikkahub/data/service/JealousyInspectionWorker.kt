@@ -73,7 +73,7 @@ class JealousyInspectionWorker(
             }
         val contextText = buildString {
             appendLine("吃醋值：$score/100")
-            appendLine("固定锁定阈值：70")
+            appendLine("关注提醒阈值：70（不强制锁定）")
             appendLine("本轮可管理应用使用情况：")
             appendLine(usageLines.ifBlank { "- 没有可用记录" })
         }

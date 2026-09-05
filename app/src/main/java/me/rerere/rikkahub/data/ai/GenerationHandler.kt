@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -44,6 +44,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.limitContext
+import me.rerere.rikkahub.data.ai.transformers.JealousyReconciliationTransformer
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
@@ -184,6 +185,19 @@ class GenerationHandler(
                     conversationSystemPrompt = conversationSystemPrompt,
                     workspaceCwd = workspaceCwd,
                 )
+                // Consume control markers from the completed raw reply before the
+                // display transforms remove them. Keep other finish hooks in their
+                // existing position after visual transforms (e.g. reasoning parsing).
+                val reconciliationTransformers = outputTransformers.filter {
+                    it === JealousyReconciliationTransformer
+                }
+                messages = messages.onGenerationFinish(
+                    transformers = reconciliationTransformers,
+                    context = context,
+                    model = model,
+                    assistant = assistant,
+                    settings = settings
+                )
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
                     context = context,
@@ -192,7 +206,9 @@ class GenerationHandler(
                     settings = settings
                 )
                 messages = messages.onGenerationFinish(
-                    transformers = outputTransformers,
+                    transformers = outputTransformers.filterNot {
+                        it === JealousyReconciliationTransformer
+                    },
                     context = context,
                     model = model,
                     assistant = assistant,
