@@ -17,6 +17,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -55,7 +56,8 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
     private val gestureHandlerThread = HandlerThread("RikkaAcc-Callback").apply { start() }
     private val gestureHandler = Handler(gestureHandlerThread.looper)
-    private val mainHandler = Handler(mainLooper)
+    // Service 构造时 baseContext 尚未 attach，不能通过 ContextWrapper.mainLooper 取主线程。
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var jealousyOverlay: View? = null
     private var jealousyOverlayPackage: String? = null
 
