@@ -44,7 +44,6 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.limitContext
-import me.rerere.rikkahub.data.ai.transformers.JealousyReconciliationTransformer
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
@@ -185,19 +184,6 @@ class GenerationHandler(
                     conversationSystemPrompt = conversationSystemPrompt,
                     workspaceCwd = workspaceCwd,
                 )
-                // Consume control markers from the completed raw reply before the
-                // display transforms remove them. Keep other finish hooks in their
-                // existing position after visual transforms (e.g. reasoning parsing).
-                val reconciliationTransformers = outputTransformers.filter {
-                    it === JealousyReconciliationTransformer
-                }
-                messages = messages.onGenerationFinish(
-                    transformers = reconciliationTransformers,
-                    context = context,
-                    model = model,
-                    assistant = assistant,
-                    settings = settings
-                )
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
                     context = context,
@@ -206,9 +192,7 @@ class GenerationHandler(
                     settings = settings
                 )
                 messages = messages.onGenerationFinish(
-                    transformers = outputTransformers.filterNot {
-                        it === JealousyReconciliationTransformer
-                    },
+                    transformers = outputTransformers,
                     context = context,
                     model = model,
                     assistant = assistant,
@@ -769,4 +753,3 @@ private fun buildCodeBlockPrompt(): String = buildString {
     appendLine("   - The `edits` mode applies search/replace to the files from your previous `write_files` call. Files not mentioned in `edits` keep their content unchanged.")
     appendLine("   - Always use actual filenames (e.g. `MainActivity.kt`) as code block language tags, not just language names (e.g. `kotlin`).")
 }
- 

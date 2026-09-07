@@ -126,6 +126,10 @@ class RikkaHubApp : Application() {
         // Start network change monitor (invalidates SSH DNS cache on WiFi<->cell handoff)
         startNetworkChangeMonitor()
 
+        // This build no longer ships jealousy inspection. Clean up jobs and locks
+        // left by an older installation before the normal app-lock guard starts.
+        disableLegacyJealousyInspection()
+
         // Start App Lock guard (intercepts locked apps when opened) if any app is locked
         startAppLockGuardIfEnabled()
 
@@ -184,13 +188,6 @@ class RikkaHubApp : Application() {
                     ProactiveMessageService.scheduleNext(this@RikkaHubApp, settings.proactiveMessageSetting)
                     Log.i(TAG, "Rescheduled proactive message alarm on app start")
                 }
-                val jealousyState = me.rerere.rikkahub.data.service.JealousyInspectionStore.read(this@RikkaHubApp)
-                if (jealousyState.enabled && !jealousyState.reconciling && !jealousyState.forcedOpen) {
-                    me.rerere.rikkahub.data.service.JealousyInspectionWorker.schedule(
-                        this@RikkaHubApp,
-                        me.rerere.rikkahub.data.service.JealousyInspectionStore.INSPECTION_INTERVAL_MINUTES,
-                    )
-                }
             }.onFailure {
                 Log.e(TAG, "rescheduleProactiveMessageIfEnabled failed", it)
             }
@@ -233,6 +230,30 @@ class RikkaHubApp : Application() {
             me.rerere.rikkahub.data.service.AppLockGuard.init(this)
         }.onFailure {
             Log.e(TAG, "startAppLockGuardIfEnabled failed", it)
+        }
+    }
+
+    private fun disableLegacyJealousyInspection() {
+        runCatching {
+            androidx.work.WorkManager.getInstance(this)
+                .cancelUniqueWork("jealousy_inspection_work")
+
+            val preferences = getSharedPreferences("jealousy_inspection", MODE_PRIVATE)
+            val lockedPackages = preferences
+                .getStringSet("jealousy_locked_packages", emptySet())
+                ?.toSet()
+                .orEmpty()
+            lockedPackages.forEach { packageName ->
+                me.rerere.rikkahub.data.service.AppLockStore.unlockApp(this, packageName)
+            }
+            preferences.edit()
+                .putBoolean("enabled", false)
+                .remove("jealousy_locked_packages")
+                .putBoolean("reconciling", false)
+                .putBoolean("forced_open", false)
+                .apply()
+        }.onFailure {
+            Log.e(TAG, "disableLegacyJealousyInspection failed", it)
         }
     }
 

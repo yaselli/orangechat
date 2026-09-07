@@ -27,7 +27,6 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.local.AccessibilityServiceHandle
 import me.rerere.rikkahub.data.service.AppLockGuard
-import me.rerere.rikkahub.data.service.JealousyInspectionStore
 import me.rerere.rikkahub.data.service.AppLockStore
 import me.rerere.rikkahub.ui.activity.AppLockAccessibilityPromptActivity
 
@@ -73,7 +72,7 @@ private fun resolvePackage(context: Context, packageName: String?, appName: Stri
     return ResolveResult.NotFound(appName)
 }
 
-fun createAppLockTool(context: Context, jealousyInspection: Boolean = false): Tool = Tool(
+fun createAppLockTool(context: Context): Tool = Tool(
     name = "app_lock",
     needsApproval = true,
     description = "Lock or unlock specific apps on the device. When a locked app is opened, the user is " +
@@ -179,7 +178,7 @@ fun createAppLockTool(context: Context, jealousyInspection: Boolean = false): To
                             }.toString()))
                         }
                     }
-                    val requirePin = if (jealousyInspection) false else params["require_pin"]?.jsonPrimitive?.booleanOrNull
+                    val requirePin = params["require_pin"]?.jsonPrimitive?.booleanOrNull
                         ?: params["require_pin"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull()
                         ?: true
                     if (requirePin && !AppLockStore.hasPin(context)) {
@@ -193,17 +192,7 @@ fun createAppLockTool(context: Context, jealousyInspection: Boolean = false): To
                     val appName = params["app_name"]?.jsonPrimitive?.contentOrNull
                     when (val resolved = resolvePackage(context, packageName, appName)) {
                         is ResolveResult.Resolved -> {
-                            val jealousyState = JealousyInspectionStore.read(context)
-                            val blockedByInspection = jealousyInspection && (
-                                resolved.packageName !in jealousyState.managedPackages ||
-                                    resolved.packageName in JealousyInspectionStore.effectiveWhitelist(context)
-                                )
-                            if (blockedByInspection) {
-                                listOf(UIMessagePart.Text(buildJsonObject {
-                                    put("success", false)
-                                    put("error", "app_not_allowed_for_jealousy_inspection")
-                                }.toString()))
-                            } else if (resolved.packageName == context.packageName) {
+                            if (resolved.packageName == context.packageName) {
                                 listOf(UIMessagePart.Text(buildJsonObject {
                                     put("success", false)
                                     put("error", "cannot_lock_self")
@@ -212,9 +201,6 @@ fun createAppLockTool(context: Context, jealousyInspection: Boolean = false): To
                                 AppLockStore.lockApp(context, resolved.packageName)
                                 AppLockStore.setLockMessage(context, resolved.packageName, message)
                                 AppLockStore.setRequirePin(context, resolved.packageName, requirePin)
-                                if (jealousyInspection) {
-                                    JealousyInspectionStore.recordJealousyLocks(context, setOf(resolved.packageName))
-                                }
                                 AppLockGuard.reArmLock(resolved.packageName)
                                 AppLockGuard.refresh()
                                 Log.i(TAG, "Locked app: ${resolved.packageName}")
@@ -246,15 +232,7 @@ fun createAppLockTool(context: Context, jealousyInspection: Boolean = false): To
                     val appName = params["app_name"]?.jsonPrimitive?.contentOrNull
                     when (val resolved = resolvePackage(context, packageName, appName)) {
                         is ResolveResult.Resolved -> {
-                            val wasJealousyLocked = resolved.packageName in
-                                JealousyInspectionStore.read(context).jealousyLockedPackages
                             AppLockStore.unlockApp(context, resolved.packageName)
-                            // Only enter reconciliation after the last jealousy lock is returned.
-                            if (wasJealousyLocked &&
-                                JealousyInspectionStore.read(context).jealousyLockedPackages.isEmpty()
-                            ) {
-                                JealousyInspectionStore.beginReconciliation(context)
-                            }
                             AppLockGuard.refresh()
                             Log.i(TAG, "Unlocked app: ${resolved.packageName}")
                             listOf(UIMessagePart.Text(buildJsonObject {

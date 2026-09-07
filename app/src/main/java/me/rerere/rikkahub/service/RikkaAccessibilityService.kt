@@ -9,26 +9,13 @@ package me.rerere.rikkahub.service
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.graphics.Path
-import android.graphics.PixelFormat
-import android.graphics.drawable.GradientDrawable
-import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
-import android.os.Looper
 import android.util.Log
-import android.view.Gravity
-import android.view.View
-import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityWindowInfo
 import android.view.accessibility.AccessibilityNodeInfo
-import android.widget.Button
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,10 +44,6 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
     private val gestureHandlerThread = HandlerThread("RikkaAcc-Callback").apply { start() }
     private val gestureHandler = Handler(gestureHandlerThread.looper)
-    // Service 构造时 baseContext 尚未 attach，不能通过 ContextWrapper.mainLooper 取主线程。
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var jealousyOverlay: View? = null
-    private var jealousyOverlayPackage: String? = null
 
     private val _running = MutableStateFlow(false)
     val running = _running.asStateFlow()
@@ -84,8 +67,6 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
-        mainHandler.removeCallbacksAndMessages(null)
-        removeJealousyOverlayNow()
         instance = null
         _running.value = false
         _lastActions.value = emptyList()
@@ -94,8 +75,6 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
-        mainHandler.removeCallbacksAndMessages(null)
-        removeJealousyOverlayNow()
         instance = null
         _running.value = false
         gestureHandlerThread.quitSafely()
@@ -104,135 +83,18 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        val pkg = event.packageName?.toString()?.takeIf { it.isNotBlank() } ?: return
-        // Window events also come from our lock overlay, keyboards and system UI.
-        // Only application windows represent an actual foreground-app transition.
-        val eventWindow = windows.firstOrNull { it.id == event.windowId }
-        if (eventWindow != null && eventWindow.type != AccessibilityWindowInfo.TYPE_APPLICATION) return
-        // Some devices briefly omit the event window while adding an overlay.
-        // Do not interpret that unclassified event as leaving the locked app.
-        if (eventWindow == null && jealousyOverlay != null) return
-        me.rerere.rikkahub.workflow.trigger.AppForegroundDispatcher.onForegroundChange(pkg)
+        // Feed foreground-app transitions to the workflow trigger dispatcher.
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val pkg = event.packageName?.toString()
+            if (!pkg.isNullOrBlank()) {
+                me.rerere.rikkahub.workflow.trigger.AppForegroundDispatcher.onForegroundChange(pkg)
+            }
+        }
     }
 
     override fun onInterrupt() {
         // Required override; no-op.
     }
-
-    fun showJealousyLockOverlay(packageName: String) {
-        mainHandler.post {
-            if (instance !== this) return@post
-            if (!me.rerere.rikkahub.data.service.AppLockStore.isLocked(this, packageName)) return@post
-            if (me.rerere.rikkahub.workflow.trigger.AppForegroundLastKnown.value != packageName) return@post
-            if (jealousyOverlay != null && jealousyOverlayPackage == packageName) return@post
-            removeJealousyOverlayNow()
-            val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-            val appName = runCatching {
-                val info = packageManager.getApplicationInfo(packageName, 0)
-                packageManager.getApplicationLabel(info).toString()
-            }.getOrDefault(packageName)
-            val message = me.rerere.rikkahub.data.service.AppLockStore
-                .getLockMessage(this, packageName)
-                .orEmpty()
-            val root = FrameLayout(this).apply {
-                setBackgroundColor(Color.argb(238, 255, 248, 245))
-                isClickable = true
-                isFocusable = true
-            }
-            val card = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(dp(28), dp(30), dp(28), dp(24))
-                background = GradientDrawable().apply {
-                    cornerRadius = dp(28).toFloat()
-                    setColor(Color.argb(245, 255, 255, 255))
-                    setStroke(dp(1), Color.argb(210, 255, 255, 255))
-                }
-            }
-            card.addView(TextView(this).apply {
-                text = "🔒"
-                textSize = 42f
-                gravity = Gravity.CENTER
-            })
-            card.addView(TextView(this).apply {
-                text = "$appName 暂时被收走了"
-                textSize = 22f
-                setTextColor(Color.rgb(35, 31, 30))
-                gravity = Gravity.CENTER
-                setPadding(0, dp(12), 0, dp(8))
-            })
-            if (message.isNotBlank()) {
-                card.addView(TextView(this).apply {
-                    text = message
-                    textSize = 15f
-                    setTextColor(Color.rgb(100, 82, 80))
-                    gravity = Gravity.CENTER
-                    setPadding(0, 0, 0, dp(18))
-                })
-            }
-            card.addView(Button(this).apply {
-                text = "回来找 TA"
-                setOnClickListener {
-                    hideJealousyLockOverlay()
-                    startActivity(
-                        Intent(
-                            this@RikkaAccessibilityService,
-                            me.rerere.rikkahub.RouteActivity::class.java,
-                        ).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                        },
-                    )
-                }
-            })
-            card.addView(Button(this).apply {
-                text = "先离开"
-                setOnClickListener {
-                    hideJealousyLockOverlay()
-                    performGlobalAction(GLOBAL_ACTION_HOME)
-                }
-            })
-            root.addView(
-                card,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                ).apply {
-                    gravity = Gravity.CENTER
-                    marginStart = dp(24)
-                    marginEnd = dp(24)
-                },
-            )
-            val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_SECURE,
-                PixelFormat.TRANSLUCENT,
-            )
-            runCatching { windowManager.addView(root, params) }
-                .onSuccess {
-                    jealousyOverlay = root
-                    jealousyOverlayPackage = packageName
-                }
-                .onFailure { Log.e(TAG, "Failed to show jealousy lock overlay", it) }
-        }
-    }
-
-    fun hideJealousyLockOverlay() {
-        mainHandler.post { removeJealousyOverlayNow() }
-    }
-
-    fun isJealousyLockOverlayVisible(): Boolean = jealousyOverlay != null
-
-    private fun removeJealousyOverlayNow() {
-        val view = jealousyOverlay ?: return
-        runCatching { (getSystemService(WINDOW_SERVICE) as WindowManager).removeViewImmediate(view) }
-        jealousyOverlay = null
-        jealousyOverlayPackage = null
-    }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     fun appendLog(entry: ActionLogEntry) {
         val current = _lastActions.value

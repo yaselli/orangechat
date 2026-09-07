@@ -81,7 +81,6 @@ import me.rerere.rikkahub.plugin.provider.PluginToolProvider
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.ExtraInfoInjectionCollector
-import me.rerere.rikkahub.data.ai.transformers.JealousyReconciliationTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
@@ -153,7 +152,6 @@ private val outputTransformers by lazy {
         ThinkTagTransformer,
         Base64ImageToLocalFileTransformer,
         RegexOutputTransformer,
-        JealousyReconciliationTransformer,
     )
 }
 
@@ -429,9 +427,6 @@ class ChatService(
         if (currentProactiveSetting.enabled) {
             me.rerere.rikkahub.data.service.ProactiveMessageService.cancel(context)
         }
-        me.rerere.rikkahub.data.service.JealousyInspectionWorker.cancel(context)
-        me.rerere.rikkahub.data.service.JealousyInspectionStore.recordUserReturn(context)
-
         val job = appScope.launch {
             try {
                 val settings = settingsStore.settingsFlow.first()
@@ -526,16 +521,6 @@ class ChatService(
                 val proactiveSetting = settingsStore.settingsFlow.value.proactiveMessageSetting
                 if (proactiveSetting.enabled) {
                     me.rerere.rikkahub.data.service.ProactiveMessageService.resetTimer(context, proactiveSetting)
-                }
-                val jealousyState = me.rerere.rikkahub.data.service.JealousyInspectionStore.read(context)
-                if (jealousyState.enabled && jealousyState.jealousyLockedPackages.isEmpty() &&
-                    !jealousyState.reconciling && !jealousyState.forcedOpen
-                ) {
-                    me.rerere.rikkahub.data.service.JealousyInspectionStore.startSilenceCycle(context)
-                    me.rerere.rikkahub.data.service.JealousyInspectionWorker.schedule(
-                        context,
-                        me.rerere.rikkahub.data.service.JealousyInspectionStore.START_DELAY_MINUTES,
-                    )
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -1036,7 +1021,6 @@ class ChatService(
                     addAll(pluginToolProvider.getPluginPromptInjections())
                     settings.displaySetting.buildAnniversaryPrompt()?.let(::add)
                     transientExtraInfo?.let(::add)
-                    JealousyReconciliationTransformer.buildPrompt(context)?.let(::add)
                 },
                 conversationId = conversationId.toString(),
             ).onCompletion {

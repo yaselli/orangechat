@@ -140,7 +140,6 @@ class ExtraInfoInjectionCollector(
 
     suspend fun collectScreenTextForProactive(timeoutMillis: Long): String? {
         val service = RikkaAccessibilityService.instance ?: return null
-        if (service.isJealousyLockOverlayVisible()) return null
         val packageName = service.rootInActiveWindow?.packageName?.toString().orEmpty()
         val sensitiveTokens = listOf("bank", "pay", "wallet", "password", "permissioncontroller")
         if (sensitiveTokens.any { token -> packageName.contains(token, ignoreCase = true) }) return null

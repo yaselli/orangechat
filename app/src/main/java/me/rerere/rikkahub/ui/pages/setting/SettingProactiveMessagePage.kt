@@ -33,8 +33,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RiskConfirmDialog
@@ -45,7 +43,6 @@ import org.koin.compose.koinInject
 @Composable
 fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
     val context = LocalContext.current
-    val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
@@ -83,13 +80,6 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
         ) {
             item {
                 CardGroup {
-                    item(
-                        headlineContent = { Text("吃醋巡检") },
-                        supportingContent = {
-                            Text("查看 TA 的情绪、固定阈值、受管应用与永不锁定白名单")
-                        },
-                        onClick = { navController.navigate(Screen.JealousyInspection) },
-                    )
                     item(
                         headlineContent = { Text("启用主动消息") },
                         supportingContent = { Text("开启后AI立即主动发一条消息，之后按设定间隔循环") },

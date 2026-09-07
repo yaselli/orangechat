@@ -10,7 +10,6 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import me.rerere.rikkahub.service.RikkaAccessibilityService
 import me.rerere.rikkahub.ui.activity.AppLockUnlockActivity
 import me.rerere.rikkahub.workflow.trigger.AppForegroundDispatcher
 
@@ -61,24 +60,11 @@ object AppLockGuard {
     private fun onForegroundChange(pkg: String?) {
         if (pkg.isNullOrBlank()) return
         if (!::appContext.isInitialized) return
-        if (pkg == appContext.packageName) {
-            RikkaAccessibilityService.instance?.hideJealousyLockOverlay()
-            return
-        }
+        if (pkg == appContext.packageName) return
 
         val locked = AppLockStore.getLockedPackages(appContext)
-        if (pkg !in locked) {
-            RikkaAccessibilityService.instance?.hideJealousyLockOverlay()
-            return
-        }
+        if (pkg !in locked) return
         if (pkg in unlockedPackages) return
-
-        // The overlay is idempotent per package. A quick return to a locked app
-        // must not be skipped by the activity-launch throttle.
-        if (pkg in JealousyInspectionStore.read(appContext).jealousyLockedPackages) {
-            RikkaAccessibilityService.instance?.showJealousyLockOverlay(pkg)
-            return
-        }
 
         val now = System.currentTimeMillis()
         if (now - lastInterceptAt < REENTRY_GUARD_MS) return

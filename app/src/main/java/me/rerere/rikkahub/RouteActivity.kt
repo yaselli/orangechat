@@ -161,7 +161,6 @@ import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSystemToolsPage
 import me.rerere.rikkahub.ui.pages.setting.SecuritySettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProactiveMessagePage
-import me.rerere.rikkahub.ui.pages.setting.JealousyInspectionPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWeixinBotPage
 import me.rerere.rikkahub.ui.pages.setting.SettingQqBotPage
 import me.rerere.rikkahub.plugin.webview.PluginWebViewPage
@@ -702,10 +701,6 @@ entry<Screen.Extensions> {
                                 SettingProactiveMessagePage()
                             }
 
-                            entry<Screen.JealousyInspection> {
-                                JealousyInspectionPage()
-                            }
-
                             entry<Screen.SettingExtraInjection> {
                                 SettingExtraInjectionPage()
                             }
@@ -1089,9 +1084,6 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingProactiveMessage : Screen
-
-    @Serializable
-    data object JealousyInspection : Screen
 
     @Serializable
     data object SettingExtraInjection : Screen
