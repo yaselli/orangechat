@@ -125,7 +125,7 @@ class OpenAIRealtimeASRController(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "Realtime ASR websocket failed", t)
+                Log.e(TAG, "Realtime ASR websocket failed")
                 releaseRecorder()
                 handleDisconnect(t.message ?: "ASR websocket failed")
             }
@@ -229,7 +229,7 @@ class OpenAIRealtimeASRController(
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "AudioRecord 构造/初始化失败", e)
+                Log.e(TAG, "AudioRecord 构造/初始化失败")
                 setError(e.message ?: "麦克风初始化失败")
                 return@launch
             }
@@ -256,7 +256,7 @@ class OpenAIRealtimeASRController(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Audio recording failed", e)
+                Log.e(TAG, "Audio recording failed")
                 setError(e.message ?: "Audio recording failed")
             } finally {
                 releaseRecorder()
@@ -266,7 +266,7 @@ class OpenAIRealtimeASRController(
 
     private fun handleServerEvent(text: String) {
         val event = runCatching { JSONObject(text) }.getOrElse {
-            Log.w(TAG, "Invalid realtime event: $text", it)
+            Log.d(TAG, "Speech response parsing failed; payload omitted")
             return
         }
 

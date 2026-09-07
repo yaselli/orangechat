@@ -124,7 +124,7 @@ class MiMoASRController(
                 flushJob?.join()
                 flushSegment()
             } catch (e: Exception) {
-                Log.e(TAG, "Final flush failed", e)
+                Log.e(TAG, "Final flush failed")
                 setError(e.message ?: "MiMo ASR final flush failed")
             } finally {
                 _state.update { it.copy(status = ASRStatus.Idle) }
@@ -191,7 +191,7 @@ class MiMoASRController(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Audio recording failed", e)
+                Log.e(TAG, "Audio recording failed")
                 setError(e.message ?: "Audio recording failed")
             } finally {
                 releaseRecorder()
@@ -204,7 +204,7 @@ class MiMoASRController(
         if (flushJob?.isActive == true) return
         flushJob = scope.launch(Dispatchers.IO) {
             runCatching { flushSegment() }
-                .onFailure { Log.e(TAG, "Segment flush failed", it) }
+                .onFailure { Log.e(TAG, "Segment flush failed") }
         }
     }
 

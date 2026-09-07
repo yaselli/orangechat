@@ -52,7 +52,7 @@ class ElevenLabsTTSProvider : TTSProvider<TTSProviderSetting.ElevenLabs> {
                 })
             }
 
-            Log.i(TAG, "generateSpeech request: voiceId=${providerSetting.voiceId}, modelId=${providerSetting.modelId}, body=$requestBody")
+            Log.d(TAG, "Speech request prepared; payload omitted")
 
             val httpRequest = Request.Builder()
                 .url("${providerSetting.baseUrl}/text-to-speech/${providerSetting.voiceId}")
@@ -67,10 +67,10 @@ class ElevenLabsTTSProvider : TTSProvider<TTSProviderSetting.ElevenLabs> {
                 val errorBody = try {
                     response.body.string()
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to read error body", e)
+                    Log.e(TAG, "Failed to read error body")
                     null
                 }
-                Log.e(TAG, "generateSpeech failed: code=${response.code}, message=${response.message}, body=$errorBody, voiceId=${providerSetting.voiceId}")
+                Log.d(TAG, "Speech HTTP status=${response.code}; payload omitted")
                 throw Exception("ElevenLabs TTS request failed: ${response.code} ${response.message}")
             }
 
@@ -89,7 +89,7 @@ class ElevenLabsTTSProvider : TTSProvider<TTSProviderSetting.ElevenLabs> {
                 )
             )
         } catch (e: Exception) {
-            Log.e(TAG, "generateSpeech exception: voiceId=${providerSetting.voiceId}, modelId=${providerSetting.modelId}", e)
+            Log.e(TAG, "generateSpeech exception: voiceId=${providerSetting.voiceId}, modelId=${providerSetting.modelId}")
             throw e
         }
     }

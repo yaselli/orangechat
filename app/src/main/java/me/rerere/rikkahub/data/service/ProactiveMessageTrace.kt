@@ -66,7 +66,7 @@ internal class ProactiveMessageTrace private constructor(
         error?.let {
             event(
                 "error",
-                "type=${it::class.simpleName.orEmpty()}",
+                "type=${it::class.simpleName.orEmpty()} category=${errorCategory(it)}",
             )
         }
         event("finish", "outcome=$outcome")
@@ -76,6 +76,14 @@ internal class ProactiveMessageTrace private constructor(
 
     companion object {
         const val TAG = "ProactiveMessageTrace"
+
+        // Only fixed categories leave this boundary; never echo arbitrary upstream error text.
+        internal fun errorCategory(error: Throwable): String = when {
+            error is kotlinx.coroutines.CancellationException -> "cancelled"
+            error is java.net.SocketTimeoutException -> "timeout"
+            error.message.orEmpty().contains("empty_stream", ignoreCase = true) -> "empty_stream"
+            else -> "other"
+        }
 
         fun start(source: String): ProactiveMessageTrace {
             val suffix = Uuid.random().toString().replace("-", "").takeLast(4).uppercase(Locale.ROOT)

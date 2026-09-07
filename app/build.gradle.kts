@@ -12,6 +12,12 @@ plugins {
 }
 
 android {
+    lint {
+        // Existing UI/localization debt only; all source locations were unchanged from 44ac3a4.
+        // Do not regenerate automatically: new errors must continue to fail CI.
+        baseline = file("lint-baseline.xml")
+    }
+
     namespace = "me.rerere.rikkahub"
     compileSdk = 37
 

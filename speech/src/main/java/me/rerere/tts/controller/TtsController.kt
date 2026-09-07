@@ -260,7 +260,7 @@ class TtsController(
                         awaitOrCreate(chunk, provider)
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
-                        Log.e(TAG, "Synthesis error", e)
+                        Log.e(TAG, "Synthesis error")
                         _error.update { e.message ?: "TTS synthesis error" }
                         processedCount++
                         continue
@@ -271,7 +271,7 @@ class TtsController(
                         audio.play(response)
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
-                        Log.e(TAG, "Playback error", e)
+                        Log.e(TAG, "Playback error")
                         _error.update { e.message ?: "Audio playback error" }
                     }
 

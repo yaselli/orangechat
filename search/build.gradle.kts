@@ -47,6 +47,7 @@ android {
 }
 
 dependencies {
+    testImplementation(libs.junit)
     implementation(project(":ai"))
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)

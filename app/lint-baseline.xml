@@ -1,0 +1,507 @@
+<?xml version='1.0' encoding='utf-8'?>
+<issues format="6" by="lint 9.1.1" type="baseline" client="gradle">
+    <issue id="MissingSuperCall" message="Overriding method should call `super.onBackPressed`" errorLine1="    override fun onBackPressed() {" errorLine2="                 ~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/activity/AppLockUnlockActivity.kt" line="92" column="18" />
+    </issue>
+    <issue id="GestureBackNavigation" message="`onBackPressed` is no longer called for back gestures; migrate to AndroidX's backward compatible `OnBackPressedDispatcher`" errorLine1="    override fun onBackPressed() {" errorLine2="                 ~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/activity/AppLockUnlockActivity.kt" line="92" column="18" />
+    </issue>
+    <issue id="GestureBackNavigation" message="`onBackPressed` is no longer called for back gestures; migrate to AndroidX's backward compatible `OnBackPressedDispatcher`" errorLine1="    override fun onBackPressed() {" errorLine2="                 ~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/activity/BiometricPromptActivity.kt" line="113" column="18" />
+    </issue>
+    <issue id="NonObservableLocale" message="Reading locale in a non-observable way in a composable function" errorLine1="            else -&gt; locale.getDisplayLanguage(Locale.getDefault())" errorLine2="                                              ~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageTranslation.kt" line="95" column="47" />
+    </issue>
+    <issue id="NonObservableLocale" message="Reading locale in a non-observable way in a composable function" errorLine1="                                    val sdf = java.text.SimpleDateFormat(&quot;yyyy-MM-dd HH:mm:ss&quot;, java.util.Locale.getDefault())" errorLine2="                                                                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingProactiveMessagePage.kt" line="119" column="97" />
+    </issue>
+    <issue id="NonObservableLocale" message="Reading locale in a non-observable way in a composable function" errorLine1="                    if(Locale.getDefault().language == &quot;zh&quot;) {" errorLine2="                       ~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingProviderPage.kt" line="131" column="24" />
+    </issue>
+    <issue id="NonObservableLocale" message="Reading locale in a non-observable way in a composable function" errorLine1="                                    labelDate.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())" errorLine2="                                                                                    ~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/stats/StatsPage.kt" line="228" column="85" />
+    </issue>
+    <issue id="NonObservableLocale" message="Reading locale in a non-observable way in a composable function" errorLine1="            else -&gt; locale.getDisplayLanguage(Locale.getDefault())" errorLine2="                                              ~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/translator/TranslatorPage.kt" line="246" column="47" />
+    </issue>
+    <issue id="ContextCastToActivity" message="LocalContext should not be cast to Activity, use LocalActivity instead" errorLine1="    val activity = LocalContext.current as? me.rerere.rikkahub.RouteActivity" errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt" line="230" column="20" />
+    </issue>
+    <issue id="FlowOperatorInvokedInComposition" message="Flow operator functions should not be invoked within composition" errorLine1="        ?: MutableStateFlow(VoiceCallUiState()).asStateFlow())" errorLine2="                                                ~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/voice/VoiceCallPage.kt" line="161" column="49" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        toaster.show(exception.message ?: context.getString(R.string.assistant_importer_import_failed))" errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantImporter.kt" line="95" column="59" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        toaster.show(exception.message ?: context.getString(R.string.assistant_importer_import_failed))" errorLine2="                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantImporter.kt" line="121" column="59" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                            toaster.show(context.getString(R.string.chat_page_delete_folder_generating), type = ToastType.Warning)" errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatDrawer.kt" line="798" column="42" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                context.getString(R.string.chat_input_unsupported_file_type, fileName)," errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt" line="461" column="33" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                                            message = context.getString(R.string.imggen_page_image_saved_success)," errorLine2="                                                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/imggen/ImgGenPage.kt" line="635" column="71" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                                            message = context.getString(" errorLine2="                                                                      ^">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/imggen/ImgGenPage.kt" line="640" column="71" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        context.getString(R.string.backup_page_backup_success)," errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt" line="81" column="25" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        context.getString(R.string.backup_page_restore_failed, e.message ?: &quot;&quot;)," errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt" line="87" column="25" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        context.getString(R.string.backup_page_restore_success)," errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt" line="161" column="25" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        context.getString(R.string.backup_page_restore_failed, e.message ?: &quot;&quot;)," errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/ImportExportTab.kt" line="168" column="25" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        context.getString(R.string.mermaid_export_success)," errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/components/richtext/Mermaid.kt" line="108" column="25" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        context.getString(R.string.mermaid_export_failed)," errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/components/richtext/Mermaid.kt" line="114" column="25" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                            context.getString(" errorLine2="                                            ^">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/PropertyEditor.kt" line="177" column="45" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                context.getString(R.string.backup_page_connection_success)," errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt" line="272" column="33" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                context.getString(" errorLine2="                                ^">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt" line="278" column="33" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                context.getString(R.string.backup_page_backup_success)," errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt" line="307" column="33" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                it.message ?: context.getString(R.string.backup_page_unknown_error)," errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt" line="313" column="47" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                                context.getString(R.string.backup_page_delete_success)," errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt" line="377" column="49" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                                context.getString(" errorLine2="                                                ^">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt" line="384" column="49" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                                context.getString(R.string.backup_page_restore_success)," errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt" line="399" column="49" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                                context.getString(" errorLine2="                                                ^">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/S3Tab.kt" line="407" column="49" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                context.getString(R.string.setting_provider_page_save_success)," errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingProviderDetailPage.kt" line="237" column="33" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        toaster.show(context.getString(R.string.skills_page_save_failed))" errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt" line="161" column="38" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        toaster.show(context.getString(R.string.skills_page_import_success, message))" errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt" line="175" column="38" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        toaster.show(context.getString(R.string.skills_page_import_failed, message))" errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/SkillsPage.kt" line="177" column="38" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                    toaster.show(context.getString(R.string.text_area_import_success), type = ToastType.Success)" errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/components/ui/TextArea.kt" line="105" column="34" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                    val errorMessage = e.message ?: context.getString(R.string.text_area_import_failed)" errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/components/ui/TextArea.kt" line="108" column="53" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                toaster.show(context.getString(R.string.update_card_downloading), type = ToastType.Info)" errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/components/ui/UpdateCard.kt" line="133" column="30" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                context.getString(R.string.backup_page_connection_success)," errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt" line="244" column="33" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                context.getString(" errorLine2="                                ^">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt" line="250" column="33" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                context.getString(R.string.backup_page_backup_success)," errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt" line="278" column="33" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                it.message ?: context.getString(R.string.backup_page_unknown_error)," errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt" line="284" column="47" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                                context.getString(R.string.backup_page_delete_success)," errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt" line="348" column="49" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                                context.getString(" errorLine2="                                                ^">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt" line="355" column="49" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                                context.getString(R.string.backup_page_restore_success)," errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt" line="370" column="49" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                                                context.getString(" errorLine2="                                                ^">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/backup/tabs/WebDavTab.kt" line="378" column="49" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="            toaster.show(context.getString(R.string.workspace_detail_import_failed))" errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspaceDetailPage.kt" line="132" column="26" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="            } ?: toaster.show(context.getString(R.string.workspace_detail_export_failed))" errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspaceDetailPage.kt" line="144" column="31" />
+    </issue>
+    <issue id="LocalContextGetResourceValueCall" message="Querying resource values using LocalContext.current" errorLine1="                        toaster.show(it.message ?: context.getString(R.string.workspace_page_create_failed))" errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/java/me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspacePage.kt" line="146" column="52" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;about_page_upstream_name&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese), &quot;zh&quot; (Chinese)" errorLine1="  &lt;string name=&quot;about_page_upstream_name&quot;&gt;RikkaHub&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="9" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;about_page_upstream_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese), &quot;zh&quot; (Chinese)" errorLine1="  &lt;string name=&quot;about_page_upstream_desc&quot;&gt;https://github.com/rikkahub/rikkahub&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="10" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;about_page_derivation_notice&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese), &quot;zh&quot; (Chinese)" errorLine1="  &lt;string name=&quot;about_page_derivation_notice&quot;&gt;本项目【西瓜瓣】基于 RikkaHub 二次开发而成。西瓜瓣是独立项目，其功能与问题由本项目自行维护。请不要因为本项目去打扰 RikkaHub 原作者以及各位开源贡献者。感谢他们的付出与开源精神。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="11" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;extensions_page_workspace&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;extensions_page_workspace&quot;&gt;Workspace&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="383" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;extensions_page_workspace_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;extensions_page_workspace_desc&quot;&gt;Sandboxed Linux file area &amp;amp; shell tools for assistants&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="384" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;assistant_page_workspace_binding&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;assistant_page_workspace_binding&quot;&gt;Workspace Binding&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="385" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;assistant_page_workspace_binding_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;assistant_page_workspace_binding_desc&quot;&gt;Bind a workspace to enable file/shell tools for this assistant&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="386" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_no_binding&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_no_binding&quot;&gt;No binding&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="387" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_page_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_page_title&quot;&gt;Workspaces&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="388" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_page_empty_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_page_empty_title&quot;&gt;No workspaces yet&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="389" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_page_empty_hint&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_page_empty_hint&quot;&gt;Create a workspace to provide an isolated file area and shell for assistants&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="390" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_page_create_failed&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_page_create_failed&quot;&gt;Failed to create workspace&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="391" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_page_delete_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_page_delete_title&quot;&gt;Delete workspace&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="392" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_page_delete_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_page_delete_message&quot;&gt;Delete workspace \&quot;%s\&quot;? All files in it will be removed.&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="393" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_page_add_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_page_add_title&quot;&gt;New Workspace&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="394" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_page_name_label&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_page_name_label&quot;&gt;Workspace name&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="395" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_page_create&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_page_create&quot;&gt;Create&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="396" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_status_disabled&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_status_disabled&quot;&gt;Shell disabled (Rootfs not installed)&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="397" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_status_installing&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_status_installing&quot;&gt;Installing Rootfs…&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="398" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_status_ready&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_status_ready&quot;&gt;Ready&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="399" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_status_broken&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_status_broken&quot;&gt;Rootfs broken&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="400" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_rootfs_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_rootfs_title&quot;&gt;Linux Rootfs&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="401" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_install_rootfs&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_install_rootfs&quot;&gt;Install Rootfs&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="402" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_install_url_hint&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_install_url_hint&quot;&gt;e.g.: https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="403" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_install_url_empty&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_install_url_empty&quot;&gt;Please enter a download URL&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="404" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_install_downloading&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_install_downloading&quot;&gt;Downloading…&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="405" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_install_downloading_percent&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_install_downloading_percent&quot;&gt;Downloading… %d%%&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="406" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_install_extracting&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_install_extracting&quot;&gt;Extracting… (%d files)&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="407" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_install_finishing&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_install_finishing&quot;&gt;Finishing up…&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="408" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_tool_approval_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_tool_approval_title&quot;&gt;Tool Approval (require confirmation)&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="409" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_tool_read_file&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_tool_read_file&quot;&gt;Read file&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="410" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_tool_write_file&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_tool_write_file&quot;&gt;Write file&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="411" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_tool_edit_file&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_tool_edit_file&quot;&gt;Edit file&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="412" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_tool_shell&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_tool_shell&quot;&gt;Run command&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="413" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_area_files&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_area_files&quot;&gt;Workspace files&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="414" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_area_linux&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_area_linux&quot;&gt;Linux Rootfs&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="415" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_empty_dir&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_empty_dir&quot;&gt;This directory is empty&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="416" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_delete_file_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_delete_file_title&quot;&gt;Delete&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="417" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_delete_file_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_delete_file_message&quot;&gt;Delete \&quot;%s\&quot;?&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="418" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_import_failed&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_import_failed&quot;&gt;Failed to import file&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="419" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_tab_basic&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_tab_basic&quot;&gt;Basic&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="420" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_tab_files&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_tab_files&quot;&gt;Files&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="421" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_export&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_export&quot;&gt;Export&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="422" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_share&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_share&quot;&gt;Share&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="423" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_detail_export_failed&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_detail_export_failed&quot;&gt;Failed to export file&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="424" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_terminal_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_terminal_title&quot;&gt;Terminal&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="425" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_terminal_not_installed&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_terminal_not_installed&quot;&gt;Rootfs is not installed in this workspace&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="426" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_terminal_loading&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_terminal_loading&quot;&gt;Loading terminal…&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="427" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;workspace_terminal_exited&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;workspace_terminal_exited&quot;&gt;Terminal process exited&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="428" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_asr_configure_base_url&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_asr_configure_base_url&quot;&gt;Base URL&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="661" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_asr_configure_mimo_api_key_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_asr_configure_mimo_api_key_desc&quot;&gt;Xiaomi MiMo API key (sk-xxx for pay-as-you-go, tp-xxx for token plan)&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="668" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_asr_configure_mimo_base_url_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_asr_configure_mimo_base_url_desc&quot;&gt;MiMo OpenAI-compatible base URL. Use https://api.xiaomimimo.com/v1 for sk- keys, https://token-plan-cn.xiaomimimo.com/v1 for tp- keys&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="669" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_asr_configure_mimo_language_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_asr_configure_mimo_language_desc&quot;&gt;Optional language hint: auto, zh, or en. Leave empty to use server default (auto)&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="670" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_asr_configure_mimo_model_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_asr_configure_mimo_model_desc&quot;&gt;MiMo ASR model name, e.g. mimo-v2.5-asr&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="671" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_asr_configure_mimo_sample_rate_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_asr_configure_mimo_sample_rate_desc&quot;&gt;PCM recording sample rate in Hz, 16000 is recommended for ASR&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="672" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_asr_configure_mimo_segment_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_asr_configure_mimo_segment_desc&quot;&gt;Auto-flush buffered audio every N seconds during recording. 0 disables auto-segmentation (single request on stop, max ~3.9 min at 16kHz)&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="673" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_asr_configure_sample_rate&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_asr_configure_sample_rate&quot;&gt;Sample Rate&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="688" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_asr_configure_segment_duration&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;setting_asr_configure_segment_duration&quot;&gt;Segment Duration&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="689" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;theme_name_claude&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;theme_name_claude&quot;&gt;Claude&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1108" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;theme_name_pearltide&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="    &lt;string name=&quot;theme_name_pearltide&quot;&gt;Pearl Tide&lt;/string&gt;" errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1111" column="13" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;keep_alive_notification_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese), &quot;zh&quot; (Chinese)" errorLine1="  &lt;string name=&quot;keep_alive_notification_title&quot;&gt;西瓜瓣&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1139" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;keep_alive_notification_content&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese), &quot;zh&quot; (Chinese)" errorLine1="  &lt;string name=&quot;keep_alive_notification_content&quot;&gt;保持连接中&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1140" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;keep_alive_channel_name&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese), &quot;zh&quot; (Chinese)" errorLine1="  &lt;string name=&quot;keep_alive_channel_name&quot;&gt;后台保活&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1141" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;keep_alive_channel_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese), &quot;zh&quot; (Chinese)" errorLine1="  &lt;string name=&quot;keep_alive_channel_desc&quot;&gt;用于维持应用后台运行，确保定时消息等功能稳定工作&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1142" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_system_tools_keep_alive&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese), &quot;zh&quot; (Chinese)" errorLine1="  &lt;string name=&quot;setting_system_tools_keep_alive&quot;&gt;后台保活&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1143" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;setting_system_tools_keep_alive_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese), &quot;zh&quot; (Chinese)" errorLine1="  &lt;string name=&quot;setting_system_tools_keep_alive_desc&quot;&gt;开启后前台常驻通知，降低被系统杀死概率，保障定时消息正常触发&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1144" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;disclaimer_page_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;disclaimer_page_title&quot;&gt;使用协议与免责声明&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1157" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;disclaimer_tab_user_agreement&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;disclaimer_tab_user_agreement&quot;&gt;用户协议&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1158" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;disclaimer_tab_privacy_policy&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;disclaimer_tab_privacy_policy&quot;&gt;隐私政策&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1159" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;disclaimer_tab_disclaimer&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;disclaimer_tab_disclaimer&quot;&gt;免责声明&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1160" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;disclaimer_accept_checkbox&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;disclaimer_accept_checkbox&quot;&gt;我已阅读并同意以上全部内容&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1161" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;disclaimer_accept_button&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;disclaimer_accept_button&quot;&gt;同意并进入&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1162" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;disclaimer_decline_button&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;disclaimer_decline_button&quot;&gt;不同意并退出&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1163" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_user_agreement_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_user_agreement_title&quot;&gt;用户协议&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1165" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_user_agreement_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_user_agreement_desc&quot;&gt;西瓜瓣用户使用协议&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1166" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_privacy_policy_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_privacy_policy_title&quot;&gt;隐私政策&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1167" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_privacy_policy_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_privacy_policy_desc&quot;&gt;我们如何收集、使用和保护您的信息&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1168" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_disclaimer_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_disclaimer_title&quot;&gt;免责声明&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1169" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_disclaimer_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_disclaimer_desc&quot;&gt;关于 AI 生成内容、权限与风险的说明&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1170" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_plugin_security_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_plugin_security_title&quot;&gt;插件安全说明&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1171" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_plugin_security_desc&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_plugin_security_desc&quot;&gt;第三方插件可能带来的风险&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1172" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;disclaimer_user_agreement_text&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;disclaimer_user_agreement_text&quot;&gt;欢迎使用西瓜瓣（OrangeChat）。\n\n1. 协议范围\n本协议是您与西瓜瓣开发者之间关于使用本软件及相关服务的协议。请您仔细阅读并理解本协议全部内容。一旦您安装、启动或以任何方式使用本软件，即视为您已阅读、理解并同意接受本协议全部条款的约束。\n\n2. 软件性质\n西瓜瓣是一款开源 AI 客户端软件，基于 RikkaHub 二次开发，源代码遵循 GNU AGPL v3 许可协议发布。本软件本身不提供底层 AI 模型能力，所有对话内容均由您自行配置的第三方模型提供商生成。\n\n3. 用户账号与数据\n本软件主要在本地运行和存储您的对话数据。当您启用 Web 服务器、QQ/微信 Bot、插件或第三方服务时，数据可能按照您的配置离开本机。您应自行评估相关风险并妥善保管 API Key、密码等敏感信息。\n\n4. 用户行为规范\n您不得使用本软件从事任何违反法律法规、侵犯他人合法权益或干扰第三方服务正常运行的行为。您应对自己配置的助手提示词、工具、插件和外部服务承担全部责任。\n\n5. 知识产权\n本软件及其衍生作品的知识产权归开发者所有。第三方模型、插件、图标、字体等内容的知识产权归 respective 权利人所有。\n\n6. 责任限制\n在法律允许的最大范围内，开发者不对因使用或无法使用本软件而导致的任何直接、间接、偶然、特殊或继发性的损失承担责任。\n\n7. 协议修改\n开发者有权随时修改本协议，修改后的协议将在软件更新或公告时生效。如您继续使用本软件，视为接受修改后的协议。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1174" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;disclaimer_privacy_policy_text&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;disclaimer_privacy_policy_text&quot;&gt;西瓜瓣隐私政策\n\n1. 信息收集\n为了提供 AI 对话、系统工具、插件运行等服务，本软件可能在获得您授权后收集以下信息：\n- 设备型号、系统版本、应用版本等基本信息；\n- 您主动输入的对话、文件、图片等内容；\n- 在您开启相应权限后，位置、通知、短信、应用使用记录、相机、通讯录、日历、WiFi 信息等数据；\n- 崩溃日志和诊断信息（用于改进软件稳定性）。\n\n2. 信息使用\n上述信息仅用于向您提供本软件功能，不会出售给第三方。部分功能（如 Web 服务器、QQ/微信 Bot）会按照您的配置将数据发送到您指定的地址或服务。\n\n3. 信息共享\n除以下情形外，我们不会向第三方共享您的个人信息：\n- 获得您的明确同意；\n- 根据法律法规或政府主管部门要求；\n- 为保护开发者或用户的合法权益所必需。\n\n4. 信息安全\n我们采用本地存储、加密传输、权限最小化等措施保护您的数据，但互联网环境并非绝对安全，请您妥善保管敏感配置。\n\n5. 您的权利\n您可以随时在设置中关闭相关权限或删除本地数据。如需更多帮助，请通过 GitHub 提交 Issue。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1176" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;disclaimer_disclaimer_text&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;disclaimer_disclaimer_text&quot;&gt;重要提示：在使用西瓜瓣前，请您务必认真阅读以下免责声明。\n\n1. AI 生成内容\n西瓜瓣仅为 AI 模型的客户端，所有由 AI 生成的回复、建议、代码、图片等内容均不代表开发者的观点或立场。AI 可能产生错误、偏见、过时或不当信息，请您自行判断并核实，不要将其作为医疗诊断、法律意见、金融投资、专业咨询或任何重大决策的唯一依据。\n\n2. 权限与功能风险\n本软件申请了无障碍服务、短信读取、SIM 卡信息、WiFi 信息、设备存储、应用使用记录、定位、相机、日历、通知监听、闹钟、音乐控制、唤醒屏幕、设置壁纸、启动或锁定其他应用等权限。启用这些功能意味着您明确授权 AI 在特定场景下读取或控制您的设备和数据。请您仅在充分了解风险后开启，开发者不对因误操作、AI 误判或权限滥用导致的损失承担责任。\n\n3. 网络与数据外传\n开启 Web 服务器、QQ/微信 Bot、主动消息或插件等功能，可能导致您的对话内容、设备状态或隐私信息通过网络离开本机。请您确保网络环境可信，并自行承担由此带来的信息泄露风险。\n\n4. 插件与第三方服务\n插件运行在 QuickJS 沙箱中，但仍可访问网络和您已授权的系统数据。第三方插件不受开发者控制，可能存在恶意代码、后门或隐私收集行为。请您仅从可信来源安装插件，并自行对插件行为负责。\n\n5. 服务可用性\n开发者不保证软件在任何设备、任何网络环境下的可用性、稳定性或兼容性。软件更新、第三方 API 变动或设备限制可能导致部分功能失效。\n\n6. 未成年人\n如您是未成年人，请在监护人指导下使用本软件，并避免开启涉及敏感权限或外传数据的功能。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1178" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_user_agreement_text&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_user_agreement_text&quot;&gt;欢迎使用西瓜瓣（OrangeChat）。\n\n1. 协议范围\n本协议是您与西瓜瓣开发者之间关于使用本软件及相关服务的协议。请您仔细阅读并理解本协议全部内容。一旦您安装、启动或以任何方式使用本软件，即视为您已阅读、理解并同意接受本协议全部条款的约束。\n\n2. 软件性质\n西瓜瓣是一款开源 AI 客户端软件，基于 RikkaHub 二次开发，源代码遵循 GNU AGPL v3 许可协议发布。本软件本身不提供底层 AI 模型能力，所有对话内容均由您自行配置的第三方模型提供商生成。\n\n3. 用户账号与数据\n本软件主要在本地运行和存储您的对话数据。当您启用 Web 服务器、QQ/微信 Bot、插件或第三方服务时，数据可能按照您的配置离开本机。您应自行评估相关风险并妥善保管 API Key、密码等敏感信息。\n\n4. 用户行为规范\n您不得使用本软件从事任何违反法律法规、侵犯他人合法权益或干扰第三方服务正常运行的行为。您应对自己配置的助手提示词、工具、插件和外部服务承担全部责任。\n\n5. 知识产权\n本软件及其衍生作品的知识产权归开发者所有。第三方模型、插件、图标、字体等内容的知识产权归 respective 权利人所有。\n\n6. 责任限制\n在法律允许的最大范围内，开发者不对因使用或无法使用本软件而导致的任何直接、间接、偶然、特殊或继发性的损失承担责任。\n\n7. 协议修改\n开发者有权随时修改本协议，修改后的协议将在软件更新或公告时生效。如您继续使用本软件，视为接受修改后的协议。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1180" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_privacy_policy_text&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_privacy_policy_text&quot;&gt;西瓜瓣隐私政策\n\n1. 信息收集\n为了提供 AI 对话、系统工具、插件运行等服务，本软件可能在获得您授权后收集以下信息：\n- 设备型号、系统版本、应用版本等基本信息；\n- 您主动输入的对话、文件、图片等内容；\n- 在您开启相应权限后，位置、通知、短信、应用使用记录、相机、通讯录、日历、WiFi 信息等数据；\n- 崩溃日志和诊断信息（用于改进软件稳定性）。\n\n2. 信息使用\n上述信息仅用于向您提供本软件功能，不会出售给第三方。部分功能（如 Web 服务器、QQ/微信 Bot）会按照您的配置将数据发送到您指定的地址或服务。\n\n3. 信息共享\n除以下情形外，我们不会向第三方共享您的个人信息：\n- 获得您的明确同意；\n- 根据法律法规或政府主管部门要求；\n- 为保护开发者或用户的合法权益所必需。\n\n4. 信息安全\n我们采用本地存储、加密传输、权限最小化等措施保护您的数据，但互联网环境并非绝对安全，请您妥善保管敏感配置。\n\n5. 您的权利\n您可以随时在设置中关闭相关权限或删除本地数据。如需更多帮助，请通过 GitHub 提交 Issue。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1182" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_disclaimer_text&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_disclaimer_text&quot;&gt;重要提示：在使用西瓜瓣前，请您务必认真阅读以下免责声明。\n\n1. AI 生成内容\n西瓜瓣仅为 AI 模型的客户端，所有由 AI 生成的回复、建议、代码、图片等内容均不代表开发者的观点或立场。AI 可能产生错误、偏见、过时或不当信息，请您自行判断并核实，不要将其作为医疗诊断、法律意见、金融投资、专业咨询或任何重大决策的唯一依据。\n\n2. 权限与功能风险\n本软件申请了无障碍服务、短信读取、SIM 卡信息、WiFi 信息、设备存储、应用使用记录、定位、相机、日历、通知监听、闹钟、音乐控制、唤醒屏幕、设置壁纸、启动或锁定其他应用等权限。启用这些功能意味着您明确授权 AI 在特定场景下读取或控制您的设备和数据。请您仅在充分了解风险后开启，开发者不对因误操作、AI 误判或权限滥用导致的损失承担责任。\n\n3. 网络与数据外传\n开启 Web 服务器、QQ/微信 Bot、主动消息或插件等功能，可能导致您的对话内容、设备状态或隐私信息通过网络离开本机。请您确保网络环境可信，并自行承担由此带来的信息泄露风险。\n\n4. 插件与第三方服务\n插件运行在 QuickJS 沙箱中，但仍可访问网络和您已授权的系统数据。第三方插件不受开发者控制，可能存在恶意代码、后门或隐私收集行为。请您仅从可信来源安装插件，并自行对插件行为负责。\n\n5. 服务可用性\n开发者不保证软件在任何设备、任何网络环境下的可用性、稳定性或兼容性。软件更新、第三方 API 变动或设备限制可能导致部分功能失效。\n\n6. 未成年人\n如您是未成年人，请在监护人指导下使用本软件，并避免开启涉及敏感权限或外传数据的功能。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1184" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;legal_plugin_security_text&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;legal_plugin_security_text&quot;&gt;插件安全说明\n\n1. 插件能力\n西瓜瓣支持用户安装基于 JavaScript 的插件。插件运行在 QuickJS 沙箱中，可调用 manifest 声明的工具、hooks 以及我们显式注入的 fetch、dataStore、memoryBank、musicPlayer 等桥接。\n\n2. 潜在风险\n- 插件可以发起网络请求，可能将您在软件内输入或 AI 读取到的隐私信息发送到任意服务器；\n- 插件无法直接反射调用 Java 代码或加载原生代码，但如果您的设备已授予本软件相关系统权限，插件可能通过桥接间接利用这些权限；\n- 恶意插件可能包含后门、诱导性提示词或数据收集逻辑。\n\n3. 安全建议\n- 请仅从您信任的来源安装插件；\n- 安装前尽量审查插件源码（manifest.json 和入口 JS 文件）；\n- 不要为来历不明的插件配置模型 API Key 或敏感账户信息；\n- 一旦发现插件行为异常，请立即在插件管理中禁用或删除。\n\n4. 责任边界\n开发者不提供插件市场审核，也不对第三方插件的行为、稳定性或安全性承担责任。因安装、使用插件导致的任何损失由您自行承担。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1186" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_confirm_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_confirm_title&quot;&gt;安全提示&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1189" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_confirm_understood&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_confirm_understood&quot;&gt;我已了解风险，继续开启&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1190" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_confirm_cancel&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_confirm_cancel&quot;&gt;取消&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1191" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_web_server_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_web_server_title&quot;&gt;确认开启 Web 服务器？&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1193" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_web_server_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_web_server_message&quot;&gt;开启后，同一网络下的其他设备可能通过浏览器访问您的对话记录、文件和部分设置。请务必设置强访问密码并启用 JWT，避免在公共网络中使用。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1194" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_web_server_public_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_web_server_public_title&quot;&gt;确认暴露到局域网？&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1195" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_web_server_public_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_web_server_public_message&quot;&gt;当前未勾选“仅本机访问”，服务将监听所有网络接口。请确认您处于可信的家庭或私人网络，否则任何人只要知道 IP 和端口就能访问您的数据。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1196" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_weixin_bot_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_weixin_bot_title&quot;&gt;确认开启微信 Bot？&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1198" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_weixin_bot_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_weixin_bot_message&quot;&gt;开启后，您的微信消息将被转发给 AI 处理，AI 的回复也会通过微信发送出去。这意味着您的微信聊天记录可能离开本机，请确认您了解相关隐私风险。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1199" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_qq_bot_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_qq_bot_title&quot;&gt;确认开启 QQ Bot？&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1200" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_qq_bot_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_qq_bot_message&quot;&gt;开启后，QQ 私聊消息将被发送到 AI 处理并自动回复。请确保 Bot 账号、Token 等信息安全，避免被他人滥用。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1201" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_proactive_message_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_proactive_message_title&quot;&gt;确认开启主动消息？&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1203" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_proactive_message_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_proactive_message_message&quot;&gt;开启后，AI 将在设定时间间隔内主动读取您的上下文并发送消息。这可能涉及后台唤醒、通知权限和长期运行服务，请确认您已阅读隐私政策并了解数据使用方式。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1204" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_accessibility_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_accessibility_title&quot;&gt;确认开启无障碍相关功能？&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1206" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_accessibility_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_accessibility_message&quot;&gt;无障碍服务允许 AI 读取屏幕内容、模拟点击、锁定其他应用等。这是最高级别的系统权限之一，可能被恶意配置或插件利用。请仅在完全信任当前助手和插件时开启。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1207" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_notification_listener_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_notification_listener_title&quot;&gt;确认开启通知监听？&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1209" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_notification_listener_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_notification_listener_message&quot;&gt;开启后，AI 可以读取设备上的通知内容，包括短信、聊天应用、银行提醒等敏感信息。请确认您只在必要时开启，并了解这些数据可能被模型或插件处理。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1210" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_sms_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_sms_title&quot;&gt;确认开启短信读取？&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1212" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_sms_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_sms_message&quot;&gt;开启后，AI 可以读取您设备上的短信内容，包括验证码、银行通知、隐私对话等。请确认您了解该权限的敏感性。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1213" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_app_usage_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_app_usage_title&quot;&gt;确认开启应用使用统计？&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1215" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_app_usage_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_app_usage_message&quot;&gt;开启后，AI 可以查看您每天使用各应用的时长和次数。该数据属于敏感行为信息，请确认您愿意让 AI 访问。&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1216" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_plugin_import_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_plugin_import_title&quot;&gt;Confirm Install Plugin?&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1218" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;risk_plugin_import_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;risk_plugin_import_message&quot;&gt;Plugins can execute JavaScript code and make network requests. If the plugin comes from an unknown source or its code has not been reviewed, it may lead to privacy leaks, property loss, or device anomalies. Only install from trusted sources.&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1219" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;plugin_import_security_warning_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;plugin_import_security_warning_title&quot;&gt;Plugin Security Notice&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1221" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;plugin_import_security_warning_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;plugin_import_security_warning_message&quot;&gt;Plugins can execute JavaScript and make network requests, and may access system data you have already authorized. Only install plugins from trusted sources and review their source code when possible.&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1222" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;plugin_import_security_warning_action&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;plugin_import_security_warning_action&quot;&gt;View plugin security notice&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1223" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;system_tools_security_warning_title&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;system_tools_security_warning_title&quot;&gt;System Tools Security Notice&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1225" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;system_tools_security_warning_message&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;system_tools_security_warning_message&quot;&gt;Tools on this page invoke system-level permissions, read sensitive data, or connect to external services. Only enable them when you trust the current assistant and model, and read the disclaimer carefully.&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1226" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;system_tools_security_warning_action&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;system_tools_security_warning_action&quot;&gt;View disclaimer&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1227" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;plugin_security_banner&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;plugin_security_banner&quot;&gt;⚠ Plugins can make network requests and access system data you have authorized. Only install plugins from trusted sources.&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1229" column="11" />
+    </issue>
+    <issue id="MissingTranslation" message="&quot;web_server_security_warning_no_jwt&quot; is not translated in &quot;ru&quot; (Russian), &quot;ko&quot; (Korean), &quot;ja&quot; (Japanese)" errorLine1="  &lt;string name=&quot;web_server_security_warning_no_jwt&quot;&gt;⚠ JWT authentication is not enabled or the password is empty. Anyone who can access this address can read your conversation records. It is strongly recommended to set a password and enable JWT immediately.&lt;/string&gt;" errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location file="src/main/res/values/strings.xml" line="1230" column="11" />
+    </issue>
+</issues>

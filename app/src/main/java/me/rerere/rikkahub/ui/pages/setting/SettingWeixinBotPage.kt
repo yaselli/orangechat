@@ -166,7 +166,7 @@ fun SettingWeixinBotPage(vm: SettingVM = koinViewModel()) {
                                             val qr = client.getQrcode(botSetting.baseUrl)
                                             qrContent = qr.qrcodeImgContent
                                             loginStatus = "请用微信扫码"
-                                            android.util.Log.d("SettingWeixinBot", "qrcode_img_content = ${qr.qrcodeImgContent.take(200)}")
+                                            android.util.Log.d("SettingWeixinBot", "Login QR code received; content omitted")
                                             qrBitmap = withContext(Dispatchers.Default) {
                                                 try {
                                                     renderQrCode(qr.qrcodeImgContent, 480)
@@ -205,7 +205,7 @@ fun SettingWeixinBotPage(vm: SettingVM = koinViewModel()) {
                                                         loginStatus = "二维码过期, 刷新中..."
                                                         val newQr = client.getQrcode(botSetting.baseUrl)
                                                         currentQrcode = newQr.qrcode
-                                                        android.util.Log.d("SettingWeixinBot", "refresh qrcode_img_content = ${newQr.qrcodeImgContent.take(200)}")
+                                                        android.util.Log.d("SettingWeixinBot", "Login QR code refreshed; content omitted")
                                                         qrBitmap = withContext(Dispatchers.Default) {
                                                             try {
                                                                 renderQrCode(newQr.qrcodeImgContent, 480)

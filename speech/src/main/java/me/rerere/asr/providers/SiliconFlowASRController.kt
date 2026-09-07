@@ -142,7 +142,7 @@ class SiliconFlowASRController(
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "AudioRecord 构造/初始化失败", e)
+                Log.e(TAG, "AudioRecord 构造/初始化失败")
                 setError(e.message ?: "麦克风初始化失败")
                 return@launch
             }
@@ -161,7 +161,7 @@ class SiliconFlowASRController(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Audio recording failed", e)
+                Log.e(TAG, "Audio recording failed")
                 setError(e.message ?: "Audio recording failed")
             } finally {
                 releaseRecorder()
@@ -214,7 +214,7 @@ class SiliconFlowASRController(
                     return@withContext
                 }
 
-                Log.d(TAG, "API response: ${response.code} $responseBody")
+                Log.d(TAG, "Speech HTTP status=${response.code}; payload omitted")
                 val json = JSONObject(responseBody)
 
                 // SiliconFlow response: { code, message, data }
@@ -255,7 +255,7 @@ class SiliconFlowASRController(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Transcription failed", e)
+                Log.e(TAG, "Transcription failed")
                 setError(e.message ?: "Transcription failed")
             }
         }

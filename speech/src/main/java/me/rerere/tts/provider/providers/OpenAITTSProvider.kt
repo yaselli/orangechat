@@ -42,7 +42,7 @@ class OpenAITTSProvider : TTSProvider<TTSProviderSetting.OpenAI> {
             put("response_format", "mp3") // Default to MP3
         }
 
-        Log.i(TAG, "generateSpeech: $requestBody")
+        Log.d(TAG, "Speech request prepared; payload omitted")
 
         val httpRequest = Request.Builder()
             .url("${providerSetting.baseUrl}/audio/speech")

@@ -71,7 +71,7 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
             })
         }
 
-        Log.i(TAG, "generateSpeech: $requestBody")
+        Log.d(TAG, "Speech request prepared; payload omitted")
 
         val httpRequest = Request.Builder()
             .url("${providerSetting.baseUrl}/t2a_v2")
@@ -109,7 +109,7 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
                         )
                         hasEmittedAudio = true
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to process audio chunk", e)
+                        Log.e(TAG, "Failed to process audio chunk")
                     }
                 }
 

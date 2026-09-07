@@ -55,7 +55,7 @@ jobs:
           keytool -list -keystore app/debug.keystore -storepass android -alias androiddebugkey
 
       - name: Unit tests
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew testDebugUnitTest --continue
 
       - name: Android Lint
         if: ${{ !cancelled() }}

@@ -67,7 +67,7 @@ class VoiceCallService : Service(), KoinComponent {
 
     private val serviceScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main + CoroutineExceptionHandler { _, e ->
-            Log.e(TAG, "VoiceCallService coroutine exception", e)
+            Log.e(TAG, "VoiceCallService coroutine exception")
         }
     )
 
@@ -115,7 +115,7 @@ class VoiceCallService : Service(), KoinComponent {
             try {
                 ContextCompat.startForegroundService(context, intent)
             } catch (e: Exception) {
-                Log.e(TAG, "启动 VoiceCallService 失败, conversationId=$conversationId", e)
+                Log.e(TAG, "启动 VoiceCallService 失败, conversationId=$conversationId")
             }
         }
 
@@ -123,7 +123,7 @@ class VoiceCallService : Service(), KoinComponent {
             try {
                 context.stopService(Intent(context, VoiceCallService::class.java))
             } catch (e: Exception) {
-                Log.e(TAG, "停止 VoiceCallService 失败", e)
+                Log.e(TAG, "停止 VoiceCallService 失败")
             }
         }
 
@@ -173,7 +173,7 @@ class VoiceCallService : Service(), KoinComponent {
         try {
             conversationId = Uuid.parse(convIdStr)
         } catch (e: Exception) {
-            Log.e(TAG, "conversationId 解析失败: $convIdStr", e)
+            Log.e(TAG, "conversationId 解析失败: $convIdStr")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -192,7 +192,7 @@ class VoiceCallService : Service(), KoinComponent {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             )
         } catch (e: Exception) {
-            Log.e(TAG, "startForeground 失败, conversationId=$conversationId", e)
+            Log.e(TAG, "startForeground 失败, conversationId=$conversationId")
             _activeConversationId.value = null
             stopSelf()
             return START_NOT_STICKY
@@ -215,7 +215,7 @@ class VoiceCallService : Service(), KoinComponent {
                                 getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                             manager.notify(NOTIFICATION_ID, buildNotification(state))
                         } catch (e: Exception) {
-                            Log.e(TAG, "刷新通话通知失败", e)
+                            Log.e(TAG, "刷新通话通知失败")
                         }
                     }
                 }
@@ -237,7 +237,7 @@ class VoiceCallService : Service(), KoinComponent {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "初始化语音通话失败, conversationId=$conversationId", e)
+                Log.e(TAG, "初始化语音通话失败, conversationId=$conversationId")
                 _uiState.update {
                     it.copy(
                         status = VoiceCallStatus.Error,
@@ -280,7 +280,7 @@ class VoiceCallService : Service(), KoinComponent {
                 _uiState.update { it.copy(userTranscript = transcript) }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "启动 ASR 失败, conversationId=$conversationId", e)
+            Log.e(TAG, "启动 ASR 失败, conversationId=$conversationId")
             _uiState.update {
                 it.copy(
                     status = VoiceCallStatus.Error,
@@ -324,7 +324,7 @@ class VoiceCallService : Service(), KoinComponent {
                 asr.start { transcript ->
                     _uiState.update { it.copy(userTranscript = transcript) }
                 }
-            }.onFailure { Log.e(TAG, it.toString(), it) }
+            }.onFailure { Log.e(TAG, it.toString()) }
         }
 
         startVadDetection()
@@ -655,7 +655,7 @@ class VoiceCallService : Service(), KoinComponent {
                 if (wasRecording && !isRecording && !isMuted && _uiState.value.status == VoiceCallStatus.Listening) {
                     val transcript = asrState.transcript.trim()
                     if (transcript.isNotEmpty() && _uiState.value.autoSendEnabled) {
-                        Log.d(TAG, "ASR monitor: Auto-send after ASR completed: $transcript")
+                        Log.d(TAG, "ASR monitor: Auto-send after ASR completed; chars=${transcript.length}")
                         sendCurrentMessage()
                     } else {
                         // 转写为空(没说话/未识别到): 非流式 ASR (SiliconFlow)
@@ -664,7 +664,7 @@ class VoiceCallService : Service(), KoinComponent {
                         if (!isMuted && _uiState.value.status == VoiceCallStatus.Listening) {
                             runCatching {
                                 asr.start { t -> _uiState.update { it.copy(userTranscript = t) } }
-                            }.onFailure { Log.e(TAG, it.toString(), it) }
+                            }.onFailure { Log.e(TAG, it.toString()) }
                         }
                     }
                 }
@@ -692,7 +692,7 @@ class VoiceCallService : Service(), KoinComponent {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "切换静音状态失败, isMuted=$isMuted", e)
+            Log.e(TAG, "切换静音状态失败, isMuted=$isMuted")
             _uiState.update { it.copy(errorMessage = "麦克风切换失败: ${e.message}") }
         }
     }
@@ -723,7 +723,7 @@ class VoiceCallService : Service(), KoinComponent {
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {
-            Log.e(TAG, "stopForeground 失败", e)
+            Log.e(TAG, "stopForeground 失败")
         }
     }
 
@@ -783,7 +783,7 @@ class VoiceCallService : Service(), KoinComponent {
             // 兜底, 防止外部通过 stopService 直接杀掉时状态没清理干净
             endCall()
         } catch (e: Exception) {
-            Log.e(TAG, "onDestroy 清理失败", e)
+            Log.e(TAG, "onDestroy 清理失败")
         }
         serviceScope.cancel()
     }

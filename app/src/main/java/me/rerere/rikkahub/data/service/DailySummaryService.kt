@@ -19,6 +19,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -239,7 +240,11 @@ class DailySummaryReceiver : BroadcastReceiver() {
  * 执行完成后自动调度下一次闹钟
  */
 class DailySummaryTriggerService : Service() {
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val serviceScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, error ->
+            Log.e(TAG, "Service task failed: ${error.javaClass.simpleName}")
+        }
+    )
     private var runJob: Job? = null
     private var latestStartId = 0
 

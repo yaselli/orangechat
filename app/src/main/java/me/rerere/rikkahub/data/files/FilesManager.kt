@@ -140,11 +140,11 @@ class FilesManager(
                 )
                 newUris.add(file.toUri())
             }.onFailure {
-                it.printStackTrace()
-                Log.e(TAG, "createChatFilesByContents: Failed to save file from $uri", it)
+                // Do not log exception messages or causes containing user file data.
+                Log.e(TAG, "createChatFilesByContents: ${it.javaClass.simpleName}")
                 Logging.log(
                     TAG,
-                    "createChatFilesByContents: Failed to save file from $uri ${it.message} | ${it.stackTraceToString()}"
+                    "createChatFilesByContents: ${it.javaClass.simpleName}"
                 )
             }
         }
@@ -419,10 +419,10 @@ class FilesManager(
                     )
                 )
             }.onFailure {
-                Log.e(TAG, "trackManagedFile: Failed to track file ${file.absolutePath}", it)
+                Log.e(TAG, "trackManagedFile: ${it.javaClass.simpleName}")
                 Logging.log(
                     TAG,
-                    "trackManagedFile: Failed to track file ${file.absolutePath} ${it.message} | ${it.stackTraceToString()}"
+                    "trackManagedFile: ${it.javaClass.simpleName}"
                 )
             }
         }

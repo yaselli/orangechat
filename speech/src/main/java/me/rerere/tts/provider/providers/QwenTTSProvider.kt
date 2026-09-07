@@ -44,7 +44,7 @@ class QwenTTSProvider : TTSProvider<TTSProviderSetting.Qwen> {
             })
         }
 
-        Log.i(TAG, "generateSpeech: $requestBody")
+        Log.d(TAG, "Speech request prepared; payload omitted")
 
         val httpRequest = Request.Builder()
             .url("${providerSetting.baseUrl}/services/aigc/multimodal-generation/generation")
@@ -58,7 +58,7 @@ class QwenTTSProvider : TTSProvider<TTSProviderSetting.Qwen> {
 
         if (!response.isSuccessful) {
             val errorBody = response.body.string()
-            Log.e(TAG, "Qwen TTS request failed: ${response.code} ${response.message}, body: $errorBody")
+            Log.d(TAG, "Speech HTTP status=${response.code}; payload omitted")
             throw Exception("Qwen TTS request failed: ${response.code} ${response.message}")
         }
 
@@ -119,7 +119,7 @@ class QwenTTSProvider : TTSProvider<TTSProviderSetting.Qwen> {
                 null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse SSE data: $data", e)
+            Log.d(TAG, "Speech response parsing failed; payload omitted")
             null
         }
     }

@@ -40,7 +40,7 @@ class XAITTSProvider : TTSProvider<TTSProviderSetting.XAI> {
             put("language", providerSetting.language)
         }
 
-        Log.i(TAG, "generateSpeech: $requestBody")
+        Log.d(TAG, "Speech request prepared; payload omitted")
 
         val httpRequest = Request.Builder()
             .url("${providerSetting.baseUrl}/tts")
@@ -54,7 +54,7 @@ class XAITTSProvider : TTSProvider<TTSProviderSetting.XAI> {
         if (!response.isSuccessful) {
             val errorBody = response.body?.string()
             Log.e(TAG, "generateSpeech: ${response.code} ${response.message}")
-            Log.e(TAG, "generateSpeech: $errorBody")
+            Log.d(TAG, "Speech payload omitted")
             throw Exception("xAI TTS request failed: ${response.code} ${response.message}")
         }
 

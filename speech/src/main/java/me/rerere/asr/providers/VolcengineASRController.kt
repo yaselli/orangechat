@@ -135,7 +135,7 @@ class VolcengineASRController(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "Volcengine ASR websocket failed", t)
+                Log.e(TAG, "Volcengine ASR websocket failed")
                 releaseRecorder()
                 handleDisconnect(t.message ?: "ASR websocket failed")
             }
@@ -262,7 +262,7 @@ class VolcengineASRController(
                 var payload = data.copyOfRange(offset, offset + payloadSize)
                 if (compression == COMP_GZIP) {
                     payload = runCatching { gzipDecompress(payload) }.getOrElse {
-                        Log.w(TAG, "Gzip decompression failed", it)
+                        Log.w(TAG, "Gzip decompression failed")
                         return
                     }
                 }
@@ -270,7 +270,7 @@ class VolcengineASRController(
                 val json = runCatching {
                     JSONObject(String(payload, Charsets.UTF_8))
                 }.getOrElse {
-                    Log.w(TAG, "Failed to parse response JSON", it)
+                    Log.w(TAG, "Failed to parse response JSON")
                     return
                 }
 
@@ -332,7 +332,7 @@ class VolcengineASRController(
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "AudioRecord 构造/初始化失败", e)
+                Log.e(TAG, "AudioRecord 构造/初始化失败")
                 setError(e.message ?: "麦克风初始化失败")
                 return@launch
             }
@@ -362,7 +362,7 @@ class VolcengineASRController(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Audio recording failed", e)
+                Log.e(TAG, "Audio recording failed")
                 setError(e.message ?: "Audio recording failed")
             } finally {
                 releaseRecorder()
