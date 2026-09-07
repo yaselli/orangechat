@@ -471,10 +471,13 @@ class SettingsStore(
     private val updateMutex = Mutex()
 
     suspend fun update(settings: Settings) {
-        updateMutex.withLock { persistSettings(settings) }
+        updateMutex.withLock {
+            val previous = settingsFlowRaw.first()
+            persistSettings(settings, previous)
+        }
     }
 
-    private suspend fun persistSettings(settings: Settings) {
+    private suspend fun persistSettings(settings: Settings, previous: Settings) {
         if(settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
             return
@@ -508,24 +511,48 @@ class SettingsStore(
                 preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
                 preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
-                preferences.putSecret(PROVIDERS, JsonInstant.encodeToString(settings.providers))
+                preferences.putSecretIfChanged(
+                    PROVIDERS,
+                    settings.providers != previous.providers,
+                ) { JsonInstant.encodeToString(settings.providers) }
 
-                preferences.putSecret(ASSISTANTS, JsonInstant.encodeToString(settings.assistants))
+                preferences.putSecretIfChanged(
+                    ASSISTANTS,
+                    settings.assistants != previous.assistants,
+                ) { JsonInstant.encodeToString(settings.assistants) }
                 preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
                 preferences[ASSISTANT_TAGS] = JsonInstant.encodeToString(settings.assistantTags)
 
-                preferences.putSecret(SEARCH_SERVICES, JsonInstant.encodeToString(settings.searchServices))
+                preferences.putSecretIfChanged(
+                    SEARCH_SERVICES,
+                    settings.searchServices != previous.searchServices,
+                ) { JsonInstant.encodeToString(settings.searchServices) }
                 preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
                 preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
 
-                preferences.putSecret(MCP_SERVERS, JsonInstant.encodeToString(settings.mcpServers))
-                preferences.putSecret(WEBDAV_CONFIG, JsonInstant.encodeToString(settings.webDavConfig))
-                preferences.putSecret(S3_CONFIG, JsonInstant.encodeToString(settings.s3Config))
-                preferences.putSecret(TTS_PROVIDERS, JsonInstant.encodeToString(settings.ttsProviders))
+                preferences.putSecretIfChanged(
+                    MCP_SERVERS,
+                    settings.mcpServers != previous.mcpServers,
+                ) { JsonInstant.encodeToString(settings.mcpServers) }
+                preferences.putSecretIfChanged(
+                    WEBDAV_CONFIG,
+                    settings.webDavConfig != previous.webDavConfig,
+                ) { JsonInstant.encodeToString(settings.webDavConfig) }
+                preferences.putSecretIfChanged(
+                    S3_CONFIG,
+                    settings.s3Config != previous.s3Config,
+                ) { JsonInstant.encodeToString(settings.s3Config) }
+                preferences.putSecretIfChanged(
+                    TTS_PROVIDERS,
+                    settings.ttsProviders != previous.ttsProviders,
+                ) { JsonInstant.encodeToString(settings.ttsProviders) }
                 settings.selectedTTSProviderId?.let {
                     preferences[SELECTED_TTS_PROVIDER] = it.toString()
                 } ?: preferences.remove(SELECTED_TTS_PROVIDER)
-                preferences.putSecret(ASR_PROVIDERS, JsonInstant.encodeToString(settings.asrProviders))
+                preferences.putSecretIfChanged(
+                    ASR_PROVIDERS,
+                    settings.asrProviders != previous.asrProviders,
+                ) { JsonInstant.encodeToString(settings.asrProviders) }
                 settings.selectedASRProviderId?.let {
                     preferences[SELECTED_ASR_PROVIDER] = it.toString()
                 } ?: preferences.remove(SELECTED_ASR_PROVIDER)
@@ -535,18 +562,36 @@ class SettingsStore(
                 preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
                 preferences[WEB_SERVER_PORT] = settings.webServerPort
                 preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
-                preferences.putSecret(WEB_SERVER_ACCESS_PASSWORD, settings.webServerAccessPassword)
+                preferences.putSecretIfChanged(
+                    WEB_SERVER_ACCESS_PASSWORD,
+                    settings.webServerAccessPassword != previous.webServerAccessPassword,
+                ) { settings.webServerAccessPassword }
                 preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
                 preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
                 preferences[LAUNCH_COUNT] = settings.launchCount
                 preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
-                preferences.putSecret(SYSTEM_TOOLS_SETTING, JsonInstant.encodeToString(settings.systemToolsSetting))
+                preferences.putSecretIfChanged(
+                    SYSTEM_TOOLS_SETTING,
+                    settings.systemToolsSetting != previous.systemToolsSetting,
+                ) { JsonInstant.encodeToString(settings.systemToolsSetting) }
                 preferences[PROACTIVE_MESSAGE_SETTING] = JsonInstant.encodeToString(settings.proactiveMessageSetting)
-                preferences.putSecret(WECHAT_BOT_SETTING, JsonInstant.encodeToString(settings.wechatBotSetting))
-                preferences.putSecret(QQ_BOT_SETTING, JsonInstant.encodeToString(settings.qqBotSetting))
+                preferences.putSecretIfChanged(
+                    WECHAT_BOT_SETTING,
+                    settings.wechatBotSetting != previous.wechatBotSetting,
+                ) { JsonInstant.encodeToString(settings.wechatBotSetting) }
+                preferences.putSecretIfChanged(
+                    QQ_BOT_SETTING,
+                    settings.qqBotSetting != previous.qqBotSetting,
+                ) { JsonInstant.encodeToString(settings.qqBotSetting) }
                 preferences[KEEP_ALIVE_ENABLED] = settings.keepAliveEnabled
-                preferences.putSecret(EXTERNAL_MEMORIES, JsonInstant.encodeToString(settings.externalMemories))
-                preferences.putSecret(MINI_APPS, JsonInstant.encodeToString(settings.miniApps))
+                preferences.putSecretIfChanged(
+                    EXTERNAL_MEMORIES,
+                    settings.externalMemories != previous.externalMemories,
+                ) { JsonInstant.encodeToString(settings.externalMemories) }
+                preferences.putSecretIfChanged(
+                    MINI_APPS,
+                    settings.miniApps != previous.miniApps,
+                ) { JsonInstant.encodeToString(settings.miniApps) }
                 preferences[FORCE_CONFIRM_TOOL_CALLS] = settings.forceConfirmToolCalls
                 preferences[WORKFLOW_HEADLESS_BLOCK_SENSITIVE] = settings.workflowHeadlessBlockSensitive
                 preferences[AUTO_APPROVE_ALL_TOOLS] = settings.autoApproveAllTools
@@ -558,7 +603,8 @@ class SettingsStore(
         updateMutex.withLock {
             // The UI collector may lag behind a completed disk write. Read the
             // latest committed snapshot under the write lock, never that cache.
-            persistSettings(fn(settingsFlowRaw.first()))
+            val previous = settingsFlowRaw.first()
+            persistSettings(fn(previous), previous)
         }
     }
 
@@ -572,7 +618,7 @@ class SettingsStore(
                     desired = JsonInstant.encodeToJsonElement(desired),
                     current = JsonInstant.encodeToJsonElement(current),
                 )
-                persistSettings(JsonInstant.decodeFromJsonElement<Settings>(merged))
+                persistSettings(JsonInstant.decodeFromJsonElement<Settings>(merged), current)
             }
         }
     }
@@ -657,11 +703,20 @@ private fun Preferences.getSecret(key: Preferences.Key<String>): String? {
 }
 
 private fun MutablePreferences.putSecret(key: Preferences.Key<String>, plaintext: String) {
-    // Preserve existing ciphertext for unchanged values. Encryption uses a fresh
-    // nonce, so rewriting identical plaintext otherwise changes every secret key.
-    val stored = this[key]
-    if (SecretCrypto.isEncrypted(stored) && getSecret(key) == plaintext) return
     this[key] = SecretCrypto.encrypt(plaintext, key.name).orEmpty()
+}
+
+private inline fun MutablePreferences.putSecretIfChanged(
+    key: Preferences.Key<String>,
+    changed: Boolean,
+    plaintext: () -> String,
+) {
+    val stored = this[key]
+    if (!changed && SecretCrypto.isEncrypted(stored)) return
+
+    val newPlaintext = plaintext()
+    if (!changed && stored == newPlaintext) return
+    putSecret(key, newPlaintext)
 }
 
 @Serializable

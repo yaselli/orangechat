@@ -8,9 +8,11 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -21,12 +23,35 @@ class SettingVM(
     private val mcpManager: McpManager
 ) :
     ViewModel() {
-    val settings: StateFlow<Settings> = settingsStore.settingsFlow
-        .stateIn(viewModelScope, SharingStarted.Lazily, Settings(init = true, providers = emptyList()))
+    private val mutableSettings = MutableStateFlow(
+        Settings(init = true, providers = emptyList())
+    )
+    val settings: StateFlow<Settings> = mutableSettings.asStateFlow()
+
+    private var pendingWrites = 0
+
+    init {
+        viewModelScope.launch {
+            settingsStore.settingsFlow.collectLatest { committed ->
+                // Do not let an older disk emission visually undo a newer tap.
+                if (pendingWrites == 0) mutableSettings.value = committed
+            }
+        }
+    }
 
     fun updateSettings(settings: Settings, previous: Settings = this.settings.value) {
+        // Compose sees the new switch value before encryption or disk I/O starts.
+        mutableSettings.value = settings
+        pendingWrites++
         viewModelScope.launch {
-            settingsStore.updateFrom(previous, settings)
+            try {
+                settingsStore.updateFrom(previous, settings)
+            } finally {
+                pendingWrites--
+                if (pendingWrites == 0) {
+                    mutableSettings.value = settingsStore.settingsFlowRaw.first()
+                }
+            }
         }
     }
 

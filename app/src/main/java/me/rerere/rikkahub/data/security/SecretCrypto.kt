@@ -10,6 +10,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import java.security.KeyStore
+import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -28,6 +29,16 @@ object SecretCrypto {
     private const val PREFIX = "enc:v1:"
     private const val GCM_TAG_LENGTH_BITS = 128
 
+    private data class CachedPlaintext(
+        val ciphertext: String,
+        val plaintext: String,
+    )
+
+    // SettingsStore already keeps the decoded settings in memory. Keeping the last
+    // plaintext for each preference here avoids hitting Android Keystore again when
+    // an unrelated DataStore preference changes. The map is bounded by field name.
+    private val decryptCache = ConcurrentHashMap<String, CachedPlaintext>()
+
     fun isEncrypted(value: String?): Boolean = value?.startsWith(PREFIX) == true
 
     fun encrypt(plaintext: String?, associatedData: String): String? {
@@ -43,11 +54,17 @@ object SecretCrypto {
             cipher.iv.copyInto(output, destinationOffset = 1)
             ciphertext.copyInto(output, destinationOffset = 1 + cipher.iv.size)
         }
-        return PREFIX + Base64.encodeToString(envelope, Base64.NO_WRAP)
+        return (PREFIX + Base64.encodeToString(envelope, Base64.NO_WRAP)).also { encrypted ->
+            decryptCache[associatedData] = CachedPlaintext(encrypted, plaintext)
+        }
     }
 
     fun decrypt(storedValue: String?, associatedData: String): String? {
         if (storedValue == null || !isEncrypted(storedValue)) return storedValue
+
+        decryptCache[associatedData]
+            ?.takeIf { it.ciphertext == storedValue }
+            ?.let { return it.plaintext }
 
         val envelope = Base64.decode(storedValue.removePrefix(PREFIX), Base64.NO_WRAP)
         require(envelope.isNotEmpty()) { "Encrypted secret envelope is empty" }
@@ -60,7 +77,9 @@ object SecretCrypto {
             init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
             updateAAD(associatedData.toByteArray(Charsets.UTF_8))
         }
-        return cipher.doFinal(ciphertext).toString(Charsets.UTF_8)
+        return cipher.doFinal(ciphertext).toString(Charsets.UTF_8).also { plaintext ->
+            decryptCache[associatedData] = CachedPlaintext(storedValue, plaintext)
+        }
     }
 
     private fun getOrCreateKey(): SecretKey {
