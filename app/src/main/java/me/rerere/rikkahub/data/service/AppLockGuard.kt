@@ -10,6 +10,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import me.rerere.rikkahub.service.RikkaAccessibilityService
 import me.rerere.rikkahub.ui.activity.AppLockUnlockActivity
 import me.rerere.rikkahub.workflow.trigger.AppForegroundDispatcher
 
