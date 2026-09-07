@@ -7,6 +7,9 @@
 package me.rerere.rikkahub
 
 import android.app.Application
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -37,9 +40,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.service.DailySummaryService
 import me.rerere.rikkahub.data.service.DeviceEventAiTriggerService
-import me.rerere.rikkahub.data.service.DeviceEventTrackingService
 import me.rerere.rikkahub.data.service.ProactiveMessageService
-import me.rerere.rikkahub.data.service.SupabaseSyncService
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
@@ -114,11 +115,9 @@ class RikkaHubApp : Application() {
         // Reschedule proactive message alarm if enabled
         rescheduleProactiveMessageIfEnabled()
 
-        // Reschedule Supabase sync alarm if enabled
-        rescheduleSupabaseSyncIfEnabled()
-
-        // Start device event tracking (screen on/off realtime listener) if enabled
-        startDeviceEventTrackingIfEnabled()
+        // This build keeps Supabase only as the remote host of sticker images.
+        // Cancel alarms/services and preferences left by older sync builds.
+        cleanupRemovedSupabaseFeatures()
 
         // Start workflow trigger registry (event-driven automation)
         startWorkflowTriggers()
@@ -138,9 +137,6 @@ class RikkaHubApp : Application() {
 
         // Reschedule daily_cron alarm if plugins need it
         rescheduleDailyCronIfEnabled()
-
-        // Diary summary is now generated entirely by Supabase Edge Function.
-        // App no longer schedules local diary summary alarms.
 
         // Increment launch count
         incrementLaunchCount()
@@ -194,15 +190,45 @@ class RikkaHubApp : Application() {
         }
     }
 
-    private fun rescheduleSupabaseSyncIfEnabled() {
-        SupabaseSyncService.rescheduleIfEnabled(this)
-    }
-
-    private fun startDeviceEventTrackingIfEnabled() {
+    private fun cleanupRemovedSupabaseFeatures() {
         runCatching {
-            DeviceEventTrackingService.startIfEnabled(this)
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            listOf(
+                Triple(
+                    10002,
+                    "me.rerere.orangechat.SUPABASE_SYNC",
+                    "me.rerere.rikkahub.data.service.SupabaseSyncReceiver",
+                ),
+                Triple(
+                    10004,
+                    "me.rerere.rikkahub.DIARY_SUMMARY",
+                    "me.rerere.rikkahub.data.service.DiarySummaryReceiver",
+                ),
+            ).forEach { (requestCode, action, receiverClass) ->
+                val intent = Intent(action).setClassName(packageName, receiverClass)
+                PendingIntent.getBroadcast(
+                    this,
+                    requestCode,
+                    intent,
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+                )?.let { pendingIntent ->
+                    alarmManager.cancel(pendingIntent)
+                    pendingIntent.cancel()
+                }
+            }
+
+            listOf(
+                "me.rerere.rikkahub.data.service.SupabaseSyncService",
+                "me.rerere.rikkahub.data.service.DeviceEventTrackingService",
+                "me.rerere.rikkahub.data.service.DiarySummaryTriggerService",
+            ).forEach { serviceClass ->
+                stopService(Intent().setClassName(packageName, serviceClass))
+            }
+
+            getSharedPreferences("supabase_sync_prefs", MODE_PRIVATE).edit().clear().apply()
+            getSharedPreferences("diary_summary_prefs", MODE_PRIVATE).edit().clear().apply()
         }.onFailure {
-            Log.e(TAG, "startDeviceEventTrackingIfEnabled failed", it)
+            Log.w(TAG, "Failed to clean removed Supabase features", it)
         }
     }
 

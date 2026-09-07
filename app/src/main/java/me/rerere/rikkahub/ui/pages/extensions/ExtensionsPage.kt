@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.stroke.Book03
-import me.rerere.hugeicons.stroke.Brain01
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Zap
@@ -79,12 +78,6 @@ fun ExtensionsPage() {
                         leadingContent = { Icon(HugeIcons.Puzzle, null) },
                         headlineContent = { Text(stringResource(R.string.extensions_page_agent_skills)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_agent_skills_desc)) },
-                    )
-                    item(
-                        onClick = { navController.navigate(Screen.ExternalMemories) },
-                        leadingContent = { Icon(HugeIcons.Brain01, null) },
-                        headlineContent = { Text("进阶记忆") },
-                        supportingContent = { Text("管理外置记忆库，为助手配置独立的长期记忆") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Workspaces) },

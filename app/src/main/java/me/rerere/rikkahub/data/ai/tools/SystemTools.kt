@@ -41,7 +41,6 @@ sealed class SystemToolOption {
     @Serializable @SerialName("battery") data object Battery : SystemToolOption()
     @Serializable @SerialName("music") data object Music : SystemToolOption()
     @Serializable @SerialName("sms") data object Sms : SystemToolOption()
-    @Serializable @SerialName("supabase_query") data object SupabaseQuery : SystemToolOption()
     @Serializable @SerialName("torch") data object Torch : SystemToolOption()
     @Serializable @SerialName("toast") data object Toast : SystemToolOption()
     @Serializable @SerialName("vibrate") data object Vibrate : SystemToolOption()
@@ -222,143 +221,6 @@ class SystemTools(private val context: Context, private val settings: Settings) 
         )
     }
 
-    // ==================== Supabase 查询工具 ====================
-
-    private val supabaseQueryTool by lazy {
-        Tool(
-            name = "supabase_query",
-            description = "Query data from Supabase tables. Supports two operations: (1) query_recent_messages - get the most recent N rows from a table ordered by created_at descending; (2) search_messages - search rows containing a keyword using case-insensitive matching on the content column.",
-            needsApproval = true,
-            parameters = {
-                InputSchema.Obj(
-                    properties = buildJsonObject {
-                        putJsonObject("operation") {
-                            put("type", "string")
-                            put("description", "Operation type: 'query_recent_messages' or 'search_messages'")
-                            putJsonArray("enum") {
-                                add("query_recent_messages")
-                                add("search_messages")
-                            }
-                        }
-                        putJsonObject("table") {
-                            put("type", "string")
-                            put("description", "Table name to query. Common tables: 'chat_messages' (chat history), 'memory_summaries' (diary summaries), 'device_data' (device events). Defaults to 'chat_messages'.")
-                        }
-                        putJsonObject("count") {
-                            put("type", "integer")
-                            put("description", "For query_recent_messages: number of recent rows to return (default 10, max 50)")
-                        }
-                        putJsonObject("keyword") {
-                            put("type", "string")
-                            put("description", "For search_messages: keyword to search in the content column")
-                        }
-                        putJsonObject("limit") {
-                            put("type", "integer")
-                            put("description", "For search_messages: maximum results to return (default 10, max 50)")
-                        }
-                    },
-                    required = listOf("operation")
-                )
-            },
-            execute = { args ->
-                val params = args.jsonObject
-                val operation = params["operation"]?.jsonPrimitive?.contentOrNull
-                    ?: return@Tool listOf(UIMessagePart.Text(buildJsonObject {
-                        put("success", false)
-                        put("error", "Missing required parameter 'operation'")
-                    }.toString()))
-
-                val externalMemories = settings.externalMemories.filter { it.enabled }
-                if (externalMemories.isEmpty()) {
-                    return@Tool listOf(UIMessagePart.Text(buildJsonObject {
-                        put("success", false)
-                        put("error", "No enabled external memory configured. Please add a Supabase external memory in settings.")
-                    }.toString()))
-                }
-
-                val table = params["table"]?.jsonPrimitive?.contentOrNull ?: "chat_messages"
-                val memory = externalMemories.firstOrNull { it.tableName == table || it.summariesTableName == table }
-                    ?: externalMemories.first()
-                val baseUrl = memory.supabaseUrl.trimEnd('/')
-                val apiKey = memory.supabaseKey
-
-                try {
-                    when (operation) {
-                        "query_recent_messages" -> {
-                            val count = (params["count"]?.jsonPrimitive?.intOrNull ?: 10).coerceIn(1, 50)
-                            val url = java.net.URL("$baseUrl/rest/v1/$table?select=*&order=created_at.desc&limit=$count")
-                            val connection = (url.openConnection() as java.net.HttpURLConnection).apply {
-                                requestMethod = "GET"
-                                setRequestProperty("apikey", apiKey)
-                                setRequestProperty("Authorization", "Bearer ${apiKey}")
-                                setRequestProperty("Accept", "application/json")
-                                connectTimeout = 15000
-                                readTimeout = 15000
-                            }
-                            val responseCode = connection.responseCode
-                            val responseText = if (responseCode in 200..299) {
-                                connection.inputStream.bufferedReader().readText()
-                            } else {
-                                connection.errorStream?.bufferedReader()?.readText() ?: "Unknown error"
-                            }
-                            listOf(UIMessagePart.Text(buildJsonObject {
-                                put("success", responseCode in 200..299)
-                                put("operation", "query_recent_messages")
-                                put("table", table)
-                                put("count_requested", count)
-                                if (responseCode !in 200..299) put("error", "HTTP $responseCode: $responseText")
-                                else put("data", Json.parseToJsonElement(responseText))
-                            }.toString()))
-                        }
-                        "search_messages" -> {
-                            val keyword = params["keyword"]?.jsonPrimitive?.contentOrNull
-                                ?: return@Tool listOf(UIMessagePart.Text(buildJsonObject {
-                                    put("success", false)
-                                    put("error", "Missing required parameter 'keyword' for search_messages")
-                                }.toString()))
-                            val limit = (params["limit"]?.jsonPrimitive?.intOrNull ?: 10).coerceIn(1, 50)
-                            // Use ilike for case-insensitive search on content column
-                            val encodedKeyword = java.net.URLEncoder.encode("%$keyword%", "UTF-8")
-                            val url = java.net.URL("$baseUrl/rest/v1/$table?select=*&content=ilike.$encodedKeyword&limit=$limit")
-                            val connection = (url.openConnection() as java.net.HttpURLConnection).apply {
-                                requestMethod = "GET"
-                                setRequestProperty("apikey", apiKey)
-                                setRequestProperty("Authorization", "Bearer ${apiKey}")
-                                setRequestProperty("Accept", "application/json")
-                                connectTimeout = 15000
-                                readTimeout = 15000
-                            }
-                            val responseCode = connection.responseCode
-                            val responseText = if (responseCode in 200..299) {
-                                connection.inputStream.bufferedReader().readText()
-                            } else {
-                                connection.errorStream?.bufferedReader()?.readText() ?: "Unknown error"
-                            }
-                            listOf(UIMessagePart.Text(buildJsonObject {
-                                put("success", responseCode in 200..299)
-                                put("operation", "search_messages")
-                                put("table", table)
-                                put("keyword", keyword)
-                                put("limit_requested", limit)
-                                if (responseCode !in 200..299) put("error", "HTTP $responseCode: $responseText")
-                                else put("data", Json.parseToJsonElement(responseText))
-                            }.toString()))
-                        }
-                        else -> listOf(UIMessagePart.Text(buildJsonObject {
-                            put("success", false)
-                            put("error", "Unknown operation: $operation. Use 'query_recent_messages' or 'search_messages'.")
-                        }.toString()))
-                    }
-                } catch (e: Exception) {
-                    listOf(UIMessagePart.Text(buildJsonObject {
-                        put("success", false)
-                        put("error", e.message ?: "Unknown error")
-                    }.toString()))
-                }
-            }
-        )
-    }
-
     // ==================== 外部工具实例 ====================
 
     private val appUsageTool by lazy { createAppUsageTool(context) }
@@ -415,7 +277,6 @@ class SystemTools(private val context: Context, private val settings: Settings) 
         if (SystemToolOption.Battery in enabledTools) tools.add(batteryTool)
         if (SystemToolOption.Music in enabledTools) tools.add(musicTool)
         if (SystemToolOption.Sms in enabledTools) tools.add(smsTool)
-        if (SystemToolOption.SupabaseQuery in enabledTools) tools.add(supabaseQueryTool)
         if (SystemToolOption.Torch in enabledTools) tools.add(torchTool)
         if (SystemToolOption.Toast in enabledTools) tools.add(toastTool)
         if (SystemToolOption.Vibrate in enabledTools) tools.add(vibrateTool)

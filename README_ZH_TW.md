@@ -43,9 +43,6 @@
 ### ⌚ 健康資料
 - **Gadgetbridge 同步** — 從 Gadgetbridge 讀取智慧手環/手錶的健康資料（步數、心率、睡眠等），讓 AI 了解你的身體狀況
 
-### ☁️ 資料同步
-- **Supabase 同步** — 基礎資料透過 Supabase 雲端同步，多裝置無縫切換
-
 ### 🔍 搜尋增強
 - **Custom JS 搜尋** — 透過 QuickJS 引擎支援自訂 JavaScript 腳本編寫搜尋服務，靈活擴展搜尋能力
 
@@ -161,7 +158,6 @@
 | [Navigation Compose](https://developer.android.com/develop/ui/compose/navigation) | 頁面導航 |
 | [Lucide Icons](https://composeicons.com/icon-libraries/lucide) | 圖標庫 |
 | [QuickJS](https://github.com/nicholasgasior/quickjs-java) | 自訂 JS 搜尋引擎 |
-| [Supabase](https://supabase.com/) | 雲端資料同步 |
 | [高德地圖 SDK](https://lbs.amap.com/) | 定位與附近搜尋 |
 
 ---

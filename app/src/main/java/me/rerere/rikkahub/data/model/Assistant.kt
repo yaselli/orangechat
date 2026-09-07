@@ -52,7 +52,6 @@ data class Assistant(
     val timeReminderIntervalMinutes: Int = 5,           // 回复间隔提醒触发分钟数
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowSkipReply: Boolean = false,
-    val externalMemoryIds: Set<Uuid> = emptySet(),      // 关联的外置记忆库 ID
     val splitBubbleByLine: Boolean = false,             // 按模型自己写的换行拆分成多个独立气泡
     val splitUserBubbleByLine: Boolean = false,         // 用户消息按换行拆分成多个独立气泡
 )

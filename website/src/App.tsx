@@ -171,7 +171,7 @@ const uniqueFeatures = [
     icon: '🧠',
     title: '记忆系统',
     subtitle: '永不遗忘',
-    description: 'HNSW 向量索引实现语义检索，记忆银行管理完整生命周期，Supabase 云端同步，还有每日自动总结。',
+    description: 'HNSW 向量索引实现语义检索，记忆银行管理完整生命周期，还有每日自动总结。',
     highlight: '向量索引 + 记忆银行'
   },
   {
@@ -232,8 +232,6 @@ const builtInPlugins = [
   { icon: '🌤️', name: 'Weather', desc: '天气查询插件，调用 wttr.in API', tag: '入门级' },
   { icon: '🍜', name: 'What to Eat', desc: '今天吃什么？随机推荐美食', tag: '最简插件' },
   { icon: '📖', name: '共读', desc: '和 AI 一起阅读，含阅读器 UI', tag: '高级 · 含 UI' },
-  { icon: '📱', name: 'Moments', desc: '朋友圈，AI 社交动态', tag: '高级 · 含 Supabase' },
-  { icon: '💾', name: 'Supabase Memory', desc: '云端长期记忆存储', tag: '高级 · 含 memoryBank' },
   { icon: '🛡️', name: 'Purify Backup', desc: '数据净化备份，去除敏感信息', tag: '实用工具' },
   { icon: '📚', name: 'Plugin Guide', desc: '插件开发文档工具（13 个主题）', tag: '开发辅助' },
 ]
@@ -490,7 +488,7 @@ function ArchitectureComparison() {
               <div>
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-neutral-600">Services</span>
-                  <span className="font-bold text-brand">18 (+15) 🚀</span>
+                  <span className="font-bold text-brand">14 (+11) 🚀</span>
                 </div>
                 <div className="space-y-1">
                   <div className="px-3 py-1.5 bg-white/60 rounded-lg text-xs text-neutral-600">ChatService <span className="text-brand">增强</span></div>
@@ -499,7 +497,6 @@ function ArchitectureComparison() {
                   <div className="px-3 py-1.5 bg-brand/10 rounded-lg text-xs text-brand font-medium">AmapService ★</div>
                   <div className="px-3 py-1.5 bg-brand/10 rounded-lg text-xs text-brand font-medium">LocationService ★</div>
                   <div className="px-3 py-1.5 bg-brand/10 rounded-lg text-xs text-brand font-medium">GadgetbridgeService ★</div>
-                  <div className="px-3 py-1.5 bg-brand/10 rounded-lg text-xs text-brand font-medium">SupabaseSyncService ★</div>
                   <div className="px-3 py-1.5 bg-brand/10 rounded-lg text-xs text-brand font-medium">ProactiveMessageService ★</div>
                   <div className="px-3 py-1.5 bg-neutral-200/50 rounded-lg text-xs text-neutral-400">... +10 more</div>
                 </div>
@@ -507,7 +504,7 @@ function ArchitectureComparison() {
               <div>
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-neutral-600">AI Tools</span>
-                  <span className="font-bold text-brand">15 (+11) 🔧</span>
+                  <span className="font-bold text-brand">14 (+10) 🔧</span>
                 </div>
               </div>
               <div>

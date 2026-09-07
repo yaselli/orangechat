@@ -81,7 +81,6 @@ plugin/
 |------|------|
 | 向量索引 (HNSW) | 语义检索记忆，快速找到相关回忆 |
 | 记忆银行 | 完整的记忆管理服务 |
-| Supabase 同步 | 云端持久化，多设备无缝切换 |
 | 每日总结 | 自动生成每日生活总结 |
 
 ### 💌 主动消息
@@ -122,7 +121,7 @@ AI 不只是被动等你说话。让 AI 能在你需要的时候主动出现—�
 
 ```
 原版 RikkaHub                    橘瓣 OrangeChat
-├── 3 个 Service                  ├── 18 个 Service (+15)
+├── 3 个 Service                  ├── 14 个 Service (+11)
 │   ├── ChatService               │   ├── ChatService (增强)
 │   ├── ConversationSession       │   ├── ConversationSession
 │   └── WebServerService          │   ├── WebServerService
@@ -131,15 +130,13 @@ AI 不只是被动等你说话。让 AI 能在你需要的时候主动出现—�
 │                                 │   ├── AppUsageService ★
 │                                 │   ├── CameraService ★
 │                                 │   ├── GadgetbridgeService ★
-│                                 │   ├── SupabaseService ★
-│                                 │   ├── SupabaseSyncService ★
 │                                 │   ├── DailySummaryService ★
 │                                 │   ├── HNSWIndex ★
 │                                 │   ├── MemoryBankService ★
 │                                 │   ├── ProactiveMessageService ★
 │                                 │   └── NotificationListenerService ★
 │                                 │
-├── 4 个 AI Tool                  ├── 15 个 AI Tool (+11)
+├── 4 个 AI Tool                  ├── 14 个 AI Tool (+10)
 │                                 │
 ├── (无插件系统)                   ├── plugin/ ★★★ 完整插件框架
 │                                 │   ├── PluginSandbox (QuickJS)
@@ -257,14 +254,6 @@ exports.say_hello = say_hello;
 
 完整的阅读器插件，包含 `reader.html`、`reader.js`、`reader.css`，使用 WebView 渲染阅读界面。
 
-### 📱 朋友圈（高级 — 含 Supabase）
-
-AI 社交动态插件，使用 Supabase 作为后端存储，附带 `supabase_schema.sql`。
-
-### 💾 Supabase 记忆（高级 — 含 memoryBank）
-
-云端长期记忆存储插件，演示 `memoryBank` API 的使用。
-
 ### 🛡️ 净化备份（实用工具）
 
 去除备份数据中的敏感信息（API Key、密码等），保留记忆设定。
@@ -284,7 +273,6 @@ AI 社交动态插件，使用 Supabase 作为后端存储，附带 `supabase_sc
 | [OkHttp](https://square.github.io/okhttp/) | HTTP 客户端 |
 | [Ktor](https://ktor.io/) | 内嵌 Web 服务器 |
 | [QuickJS](https://github.com/nicholasgasior/quickjs-java) | 插件沙箱引擎 |
-| [Supabase](https://supabase.com/) | 云端数据同步 |
 | [高德地图 SDK](https://lbs.amap.com/) | 定位与附近搜索 |
 | [Gadgetbridge](https://gadgetbridge.org/) | 可穿戴设备健康数据 |
 

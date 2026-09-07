@@ -43,9 +43,6 @@
 ### ⌚ 健康数据
 - **Gadgetbridge 同步** — 从 Gadgetbridge 读取智能手环/手表的健康数据（步数、心率、睡眠等），让 AI 了解你的身体状况
 
-### ☁️ 数据同步
-- **Supabase 同步** — 基础数据通过 Supabase 云端同步，多设备无缝切换
-
 ### 🔍 搜索增强
 - **Custom JS 搜索** — 通过 QuickJS 引擎支持自定义 JavaScript 脚本编写搜索服务，灵活扩展搜索能力
 
@@ -161,7 +158,6 @@
 | [Navigation Compose](https://developer.android.com/develop/ui/compose/navigation) | 页面导航 |
 | [Lucide Icons](https://composeicons.com/icon-libraries/lucide) | 图标库 |
 | [QuickJS](https://github.com/nicholasgasior/quickjs-java) | 自定义 JS 搜索引擎 |
-| [Supabase](https://supabase.com/) | 云端数据同步 |
 | [高德地图 SDK](https://lbs.amap.com/) | 定位与附近搜索 |
 
 ---

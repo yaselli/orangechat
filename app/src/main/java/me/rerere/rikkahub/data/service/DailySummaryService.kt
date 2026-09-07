@@ -28,10 +28,7 @@ import org.koin.core.context.GlobalContext
 /**
  * 插件定时任务调度服务
  * 使用 AlarmManager 定时触发插件的 daily_cron 钩子
- * 遵循 ProactiveMessageService / SupabaseSyncService 的调度模式
- *
- * 这使得 supabase_memory 等插件的 daily_cron 钩子能够被定时执行，
- * 从而实现每日日记自动生成等功能。
+ * 使用 AlarmManager 保证插件的 daily_cron 钩子能够被定时执行。
  */
 class DailySummaryService {
 

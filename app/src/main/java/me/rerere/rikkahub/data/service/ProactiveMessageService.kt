@@ -887,38 +887,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         text = replyText,
                         countTowardFollowUps = true,
                     )
-                    // 同步保存 AI 主动消息 / 激进模式回复到外置记忆库（Supabase）
-                    // 保证日记总结（DiarySummaryService 只读 Supabase chat_messages 表）和记忆召回能看到这部分内容
-                    try {
-                        val externalMemoryConfigs = settings.externalMemories.filter {
-                            it.enabled && it.id in assistant.externalMemoryIds && it.autoSaveMessages
-                        }
-                        if (externalMemoryConfigs.isNotEmpty() && replyText.isNotBlank()) {
-                            kotlinx.coroutines.coroutineScope {
-                                externalMemoryConfigs.forEach { config ->
-                                    launch {
-                                        runCatching {
-                                            val service = ExternalMemoryService(config)
-                                            service.saveMessage(
-                                                assistantId = assistant.id.toString(),
-                                                conversationId = conversationId.toString(),
-                                                role = "assistant",
-                                                content = replyText,
-                                            )
-                                        }.onFailure {
-                                            Log.w(
-                                                ProactiveMessageService.TAG,
-                                                "Failed to save proactive message to external memory ${config.name}",
-                                                it
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.w(ProactiveMessageService.TAG, "Failed to save proactive message to external memory", e)
-                    }
                     showProactiveNotification(conversationId, assistant.name.ifBlank { "AI" }, replyText)
                     // 强制跳转屏幕到聊天界面（方案 A：普通拉起前台）
                     if (shouldJump) {

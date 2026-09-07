@@ -103,21 +103,6 @@ class AssistantDetailVM(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
         )
 
-    val externalMemories = settingsStore
-        .settingsFlow
-        .map { settings ->
-            settings.externalMemories
-        }.stateIn(
-            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
-        )
-
-    fun updateExternalMemoryIds(memoryIds: Set<Uuid>) {
-        viewModelScope.launch {
-            val currentAssistant = assistant.value
-            update(currentAssistant.copy(externalMemoryIds = memoryIds))
-        }
-    }
-
     fun updateTags(tagIds: List<Uuid>, tags: List<Tag>) {
         viewModelScope.launch {
             val settings = settings.value

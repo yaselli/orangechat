@@ -52,7 +52,6 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.LEARNING_MODE_PROMPT
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
-import me.rerere.rikkahub.data.model.ExternalMemory
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.MiniApp
@@ -181,7 +180,7 @@ class SettingsStore(
         // 保活服务设置
         val KEEP_ALIVE_ENABLED = booleanPreferencesKey("keep_alive_enabled")
 
-        // 外部记忆库
+        // Removed Supabase external-memory setting. Keep the key only so upgrades can erase it.
         val EXTERNAL_MEMORIES = stringPreferencesKey("external_memories")
 
         // 微信 Bot (iLink 协议)
@@ -216,7 +215,6 @@ class SettingsStore(
             SYSTEM_TOOLS_SETTING,
             WECHAT_BOT_SETTING,
             QQ_BOT_SETTING,
-            EXTERNAL_MEMORIES,
             MINI_APPS,
         )
     }
@@ -229,6 +227,7 @@ class SettingsStore(
         scope.launch(Dispatchers.IO) {
             runCatching {
                 dataStore.edit { preferences ->
+                    preferences.remove(EXTERNAL_MEMORIES)
                     ENCRYPTED_STRING_KEYS.forEach { key ->
                         val storedValue = preferences[key]
                         if (!storedValue.isNullOrEmpty() && !SecretCrypto.isEncrypted(storedValue)) {
@@ -349,9 +348,6 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: QqBotSetting(),
                 keepAliveEnabled = preferences[KEEP_ALIVE_ENABLED] == true,
-                externalMemories = preferences.getSecret(EXTERNAL_MEMORIES)?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: emptyList(),
                 miniApps = preferences.getSecret(MINI_APPS)?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -585,10 +581,6 @@ class SettingsStore(
                 ) { JsonInstant.encodeToString(settings.qqBotSetting) }
                 preferences[KEEP_ALIVE_ENABLED] = settings.keepAliveEnabled
                 preferences.putSecretIfChanged(
-                    EXTERNAL_MEMORIES,
-                    settings.externalMemories != previous.externalMemories,
-                ) { JsonInstant.encodeToString(settings.externalMemories) }
-                preferences.putSecretIfChanged(
                     MINI_APPS,
                     settings.miniApps != previous.miniApps,
                 ) { JsonInstant.encodeToString(settings.miniApps) }
@@ -775,7 +767,6 @@ data class Settings(
     val wechatBotSetting: WechatBotSetting = WechatBotSetting(),
     val qqBotSetting: QqBotSetting = QqBotSetting(),
     val keepAliveEnabled: Boolean = false,
-    val externalMemories: List<ExternalMemory> = emptyList(),
     val miniApps: List<MiniApp> = emptyList(),
     val forceConfirmToolCalls: Boolean = true,
     val workflowHeadlessBlockSensitive: Boolean = true,

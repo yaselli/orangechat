@@ -834,7 +834,7 @@ private class PluginWebViewClient(
             return true
         }
         if (!url.startsWith("file://") && !url.startsWith("about:blank")) {
-            // Open external URLs (e.g. Supabase download links) in system browser
+            // Open external download links in the system browser
             try {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                 view?.context?.startActivity(intent)

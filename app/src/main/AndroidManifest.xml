@@ -221,26 +221,6 @@
         android:value="proactive message scheduling" />
     </service>
 
-    <!-- Supabase Sync Service -->
-    <service
-      android:name=".data.service.SupabaseSyncService"
-      android:exported="false"
-      android:foregroundServiceType="specialUse">
-      <property
-        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="supabase data sync" />
-    </service>
-
-    <!-- Device Event Tracking Service (realtime screen on/off + boot push to Supabase) -->
-    <service
-      android:name=".data.service.DeviceEventTrackingService"
-      android:exported="false"
-      android:foregroundServiceType="specialUse">
-      <property
-        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="device boot/screen event tracking for supabase sync" />
-    </service>
-
     <!-- Device Event AI Trigger Service (aggressive mode: triggers AI thinking on app switch/screen on-off) -->
     <service
       android:name=".data.service.DeviceEventAiTriggerService"
@@ -250,16 +230,6 @@
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
         android:value="device event ai trigger for proactive messaging" />
     </service>
-
-    <!-- Supabase Sync Receiver -->
-    <receiver
-      android:name=".data.service.SupabaseSyncReceiver"
-      android:exported="true">
-      <intent-filter>
-        <action android:name="me.rerere.orangechat.SUPABASE_SYNC" />
-        <action android:name="android.intent.action.BOOT_COMPLETED" />
-      </intent-filter>
-    </receiver>
 
     <!-- Daily Cron Receiver (handles daily_cron alarm and boot completed) -->
     <receiver

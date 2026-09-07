@@ -450,13 +450,7 @@ class ChatService(
                 }
 
                 // 触发 message_sent 事件钩子
-                // 关键: 这里用 appScope.launch 提交独立协程, 而不是直接 await callEvent。
-                // 原因: callEvent 内部对订阅插件的 handler 在单线程 pluginDispatcher 上串行执行,
-                // supabase_memory 等插件会同步 fetch 网络请求 (最长 15s 超时)。若直接 await,
-                // 用户点发送后会卡在这里直到所有插件 handler 跑完才继续走 sendMessage 后续逻辑。
-                // 改为 fire-and-forget 提交到 AppScope (SupervisorJob) 上, 不挂在当前 sendMessage
-                // 的 job 下 —— 这样用户连续发消息触发 session.getJob()?.cancel() 取消上一条消息 job 时,
-                // 不会把这次插件同步也连累取消掉 (Supabase 记录保持完整)。
+                // 插件事件独立执行，避免插件网络请求阻塞消息生成。
                 runCatching {
                     val eventData = JsonObject(
                         mapOf(
@@ -478,36 +472,6 @@ class ChatService(
                     }
                 }.onFailure { e ->
                     Log.w(TAG, "Failed to trigger message_sent event", e)
-                }
-
-                // 保存用户消息到外置记忆库（fire-and-forget，不阻塞后续生成流程）
-                try {
-                    val settingsRaw = settingsStore.settingsFlowRaw.first()
-                    val externalMemoryConfigs = settingsRaw.externalMemories.filter {
-                        it.enabled && it.id in assistant.externalMemoryIds && it.autoSaveMessages
-                    }
-                    if (externalMemoryConfigs.isNotEmpty()) {
-                        val messageText = processedContent.mapNotNull { part ->
-                            if (part is UIMessagePart.Text) part.text else null
-                        }.joinToString("\n")
-                        externalMemoryConfigs.forEach { config ->
-                            appScope.launch {
-                                runCatching {
-                                    val service = me.rerere.rikkahub.data.service.ExternalMemoryService(config)
-                                    service.saveMessage(
-                                        assistantId = assistant.id.toString(),
-                                        conversationId = conversationId.toString(),
-                                        role = "user",
-                                        content = messageText,
-                                    )
-                                }.onFailure {
-                                    Log.w(TAG, "Failed to save user message to external memory ${config.name}", it)
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to save user message to external memory", e)
                 }
 
                 // 开始补全
@@ -1157,37 +1121,6 @@ class ChatService(
                 generateSuggestion(conversationId, finalConversation)
             }
 
-            // 保存 AI 回复到外置记忆库
-            try {
-                val externalMemoryConfigs = settings.externalMemories.filter {
-                    it.enabled && it.id in assistant.externalMemoryIds && it.autoSaveMessages
-                }
-                if (externalMemoryConfigs.isNotEmpty()) {
-                    val lastAssistantMessage = finalConversation.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
-                    val messageText = lastAssistantMessage?.toText() ?: ""
-                    if (messageText.isNotBlank()) {
-                        kotlinx.coroutines.coroutineScope {
-                            externalMemoryConfigs.forEach { config ->
-                                launch {
-                                    runCatching {
-                                        val service = me.rerere.rikkahub.data.service.ExternalMemoryService(config)
-                                        service.saveMessage(
-                                            assistantId = assistant.id.toString(),
-                                            conversationId = conversationId.toString(),
-                                            role = "assistant",
-                                            content = messageText,
-                                        )
-                                    }.onFailure {
-                                        Log.w(TAG, "Failed to save assistant message to external memory ${config.name}", it)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to save assistant message to external memory", e)
-            }
         }
     }
 
@@ -1219,9 +1152,6 @@ class ChatService(
         val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions().toMutableSet()
         if (!allowAppUsage) {
             systemToolsOptions.remove(me.rerere.rikkahub.data.ai.tools.SystemToolOption.AppUsage)
-        }
-        if (settings.externalMemories.any { it.enabled }) {
-            systemToolsOptions.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.SupabaseQuery)
         }
         if (systemToolsOptions.isNotEmpty()) {
             addAll(
