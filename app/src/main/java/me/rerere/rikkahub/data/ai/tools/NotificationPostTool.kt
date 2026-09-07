@@ -89,7 +89,7 @@ fun createNotificationPostTool(context: Context): Tool = Tool(
                         }
                         nm.createNotificationChannel(channel)
                     } catch (e: Exception) {
-                        Logging.log("NotificationPostTool", "Failed to create notification channel: ${e.message}")
+                        Logging.log("NotificationPostTool", "Failed to create notification channel: ${e.javaClass.simpleName}")
                     }
                 }
             }
@@ -113,7 +113,7 @@ fun createNotificationPostTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: SecurityException) {
-            Logging.log("NotificationPostTool", "SecurityException: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("NotificationPostTool", "SecurityException: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)
@@ -122,7 +122,7 @@ fun createNotificationPostTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("NotificationPostTool", "Unexpected error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("NotificationPostTool", "Unexpected error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)

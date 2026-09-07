@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -37,7 +37,7 @@ class KeepAliveService : Service() {
         // 通知渠道 ID
         private const val CHANNEL_ID = "keep_alive_channel"
         // 前台服务通知 ID
-        private const val NOTIFICATION_ID = 30001
+        private const val NOTIFICATION_ID = me.rerere.rikkahub.service.ServiceNotificationIds.KEEP_ALIVE
         // 自启动广播 Action
         const val ACTION_RESTART_KEEP_ALIVE = "me.rerere.orangechat.RESTART_KEEP_ALIVE"
 
@@ -118,7 +118,7 @@ class KeepAliveService : Service() {
             .build()
 
         // 启动前台服务
-        // Android 14+ 对 dataSync 类型前台服务有每 24 小时 6 小时的累计配额限制，
+        // Android 15+ 对 dataSync 类型前台服务有每 24 小时 6 小时的累计配额限制，
         // 配额耗尽时 startForeground 会抛 ForegroundServiceStartNotAllowedException。
         // 这里捕获异常并优雅降级，避免崩溃整个 App。
         try {
@@ -142,6 +142,11 @@ class KeepAliveService : Service() {
         }
 
         return START_STICKY
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

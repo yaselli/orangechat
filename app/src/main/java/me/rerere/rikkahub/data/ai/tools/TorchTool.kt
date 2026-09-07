@@ -67,7 +67,7 @@ fun createTorchTool(context: Context): Tool = Tool(
                         break
                     }
                 } catch (e: Exception) {
-                    Logging.log("TorchTool", "Error checking camera $id: ${e.message}")
+                    Logging.log("TorchTool", "Error checking camera $id: ${e.javaClass.simpleName}")
                 }
             }
 
@@ -91,7 +91,7 @@ fun createTorchTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: android.hardware.camera2.CameraAccessException) {
-            Logging.log("TorchTool", "CameraAccessException: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("TorchTool", "CameraAccessException: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)
@@ -99,7 +99,7 @@ fun createTorchTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("TorchTool", "Unexpected error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("TorchTool", "Unexpected error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)

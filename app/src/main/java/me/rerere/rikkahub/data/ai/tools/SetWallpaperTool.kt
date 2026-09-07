@@ -105,7 +105,7 @@ fun createSetWallpaperTool(
 
         try {
             val imageUrl = foundImage.url
-            Logging.log("SetWallpaperTool", "Found image url: $imageUrl")
+            Logging.log("SetWallpaperTool", "Found image url: [omitted]")
 
             // Resolve the image to a File based on its URL scheme
             val imageFile = withContext(Dispatchers.IO) {
@@ -122,7 +122,7 @@ fun createSetWallpaperTool(
             }
 
             if (!imageFile.exists() || !imageFile.isFile) {
-                Logging.log("SetWallpaperTool", "File not found: ${imageFile.absolutePath}")
+                Logging.log("SetWallpaperTool", "File not found: [omitted]")
                 return@Tool listOf(UIMessagePart.Text(
                     buildJsonObject { put("success", false); put("error", "File not found: ${imageFile.absolutePath}") }.toString()
                 ))
@@ -132,7 +132,7 @@ fun createSetWallpaperTool(
                 BitmapFactory.decodeFile(imageFile.absolutePath)
             }
             if (bitmap == null) {
-                Logging.log("SetWallpaperTool", "Failed to decode image: ${imageFile.absolutePath}")
+                Logging.log("SetWallpaperTool", "Failed to decode image: [omitted]")
                 return@Tool listOf(UIMessagePart.Text(
                     buildJsonObject { put("success", false); put("error", "Failed to decode image file") }.toString()
                 ))
@@ -163,7 +163,7 @@ fun createSetWallpaperTool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("SetWallpaperTool", "Error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("SetWallpaperTool", "Error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)
@@ -235,14 +235,14 @@ private suspend fun resolveImageToFile(context: Context, imageUrl: String, files
                     }
                     tempFile
                 } else {
-                    Logging.log("SetWallpaperTool", "Failed to download image from $imageUrl, response code: ${connection.responseCode}")
+                    Logging.log("SetWallpaperTool", "Failed to download image from [omitted], response code: ${connection.responseCode}")
                     null
                 }
             }.getOrNull()
         }
 
         else -> {
-            Logging.log("SetWallpaperTool", "Unsupported image URL scheme: $imageUrl")
+            Logging.log("SetWallpaperTool", "Unsupported image URL scheme: [omitted]")
             null
         }
     }

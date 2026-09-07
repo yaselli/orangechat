@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -34,7 +34,7 @@ class PomodoroTimerService : android.app.Service() {
         const val ACTION_STOP = "me.rerere.rikkahub.action.POMODORO_STOP"
         const val ACTION_BOOT_RESTORE = "me.rerere.rikkahub.action.POMODORO_BOOT_RESTORE"
         const val EXTRA_SECONDS = "seconds"
-        const val NOTIFICATION_ID = 3001
+        const val NOTIFICATION_ID = me.rerere.rikkahub.service.ServiceNotificationIds.POMODORO
 
         const val ACTION_TIMER_END = "me.rerere.rikkahub.TIMER_END"
 
@@ -102,6 +102,17 @@ class PomodoroTimerService : android.app.Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopCountdown()
+            return START_NOT_STICKY
+        }
+        try {
+            startForegroundCompat(buildNotification(remainingSeconds))
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "Foreground start rejected: ${e.javaClass.simpleName}")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_START -> {
                 val seconds = intent.getIntExtra(EXTRA_SECONDS, 25 * 60)

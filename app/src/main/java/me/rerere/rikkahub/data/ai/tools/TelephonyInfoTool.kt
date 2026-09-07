@@ -96,26 +96,26 @@ fun createTelephonyInfoTool(context: Context): Tool = Tool(
             }
 
             val simState = try { tm.simState } catch (e: Exception) {
-                Logging.log("TelephonyInfoTool", "Error reading simState: ${e.message}")
+                Logging.log("TelephonyInfoTool", "Error reading simState: ${e.javaClass.simpleName}")
                 TelephonyManager.SIM_STATE_UNKNOWN
             }
             val hasSim = simState == TelephonyManager.SIM_STATE_READY
 
-            val simOperator = try { tm.simOperator ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading simOperator: ${e.message}"); "" }
-            val simOperatorName = try { tm.simOperatorName ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading simOperatorName: ${e.message}"); "" }
-            val simCountryIso = try { tm.simCountryIso ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading simCountryIso: ${e.message}"); "" }
-            val networkOperator = try { tm.networkOperator ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading networkOperator: ${e.message}"); "" }
-            val networkOperatorName = try { tm.networkOperatorName ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading networkOperatorName: ${e.message}"); "" }
-            val networkCountryIso = try { tm.networkCountryIso ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading networkCountryIso: ${e.message}"); "" }
+            val simOperator = try { tm.simOperator ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading simOperator: ${e.javaClass.simpleName}"); "" }
+            val simOperatorName = try { tm.simOperatorName ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading simOperatorName: ${e.javaClass.simpleName}"); "" }
+            val simCountryIso = try { tm.simCountryIso ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading simCountryIso: ${e.javaClass.simpleName}"); "" }
+            val networkOperator = try { tm.networkOperator ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading networkOperator: ${e.javaClass.simpleName}"); "" }
+            val networkOperatorName = try { tm.networkOperatorName ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading networkOperatorName: ${e.javaClass.simpleName}"); "" }
+            val networkCountryIso = try { tm.networkCountryIso ?: "" } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading networkCountryIso: ${e.javaClass.simpleName}"); "" }
 
             val networkTypeNum = try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) tm.dataNetworkType else @Suppress("DEPRECATION") tm.networkType
             } catch (e: SecurityException) {
-                Logging.log("TelephonyInfoTool", "SecurityException reading dataNetworkType, falling back: ${e.message}")
-                try { @Suppress("DEPRECATION") tm.networkType } catch (e2: Exception) { Logging.log("TelephonyInfoTool", "Fallback networkType also failed: ${e2.message}"); 0 }
+                Logging.log("TelephonyInfoTool", "SecurityException reading dataNetworkType, falling back: ${e.javaClass.simpleName}")
+                try { @Suppress("DEPRECATION") tm.networkType } catch (e2: Exception) { Logging.log("TelephonyInfoTool", "Fallback networkType also failed: ${e2.javaClass.simpleName}"); 0 }
             }
 
-            val phoneType = try { tm.phoneType } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading phoneType: ${e.message}"); TelephonyManager.PHONE_TYPE_NONE }
+            val phoneType = try { tm.phoneType } catch (e: Exception) { Logging.log("TelephonyInfoTool", "Error reading phoneType: ${e.javaClass.simpleName}"); TelephonyManager.PHONE_TYPE_NONE }
 
             listOf(UIMessagePart.Text(
                 buildJsonObject {
@@ -133,7 +133,7 @@ fun createTelephonyInfoTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("TelephonyInfoTool", "Unexpected error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("TelephonyInfoTool", "Unexpected error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject { put("success", false); put("error", e.message ?: "Unknown error") }.toString()
             ))

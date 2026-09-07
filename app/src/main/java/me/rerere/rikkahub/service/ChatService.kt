@@ -251,7 +251,7 @@ class ChatService(
             Log.i(TAG, "Lifecycle observer added")
         } catch (e: Exception) {
             // 例如 ProcessLifecycleOwner 尚未就绪等异常边界, 记日志不崩
-            Log.e(TAG, "Failed to add lifecycle observer", e)
+            Log.e(TAG, "Failed to add lifecycle observer: ${e.javaClass.simpleName}")
         }
     }
 
@@ -287,7 +287,7 @@ class ChatService(
                     Log.i(TAG, "Cancelled pending lifecycle observer add (cleanup before add)")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to remove lifecycle observer", e)
+                Log.e(TAG, "Failed to remove lifecycle observer: ${e.javaClass.simpleName}")
             }
         }
         if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -467,11 +467,11 @@ class ChatService(
                         try {
                             pluginLoader.callEvent("message_sent", eventData)
                         } catch (e: Exception) {
-                            Log.w(TAG, "Failed to trigger message_sent event", e)
+                            Log.w(TAG, "Failed to trigger message_sent event: ${e.javaClass.simpleName}")
                         }
                     }
                 }.onFailure { e ->
-                    Log.w(TAG, "Failed to trigger message_sent event", e)
+                    Log.w(TAG, "Failed to trigger message_sent event: ${e.javaClass.simpleName}")
                 }
 
                 // 开始补全
@@ -488,7 +488,7 @@ class ChatService(
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                Log.e(TAG, "sendMessage failed, conversationId=$conversationId", e)
+                Log.e(TAG, "sendMessage failed, conversationId=$conversationId: ${e.javaClass.simpleName}")
                 addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
             }
         }
@@ -502,7 +502,7 @@ class ChatService(
             try {
                 appendProactiveAiMessageUnderLock(conversationId, aiMessage)
             } catch (e: Exception) {
-                Log.e(TAG, "addProactiveMessage failed, conversationId=$conversationId", e)
+                Log.e(TAG, "addProactiveMessage failed, conversationId=$conversationId: ${e.javaClass.simpleName}")
             }
         }
     }
@@ -658,7 +658,7 @@ class ChatService(
                     sendGenerationDoneNotification(conversationId, senderName)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "notifyVoiceCallDeclined failed, conversationId=$conversationId", e)
+                Log.e(TAG, "notifyVoiceCallDeclined failed, conversationId=$conversationId: ${e.javaClass.simpleName}")
             }
         }
     }
@@ -802,7 +802,7 @@ class ChatService(
 
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
-                Log.e(TAG, "regenerateAtMessage failed, conversationId=$conversationId", e)
+                Log.e(TAG, "regenerateAtMessage failed, conversationId=$conversationId: ${e.javaClass.simpleName}")
                 addError(e, conversationId, title = context.getString(R.string.error_title_regenerate_message))
             }
         }
@@ -868,7 +868,7 @@ class ChatService(
 
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
-                Log.e(TAG, "handleToolApproval failed, conversationId=$conversationId, toolCallId=$toolCallId", e)
+                Log.e(TAG, "handleToolApproval failed, conversationId=$conversationId, toolCallId=$toolCallId: ${e.javaClass.simpleName}")
                 addError(e, conversationId, title = context.getString(R.string.error_title_tool_approval))
             }
         }
@@ -1024,8 +1024,8 @@ class ChatService(
 
             it.printStackTrace()
             addError(it, conversationId, title = context.getString(R.string.error_title_generation))
-            Logging.log(TAG, "handleMessageComplete: $it")
-            Logging.log(TAG, it.stackTraceToString())
+            Logging.log(TAG, "handleMessageComplete: ${it.javaClass.simpleName}")
+            // Exception messages and causes may contain upstream response bodies.
         }.onSuccess {
             val finalConversation = session.saveMutex.withLock {
                 val latest = getConversationFlow(conversationId).value
@@ -1039,7 +1039,7 @@ class ChatService(
                 val messageText = lastAssistantMessage?.toText() ?: ""
                 launchNeteaseCloudMusic(messageText)
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to launch NetEase Cloud Music", e)
+                Log.w(TAG, "Failed to launch NetEase Cloud Music: ${e.javaClass.simpleName}")
             }
 
             // 检测并执行 [JUMP] 标记 - 正常聊天中的切屏（AI总是可以跳转，不需要开关）
@@ -1086,7 +1086,7 @@ class ChatService(
                     Log.d(TAG, "[JUMP] detected in normal chat, force jump to conversation $conversationId")
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to handle [JUMP] in normal chat", e)
+                Log.w(TAG, "Failed to handle [JUMP] in normal chat: ${e.javaClass.simpleName}")
             }
 
             // 触发 message_received 事件钩子
@@ -1107,11 +1107,11 @@ class ChatService(
                     try {
                         pluginLoader.callEvent("message_received", eventData)
                     } catch (e: Exception) {
-                        Log.w(TAG, "Failed to trigger message_received event", e)
+                        Log.w(TAG, "Failed to trigger message_received event: ${e.javaClass.simpleName}")
                     }
                 }
             }.onFailure { e ->
-                Log.w(TAG, "Failed to trigger message_received event", e)
+                Log.w(TAG, "Failed to trigger message_received event: ${e.javaClass.simpleName}")
             }
 
             launchWithConversationReference(conversationId) {
@@ -1315,7 +1315,7 @@ class ChatService(
             }
         }.onFailure {
             it.printStackTrace()
-            Log.e(TAG, "generateTitle failed, conversationId=$conversationId", it)
+            Log.e(TAG, "generateTitle failed, conversationId=$conversationId: ${it.javaClass.simpleName}")
             addError(
                 error = it,
                 conversationId = conversationId,
@@ -1373,7 +1373,7 @@ class ChatService(
             }
         }.onFailure {
             it.printStackTrace()
-            Log.e(TAG, "generateSuggestion failed, conversationId=$conversationId", it)
+            Log.e(TAG, "generateSuggestion failed, conversationId=$conversationId: ${it.javaClass.simpleName}")
         }
     }
 
@@ -1976,7 +1976,7 @@ class ChatService(
                     context.startActivity(widgetIntent)
                     Logging.log(TAG, "Launched NetEase Cloud Music (widget scheme), songId=$songId")
                 }.onFailure {
-                    Log.w(TAG, "NetEase Cloud Music not available, songId=$songId", e)
+                    Log.w(TAG, "NetEase Cloud Music not available, songId=$songId: ${e.javaClass.simpleName}")
                 }
             }
         }

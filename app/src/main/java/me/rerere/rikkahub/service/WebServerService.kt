@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -37,7 +37,7 @@ class WebServerService : Service() {
         const val ACTION_STOP = "me.rerere.rikkahub.action.WEB_SERVER_STOP"
         const val EXTRA_PORT = "port"
         const val EXTRA_LOCALHOST_ONLY = "localhost_only"
-        const val NOTIFICATION_ID = 2001
+        const val NOTIFICATION_ID = me.rerere.rikkahub.service.ServiceNotificationIds.WEB_SERVER
     }
 
     private val webServerManager: WebServerManager by inject()
@@ -49,26 +49,37 @@ class WebServerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action != ACTION_STOP) {
+            try {
+                startForegroundCompat()
+            } catch (e: RuntimeException) {
+                Log.e(TAG, "Foreground start rejected: ${e.javaClass.simpleName}")
+                stopSelf(startId)
+                return START_NOT_STICKY
+            }
+        }
         when (intent?.action) {
             ACTION_START -> {
                 val port = intent.getIntExtra(EXTRA_PORT, 8080)
                 val localhostOnly = intent.getBooleanExtra(EXTRA_LOCALHOST_ONLY, false)
-                startForegroundCompat()
-                startObservingState()
                 webServerManager.start(port = port, localhostOnly = localhostOnly)
+                startObservingState()
             }
 
             ACTION_STOP -> {
                 webServerManager.stop()
                 serviceScope.launch {
-                    settingsStore.update { it.copy(webServerEnabled = false) }
+                    try {
+                        settingsStore.update { it.copy(webServerEnabled = false) }
+                    } finally {
+                        stopSelfResult(startId)
+                    }
                 }
-                // 不立即 stopSelf，等状态流检测到停止后再结束
+                return START_NOT_STICKY
             }
 
             null -> {
                 // START_STICKY 重启时 intent 为 null
-                startForegroundCompat()
                 serviceScope.launch {
                     val settings = settingsStore.settingsFlowRaw.first()
                     if (settings.webServerEnabled) {
@@ -89,6 +100,7 @@ class WebServerService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
+        webServerManager.stop()
     }
 
     private fun startForegroundCompat() {
@@ -117,7 +129,7 @@ class WebServerService : Service() {
                         updateNotification(buildRunningNotification(url))
                     }
 
-                    wasRunning && !state.isRunning && !state.isLoading -> {
+                    (wasRunning || state.error != null) && !state.isRunning && !state.isLoading -> {
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         stopSelf()
                     }

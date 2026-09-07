@@ -126,7 +126,7 @@ data class UIMessage(
                     }
 
                     else -> {
-                        println("delta part append not supported: $deltaPart")
+                        println("delta part append not supported; payload omitted")
                         acc
                     }
                 }

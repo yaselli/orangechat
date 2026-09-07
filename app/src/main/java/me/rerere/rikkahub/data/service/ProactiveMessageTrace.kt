@@ -66,7 +66,7 @@ internal class ProactiveMessageTrace private constructor(
         error?.let {
             event(
                 "error",
-                "type=${it::class.simpleName.orEmpty()} message=${sanitizeError(it.message)}",
+                "type=${it::class.simpleName.orEmpty()}",
             )
         }
         event("finish", "outcome=$outcome")
@@ -114,9 +114,5 @@ internal class ProactiveMessageTrace private constructor(
             else -> part::class.simpleName ?: "Part"
         }
 
-        private fun sanitizeError(message: String?): String = message.orEmpty()
-            .replace(Regex("(?i)bearer\\s+[^\\s,}]+"), "Bearer <redacted>")
-            .replace(Regex("(?i)(api[_-]?key|authorization)[=:]\\s*[^\\s,}]+"), "\$1=<redacted>")
-            .take(400)
     }
 }

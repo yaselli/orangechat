@@ -162,7 +162,7 @@ fun PluginUIDeclarativePage(
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to read image: uri=$it", e)
+                    Log.e(TAG, "Failed to read image: uri=$it")
                 }
             }
             imagePickerTarget = null
@@ -210,7 +210,7 @@ fun PluginUIDeclarativePage(
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to read file: uri=$it", e)
+                    Log.e(TAG, "Failed to read file: uri=$it")
                 }
             }
             filePickerTarget = null
@@ -340,13 +340,13 @@ fun PluginUIDeclarativePage(
                     val paramsJson = lenientJson.parseToJsonElement(resolvedParams)
                     val result = pluginManager.callTool(pluginId, functionName, paramsJson)
                     result.onSuccess { ret ->
-                        Log.d(TAG, "call_js_function ok: function=$functionName, result=$ret")
+                        Log.d(TAG, "call_js_function completed; result omitted")
                     }
                     result.onFailure { e ->
-                        Log.e(TAG, "call_js_function failed: function=$functionName, error=${e.message}", e)
+                        Log.e(TAG, "call_js_function failed: function=$functionName, error=${e.javaClass.simpleName}")
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "call_js_function exception: function=$functionName, resolvedParams=$resolvedParams", e)
+                    Log.e(TAG, "call_js_function exception: function=$functionName, resolvedParams=$resolvedParams")
                 }
             }
         }

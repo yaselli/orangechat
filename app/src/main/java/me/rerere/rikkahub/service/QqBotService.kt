@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -91,14 +91,21 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
     @Volatile private var seq: Int? = null
     @Volatile private var reconnectAttempt = 0
     private var heartbeatJob: Job? = null
+    private var connectJob: Job? = null
     private val sendLock = Mutex()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForegroundCompat()
-        if (!alive) {
-            scope.launch { connect() }
+        try {
+            startForegroundCompat()
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "Foreground start rejected: ${e.javaClass.simpleName}")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        if (!alive && connectJob?.isActive != true) {
+            connectJob = scope.launch { connect() }
         }
         return START_STICKY
     }
@@ -124,13 +131,13 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
             val token = ensureToken(setting)
             // 2. 拿 gateway wss 地址
             val wssUrl = client.getGateway(token)
-            Log.i(TAG, "connecting WebSocket: $wssUrl")
+            Log.i(TAG, "connecting WebSocket")
             // 3. 建立 WebSocket
             alive = true
             val request = Request.Builder().url(wssUrl).build()
             webSocket = okHttpClient.newWebSocket(request, QqWsListener())
         } catch (e: Exception) {
-            Log.e(TAG, "connect failed: ${e.message}", e)
+            Log.e(TAG, "connect failed: ${e.javaClass.simpleName}")
             alive = false
             scheduleReconnect()
         }
@@ -170,16 +177,16 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-            Log.w(TAG, "WebSocket closing: $code $reason")
+            Log.w(TAG, "WebSocket closing: code=$code")
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            Log.w(TAG, "WebSocket closed: $code $reason")
+            Log.w(TAG, "WebSocket closed: code=$code")
             onDisconnect(code)
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            Log.e(TAG, "WebSocket failure: ${t.message}", t)
+            Log.e(TAG, "WebSocket failure: ${t.javaClass.simpleName}")
             onDisconnect(-1)
         }
     }
@@ -191,7 +198,7 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
         val packet = try {
             json.parseToJsonElement(text).jsonObject
         } catch (e: Exception) {
-            Log.w(TAG, "parse ws message failed: ${e.message}, raw=$text")
+            Log.w(TAG, "WebSocket parse failed: ${e.javaClass.simpleName}")
             return
         }
         val op = packet["op"]?.jsonPrimitive?.intOrNull ?: return
@@ -213,7 +220,7 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
                 when (t) {
                     "READY" -> {
                         sessionId = d?.get("session_id")?.jsonPrimitive?.contentOrNull ?: ""
-                        Log.i(TAG, "READY: session_id=$sessionId")
+                        Log.i(TAG, "WebSocket ready")
                         reconnectAttempt = 0
                         startHeartbeat()
                     }
@@ -239,7 +246,7 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
                 seq = null
                 webSocket?.close(4000, "invalid session")
             }
-            else -> Log.d(TAG, "unknown op=$op, raw=$text")
+            else -> Log.d(TAG, "unknown op=$op; payload omitted")
         }
     }
 
@@ -257,7 +264,7 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
             Log.w(TAG, "C2C message missing author/id, skip")
             return
         }
-        Log.i(TAG, "C2C from=$authorId content=${content.take(80)}")
+        Log.i(TAG, "QQ message received; chars=${content.length}")
 
         // 去掉可能的 @机器人 前缀 (私聊一般没有, 但保险)
         val cleanContent = content.replace(Regex("<@!?\\d+>\\s*"), "").trim().ifBlank { return }
@@ -269,7 +276,7 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
             client.sendPrivateMessage(token, authorId, reply, msgId)
             Log.i(TAG, "replied to=$authorId len=${reply.length}")
         } catch (e: QqApiException) {
-            Log.e(TAG, "send reply failed: ${e.code} ${e.body}", e)
+            Log.e(TAG, "send reply failed: code=${e.code}")
         }
     }
 
@@ -403,15 +410,10 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()
-        try {
-            androidx.core.app.ServiceCompat.startForeground(
-                this, NOTIFICATION_ID, notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
-            )
-        } catch (e: Exception) {
-            @Suppress("DEPRECATION")
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        androidx.core.app.ServiceCompat.startForeground(
+            this, NOTIFICATION_ID, notification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+        )
     }
 
     private fun notifyBanned() {
@@ -424,13 +426,13 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
                 .setAutoCancel(true)
                 .build()
             val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
-            nm.notify(NOTIFICATION_ID + 1, notification)
+            nm.notify(ServiceNotificationIds.QQ_ERROR, notification)
         } catch (_: Exception) {}
     }
 
     companion object {
         private const val TAG = "QqBotService"
-        private const val NOTIFICATION_ID = 20011
+        private const val NOTIFICATION_ID = me.rerere.rikkahub.service.ServiceNotificationIds.QQ
         private const val REPLY_TIMEOUT_MS = 120_000L
         private const val MAX_RECONNECT = 10
         private const val RECONNECT_BASE = 2000L

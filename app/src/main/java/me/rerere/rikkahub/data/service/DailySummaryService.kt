@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -15,6 +15,10 @@ import android.content.Intent
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -235,10 +239,14 @@ class DailySummaryReceiver : BroadcastReceiver() {
  * 执行完成后自动调度下一次闹钟
  */
 class DailySummaryTriggerService : Service() {
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var runJob: Job? = null
+    private var latestStartId = 0
+
 
     companion object {
         private const val TAG = "DailySummaryTrigger"
-        private const val NOTIFICATION_ID = 20003
+        private const val NOTIFICATION_ID = me.rerere.rikkahub.service.ServiceNotificationIds.DAILY_CRON
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -249,51 +257,70 @@ class DailySummaryTriggerService : Service() {
             .setSmallIcon(R.drawable.small_icon)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
-        startForeground(NOTIFICATION_ID, notification)
+        try {
+            startForeground(NOTIFICATION_ID, notification)
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "Foreground start rejected: ${e.javaClass.simpleName}")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        latestStartId = startId
+        if (runJob?.isActive == true) return START_NOT_STICKY
 
-        CoroutineScope(Dispatchers.IO).launch {
+        runJob = serviceScope.launch {
             try {
-                val pluginLoader = GlobalContext.get().getOrNull<PluginLoader>()
-                if (pluginLoader == null) {
-                    Log.w(TAG, "PluginLoader not available, skipping daily_cron")
-                    return@launch
-                }
+                kotlinx.coroutines.withContext(Dispatchers.IO) run@ {
+                    try {
+                        val pluginLoader = GlobalContext.get().getOrNull<PluginLoader>()
+                        if (pluginLoader == null) {
+                            Log.w(TAG, "PluginLoader not available, skipping daily_cron")
+                            return@run
+                        }
 
-                val pluginsWithCron = pluginLoader.getPluginsWithDailyCron()
-                if (pluginsWithCron.isEmpty()) {
-                    Log.i(TAG, "No plugins with daily_cron hook, skipping")
-                    DailySummaryService.cancel(this@DailySummaryTriggerService)
-                    return@launch
-                }
+                        val pluginsWithCron = pluginLoader.getPluginsWithDailyCron()
+                        if (pluginsWithCron.isEmpty()) {
+                            Log.i(TAG, "No plugins with daily_cron hook, skipping")
+                            DailySummaryService.cancel(this@DailySummaryTriggerService)
+                            return@run
+                        }
 
-                Log.i(TAG, "Dispatching daily_cron event to ${pluginsWithCron.size} plugin(s)...")
+                        Log.i(TAG, "Dispatching daily_cron event to ${pluginsWithCron.size} plugin(s)...")
                 
-                // 构建事件参数，包含当前时间信息
-                val now = java.time.LocalDateTime.now()
-                val eventData = JsonObject(
-                    mapOf(
-                        "timestamp" to JsonPrimitive(now.toString()),
-                        "date" to JsonPrimitive(now.toLocalDate().toString()),
-                        "hour" to JsonPrimitive(now.hour),
-                        "minute" to JsonPrimitive(now.minute)
-                    )
-                )
+                        // 构建事件参数，包含当前时间信息
+                        val now = java.time.LocalDateTime.now()
+                        val eventData = JsonObject(
+                            mapOf(
+                                "timestamp" to JsonPrimitive(now.toString()),
+                                "date" to JsonPrimitive(now.toLocalDate().toString()),
+                                "hour" to JsonPrimitive(now.hour),
+                                "minute" to JsonPrimitive(now.minute)
+                            )
+                        )
                 
-                pluginLoader.callEvent("daily_cron", eventData)
-                Log.i(TAG, "daily_cron event dispatch completed")
+                        pluginLoader.callEvent("daily_cron", eventData)
+                        Log.i(TAG, "daily_cron event dispatch completed")
 
-                // 执行完成后调度下一次
-                DailySummaryService.scheduleNext(this@DailySummaryTriggerService)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to dispatch daily_cron", e)
-                // 即使失败也调度下一次，避免中断
-                DailySummaryService.scheduleNext(this@DailySummaryTriggerService)
+                        // 执行完成后调度下一次
+                        DailySummaryService.scheduleNext(this@DailySummaryTriggerService)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to dispatch daily_cron: ${e.javaClass.simpleName}")
+                        // 即使失败也调度下一次，避免中断
+                        DailySummaryService.scheduleNext(this@DailySummaryTriggerService)
+                    }
+                }
             } finally {
-                stopSelf()
+                stopSelfResult(latestStartId)
             }
         }
 
         return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        serviceScope.cancel()
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

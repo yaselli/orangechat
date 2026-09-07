@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -129,7 +129,7 @@ class VoiceCallService : Service(), KoinComponent {
 
         const val EXTRA_CONVERSATION_ID = "conversationId"
         const val ACTION_HANG_UP = "me.rerere.rikkahub.VOICE_CALL_HANG_UP"
-        const val NOTIFICATION_ID = 40001
+        const val NOTIFICATION_ID = me.rerere.rikkahub.service.ServiceNotificationIds.VOICE_CALL
     }
 
     // Binder, 供 VoiceCallPage bindService 用

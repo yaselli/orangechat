@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   xmlns:tools="http://schemas.android.com/tools">
 
@@ -198,7 +198,7 @@
     <!-- Proactive Message Receiver (handles both proactive alarm and boot completed) -->
     <receiver
       android:name=".data.service.ProactiveMessageReceiver"
-      android:exported="true">
+      android:exported="false">
       <intent-filter>
         <action android:name="me.rerere.orangechat.PROACTIVE_MESSAGE" />
         <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -234,7 +234,7 @@
     <!-- Daily Cron Receiver (handles daily_cron alarm and boot completed) -->
     <receiver
       android:name=".data.service.DailySummaryReceiver"
-      android:exported="true">
+      android:exported="false">
       <intent-filter>
         <action android:name="me.rerere.orangechat.DAILY_CRON" />
         <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -254,7 +254,7 @@
     <!-- Workflow: boot-completed trigger receiver -->
     <receiver
       android:name=".workflow.trigger.WorkflowBootReceiver"
-      android:exported="true">
+      android:exported="false">
       <intent-filter>
         <action android:name="android.intent.action.BOOT_COMPLETED" />
         <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />

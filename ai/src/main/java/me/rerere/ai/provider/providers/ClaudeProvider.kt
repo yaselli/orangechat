@@ -123,7 +123,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
+        Log.d(TAG, "request prepared; payload omitted")
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
@@ -171,11 +171,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
-
-        requestBody["messages"]!!.jsonArray.forEach {
-            Log.i(TAG, "streamText: $it")
-        }
+        Log.d(TAG, "request prepared; payload omitted")
 
         val listener = object : EventSourceListener() {
             override fun onEvent(
@@ -184,7 +180,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 type: String?,
                 data: String
             ) {
-                Log.d(TAG, "onEvent: type=$type, data=$data")
+                Log.d(TAG, "stream event received; payload omitted")
                 if (data == "[DONE]") {
                     return
                 }
@@ -234,19 +230,19 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 var exception = t
 
-                t?.printStackTrace()
-                Log.e(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response")
+                Log.w(TAG, "Exception details omitted from diagnostics")
+                Log.d(TAG, "provider event; payload omitted")
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        Log.i(TAG, "Error response: $bodyElement")
+                        Log.d(TAG, "provider event; payload omitted")
                         exception = bodyElement.parseErrorDetail()
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
+                    Log.d(TAG, "provider event; payload omitted")
+                    Log.w(TAG, "Exception details omitted from diagnostics")
                 } finally {
                     close(exception)
                 }
@@ -483,7 +479,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     put("data", encoded.base64)
                 })
             }.onFailure {
-                Log.w(TAG, "encode image failed: $url", it)
+                Log.d(TAG, "provider event; payload omitted")
                 put("type", "text")
                 put("text", "")
             }
@@ -548,7 +544,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
                 "redacted_thinking" -> {
                     val data = block["data"]?.jsonPrimitiveOrNull?.contentOrNull
-                    println(data)
+                    Log.d(TAG, "Provider payload omitted")
                 }
 
                 "tool_use" -> {

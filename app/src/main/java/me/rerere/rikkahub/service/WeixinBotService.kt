@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -62,7 +62,13 @@ class WeixinBotService : Service(), org.koin.core.component.KoinComponent {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForegroundCompat()
+        try {
+            startForegroundCompat()
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "Foreground start rejected: ${e.javaClass.simpleName}")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         if (pollJob == null || pollJob?.isActive != true) {
             pollJob = scope.launch { runPollLoop() }
         }
@@ -198,16 +204,10 @@ class WeixinBotService : Service(), org.koin.core.component.KoinComponent {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()
-        try {
-            androidx.core.app.ServiceCompat.startForeground(
-                this, NOTIFICATION_ID, notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
-            )
-        } catch (e: Exception) {
-            // 部分机型/低版本不支持 specialUse, 降级普通 startForeground
-            @Suppress("DEPRECATION")
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        androidx.core.app.ServiceCompat.startForeground(
+            this, NOTIFICATION_ID, notification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+        )
     }
 
     /** token 过期时更新通知, 提示用户去设置页重新扫码. */
@@ -221,13 +221,13 @@ class WeixinBotService : Service(), org.koin.core.component.KoinComponent {
                 .setAutoCancel(true)
                 .build()
             val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
-            nm.notify(NOTIFICATION_ID + 1, notification)
+            nm.notify(ServiceNotificationIds.WEIXIN_ERROR, notification)
         } catch (_: Exception) {}
     }
 
     companion object {
         private const val TAG = "WeixinBotService"
-        private const val NOTIFICATION_ID = 20010
+        private const val NOTIFICATION_ID = me.rerere.rikkahub.service.ServiceNotificationIds.WEIXIN
         private const val REPLY_TIMEOUT_MS = 120_000L
 
         fun start(context: Context) {

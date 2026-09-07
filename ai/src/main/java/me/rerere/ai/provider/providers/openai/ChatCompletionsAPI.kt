@@ -97,12 +97,12 @@ class ChatCompletionsAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
+        Log.d(TAG, "request prepared; payload omitted")
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
             val errorBody = response.body?.string()
-            val errorMsg = "generateText: HTTP ${response.code} error response body: $errorBody"
+            val errorMsg = "generateText: HTTP ${response.code}; error body omitted"
             Log.e(TAG, errorMsg)
             Logging.log(TAG, errorMsg)
             throw Exception("Failed to get response: ${response.code} $errorBody")
@@ -241,7 +241,7 @@ class ChatCompletionsAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
+        Log.d(TAG, "request prepared; payload omitted")
 
         // just for debugging response body
         // println(client.newCall(request).await().body?.string())
@@ -274,7 +274,6 @@ class ChatCompletionsAPI(
                     Log.w(
                         TAG,
                         "onEvent: failed to parse SSE data (len=${data.length})",
-                        e
                     )
                     close(
                         Exception("Failed to parse stream data: ${e.message} (data length=${data.length})", e)
@@ -285,7 +284,7 @@ class ChatCompletionsAPI(
                     // HTTP can be 200 while the stream itself contains a structured error.
                     val model = chunkJson["model"]?.jsonPrimitive?.contentOrNull ?: "unknown"
                     val error = chunkJson["error"]!!.parseErrorDetail()
-                    val errorMsg = "onEvent stream error | model=$model | detail=${sanitizeDiagnosticText(error.message)}"
+                    val errorMsg = "onEvent: structured stream error; details omitted"
                     Log.e(TAG, errorMsg)
                     Logging.log(TAG, errorMsg)
                     close(error)
@@ -300,8 +299,8 @@ class ChatCompletionsAPI(
                         ?.jsonObject?.get("delta")?.jsonObject?.get("content")
                         ?.jsonPrimitive?.contentOrNull ?: "unknown gateway error"
                     val safeError = sanitizeDiagnosticText(errorContent)
-                    Log.e(TAG, "onEvent: gateway returned disguised error: $safeError")
-                    Logging.log(TAG, "onEvent: gateway returned disguised error: $safeError")
+                    Log.e(TAG, "onEvent: gateway returned disguised error")
+                    Logging.log(TAG, "onEvent: gateway returned disguised error")
                     close(Exception("Gateway error: $safeError"))
                     return
                 }
@@ -349,8 +348,8 @@ class ChatCompletionsAPI(
                 }
                 var exception: Throwable = t ?: Exception("HTTP ${response?.code ?: "unknown"} stream failure")
 
-                t?.printStackTrace()
-                val failureMsg = "onFailure: ${t?.javaClass?.name} ${t?.message} / response=$response"
+                Log.w(TAG, "Exception details omitted from diagnostics")
+                val failureMsg = "onFailure: type=${t?.javaClass?.simpleName} HTTP=${response?.code}"
                 Log.e(TAG, failureMsg)
                 Logging.log(TAG, failureMsg)
 
@@ -359,8 +358,7 @@ class ChatCompletionsAPI(
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
                         exception = bodyElement.parseErrorDetail()
-                        val detailMsg = "onFailure: HTTP ${response?.code} detail=" +
-                            sanitizeDiagnosticText(exception.message)
+                        val detailMsg = "onFailure: HTTP ${response?.code}; details omitted"
                         Log.e(TAG, detailMsg)
                         Logging.log(TAG, detailMsg)
                     }
@@ -368,8 +366,8 @@ class ChatCompletionsAPI(
                     // Plain-text gateways still expose their real reason, but cap and redact it.
                     // Keep it as the request failure instead of replacing it with a JSON parser error.
                     val safeBody = sanitizeDiagnosticText(bodyRaw)
-                    val parseMsg = "onFailure: HTTP ${response?.code} non-JSON body=$safeBody"
-                    Log.w(TAG, parseMsg, e)
+                    val parseMsg = "onFailure: HTTP ${response?.code}; non-JSON error body omitted"
+                    Log.w(TAG, parseMsg)
                     Logging.log(TAG, parseMsg)
                     if (safeBody.isNotBlank()) {
                         exception = Exception("HTTP ${response?.code}: $safeBody", t)
@@ -785,7 +783,7 @@ class ChatCompletionsAPI(
                                                 put("url", encodedImage.base64)
                                             })
                                         }.onFailure {
-                                            it.printStackTrace()
+                                            Log.w(TAG, "Exception details omitted from diagnostics")
                                             put("type", "text")
                                             put("text", "")
                                         }
@@ -845,7 +843,7 @@ class ChatCompletionsAPI(
                                             put("url", encodedImage.base64)
                                         })
                                     }.onFailure {
-                                        it.printStackTrace()
+                                        Log.w(TAG, "Exception details omitted from diagnostics")
                                         put("type", "text")
                                         put("text", "")
                                     }

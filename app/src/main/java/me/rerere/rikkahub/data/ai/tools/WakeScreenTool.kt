@@ -84,7 +84,7 @@ fun createWakeScreenTool(context: Context): Tool = Tool(
 
             listOf(UIMessagePart.Text(result.toString()))
         } catch (e: Exception) {
-            Logging.log("WakeScreenTool", "Error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("WakeScreenTool", "Error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)

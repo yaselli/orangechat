@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - master
+      - feature/liquid-glass-ui
 
 jobs:
   build:
@@ -52,6 +53,24 @@ jobs:
           fi
           printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > app/debug.keystore
           keytool -list -keystore app/debug.keystore -storepass android -alias androiddebugkey
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Android Lint
+        if: ${{ !cancelled() }}
+        run: ./gradlew lintDebug
+
+      - name: Upload verification reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrangeChat-verification-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+            **/build/reports/lint-results*.*
+          if-no-files-found: warn
 
       - name: Build APK
         run: ./gradlew assembleDebug

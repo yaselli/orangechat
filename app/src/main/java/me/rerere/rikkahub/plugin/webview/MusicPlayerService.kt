@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -29,7 +29,7 @@ import me.rerere.rikkahub.R
 import java.io.File
 
 private const val TAG = "MusicPlayerService"
-private const val NOTIFICATION_ID = 2001
+private const val NOTIFICATION_ID = me.rerere.rikkahub.service.ServiceNotificationIds.MUSIC
 
 private const val ACTION_PLAY = "me.rerere.rikkahub.MUSIC_PLAY"
 private const val ACTION_PAUSE = "me.rerere.rikkahub.MUSIC_PAUSE"
@@ -145,8 +145,14 @@ class MusicPlayerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // 必须最先调用 startForeground()，否则 Android 12+ 会抛出 ForegroundServiceStartNotAllowedException
-        startForeground(NOTIFICATION_ID, buildNotification(currentTitle.ifEmpty { "Music" }, currentArtist))
+        // Promote before playback work; OS restrictions can still reject an otherwise timely start.
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification(currentTitle.ifEmpty { "Music" }, currentArtist))
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "Foreground start rejected: ${e.javaClass.simpleName}")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
 
         when (intent?.action) {
             ACTION_PLAY -> {

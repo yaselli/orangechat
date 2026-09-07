@@ -116,7 +116,7 @@ class McpManager(
                 .distinctUntilChanged()
                 .collect { mcpServerConfigs ->
                     runCatching {
-                        Log.i(TAG, "update configs: $mcpServerConfigs")
+                        Log.i(TAG, "MCP configs updated; values omitted")
                         val newConfigs = mcpServerConfigs.filter { it.commonOptions.enable }
                         val currentConfigs = clients.values.map { it.first }.toList()
                         val (toAdd, toRemove) = currentConfigs.checkDifferent(
@@ -127,19 +127,19 @@ class McpManager(
                                 a.commonOptions.headers == b.commonOptions.headers
                             }
                         )
-                        Log.i(TAG, "to_add: $toAdd")
-                        Log.i(TAG, "to_remove: $toRemove")
+                        Log.i(TAG, "MCP configs to add; values omitted")
+                        Log.i(TAG, "MCP configs to remove; values omitted")
                         toAdd.forEach { cfg ->
                             appScope.launch {
                                 runCatching { addClient(cfg) }
-                                    .onFailure { it.printStackTrace() }
+                                    .onFailure { Log.w(TAG, "Operation failed: ${it.javaClass.simpleName}") }
                             }
                         }
                         toRemove.forEach { cfg ->
                             appScope.launch { removeClient(cfg) }
                         }
                     }.onFailure {
-                        it.printStackTrace()
+                        Log.w(TAG, "Operation failed: ${it.javaClass.simpleName}")
                     }
                 }
         }
@@ -168,7 +168,7 @@ class McpManager(
         val client = pair?.second
             ?: return listOf(UIMessagePart.Text("Failed to execute tool, because no such mcp client for the tool"))
         val config = pair.first
-        Log.i(TAG, "callTool: $toolName / $args (server: ${config.commonOptions.name})")
+        Log.i(TAG, "MCP tool call; arguments omitted")
 
         if (client.transport == null) client.connect(getTransport(config))
         val result = client.callTool(
@@ -275,7 +275,7 @@ class McpManager(
         }
 
         transport.onError { error ->
-            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.javaClass.simpleName}")
             val currentStatus = syncingStatus.value[config.id]
             // 只有在已连接状态下才触发重连
             if (currentStatus == McpStatus.Connected) {
@@ -292,7 +292,7 @@ class McpManager(
             reconnectAttempts[config.id] = 0 // 重置重连计数
             Log.i(TAG, "addClient: connected ${config.commonOptions.name}")
         }.onFailure {
-            it.printStackTrace()
+            Log.w(TAG, "Operation failed: ${it.javaClass.simpleName}")
             if (needsAuthorization(config, it)) {
                 setStatus(config = config, status = McpStatus.NeedsAuthorization)
             } else {
@@ -311,7 +311,7 @@ class McpManager(
             client.connect(getTransport(config))
         }
         val serverTools = client.listTools()?.tools ?: emptyList()
-        Log.i(TAG, "sync: tools: $serverTools")
+        Log.i(TAG, "MCP tools synchronized; schemas omitted")
 
         // 在 lambda 外构建新的 tools 列表
         val common = config.commonOptions
@@ -369,7 +369,7 @@ class McpManager(
                 sync(config)
             }.onFailure {
                 if (it is CancellationException) throw it
-                Log.w(TAG, "MCP refresh failed: ${config.id}", it)
+                Log.w(TAG, "MCP refresh failed: ${config.id}")
                 setStatus(config, McpStatus.Error(it.message ?: it.javaClass.name))
             }
         }
@@ -382,10 +382,10 @@ class McpManager(
             runCatching {
                 entry.second.close()
             }.onFailure {
-                it.printStackTrace()
+                Log.w(TAG, "Operation failed: ${it.javaClass.simpleName}")
             }
             syncingStatus.update { it - config.id }
-            Log.i(TAG, "removeClient: ${entry.first} / ${entry.first.commonOptions.name}")
+            Log.i(TAG, "MCP client removed")
         }
         reconnectAttempts.remove(config.id)
     }
@@ -431,7 +431,7 @@ class McpManager(
                 Log.i(TAG, "Reconnect cancelled for ${config.commonOptions.name}")
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Reconnect failed for ${config.commonOptions.name}", e)
+                Log.e(TAG, "Reconnect failed for ${config.commonOptions.name}")
                 // 继续尝试重连
                 scheduleReconnect(config)
             }
@@ -454,7 +454,7 @@ class McpManager(
         // 先关闭旧客户端
         val oldEntry = clients[config.id]
         if (oldEntry != null) {
-            runCatching { oldEntry.second.close() }.onFailure { it.printStackTrace() }
+            runCatching { oldEntry.second.close() }.onFailure { Log.w(TAG, "Operation failed: ${it.javaClass.simpleName}") }
             clients.remove(config.id)
         }
 
@@ -476,7 +476,7 @@ class McpManager(
         }
 
         transport.onError { error ->
-            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.message}")
+            Log.e(TAG, "Transport error for ${config.commonOptions.name}: ${error.javaClass.simpleName}")
             val currentStatus = syncingStatus.value[config.id]
             if (currentStatus == McpStatus.Connected) {
                 scheduleReconnect(config)
@@ -528,7 +528,7 @@ class McpManager(
                 .onFailure {
                     // 用户主动取消：状态由 cancelAuthorization 负责回退，这里不覆盖
                     if (it is CancellationException) return@onFailure
-                    it.printStackTrace()
+                    Log.w(TAG, "Operation failed: ${it.javaClass.simpleName}")
                     setStatus(config, McpStatus.Error(it.message ?: "OAuth authorization failed"))
                 }
         }
@@ -694,7 +694,7 @@ class McpManager(
             persistOAuthState(config.id, updated)
             config.clone(commonOptions = config.commonOptions.copy(oauth = updated))
         }.getOrElse {
-            Log.w(TAG, "Token refresh failed for ${config.commonOptions.name}: ${it.message}")
+            Log.w(TAG, "Token refresh failed for ${config.commonOptions.name}: ${it.javaClass.simpleName}")
             config // 刷新失败仍用旧令牌尝试，失败会转为 NeedsAuthorization
         }
     }
@@ -738,7 +738,7 @@ class McpManager(
         if (hasManualAuth) return false
         // 主动探测：仅当 server 发布了受保护资源元数据 (protected resource metadata) 时才支持 OAuth
         return runCatching { oauthClient.discoverProtectedResource(config.serverUrl) }
-            .onFailure { Log.i(TAG, "OAuth probe failed for ${config.commonOptions.name}: ${it.message}") }
+            .onFailure { Log.i(TAG, "OAuth probe failed for ${config.commonOptions.name}: ${it.javaClass.simpleName}") }
             .isSuccess
     }
 

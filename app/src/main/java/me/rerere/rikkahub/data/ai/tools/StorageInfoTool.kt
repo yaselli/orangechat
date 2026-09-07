@@ -44,7 +44,7 @@ fun createStorageInfoTool(context: Context): Tool = Tool(
                         put("used_bytes", usedBytes)
                     }
                 } catch (e: Exception) {
-                    Logging.log("StorageInfoTool", "Error reading internal storage: ${e.message}")
+                    Logging.log("StorageInfoTool", "Error reading internal storage: ${e.javaClass.simpleName}")
                     putJsonObject("internal") {
                         put("error", e.message ?: "Failed to read internal storage")
                     }
@@ -67,7 +67,7 @@ fun createStorageInfoTool(context: Context): Tool = Tool(
                         put("external", kotlinx.serialization.json.JsonNull)
                     }
                 } catch (e: Exception) {
-                    Logging.log("StorageInfoTool", "Error reading external storage: ${e.message}")
+                    Logging.log("StorageInfoTool", "Error reading external storage: ${e.javaClass.simpleName}")
                     putJsonObject("external") {
                         put("error", e.message ?: "Failed to read external storage")
                     }
@@ -76,7 +76,7 @@ fun createStorageInfoTool(context: Context): Tool = Tool(
 
             listOf(UIMessagePart.Text(result.toString()))
         } catch (e: Exception) {
-            Logging.log("StorageInfoTool", "Unexpected error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("StorageInfoTool", "Unexpected error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)

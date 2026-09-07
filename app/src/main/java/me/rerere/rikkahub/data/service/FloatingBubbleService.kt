@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -73,7 +73,7 @@ class FloatingBubbleService : Service() {
         private const val CLICK_THRESHOLD_PX = 16f
         // 最长存活时间，防止球永久挂在那里被遗忘
         private const val MAX_ALIVE_MS = 60_000L
-        private const val FOREGROUND_NOTIF_ID = 20003
+        private const val FOREGROUND_NOTIF_ID = me.rerere.rikkahub.service.ServiceNotificationIds.FLOATING_BUBBLE
         // action: 移除当前悬浮球（设置里关闭开关时调用）
         const val ACTION_DISMISS = "me.rerere.rikkahub.DISMISS_BUBBLE"
 

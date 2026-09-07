@@ -76,7 +76,7 @@ fun createShareTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("ShareTool", "Error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("ShareTool", "Error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)

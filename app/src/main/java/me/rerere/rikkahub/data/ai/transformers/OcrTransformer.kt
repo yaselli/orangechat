@@ -141,7 +141,7 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
             ),
         )
         val content = result.choices[0].message?.toText() ?: "[ERROR, OCR failed]"
-        Log.i(TAG, "performOcr: $content")
+        Log.i(TAG, "performOcr: completed; text omitted")
         val ocrResult = """
             <image_file_ocr>
                $content

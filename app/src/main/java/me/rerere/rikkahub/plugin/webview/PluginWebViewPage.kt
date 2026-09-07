@@ -236,7 +236,7 @@ fun PluginWebViewPage(
                     null
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to process picked image", e)
+                Log.e(TAG, "Failed to process picked image")
                 webView?.evaluateJavascript(
                     "if(window.__bridgeCallbacks && window.__bridgeCallbacks['$callbackId'])" +
                             "{window.__bridgeCallbacks['$callbackId'](null); delete window.__bridgeCallbacks['$callbackId'];}",
@@ -358,7 +358,7 @@ fun PluginWebViewPage(
                             imported.append("{filePath:'$escapedPath',fileName:'$escapedName'}")
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "importAudioFile: failed to process uri=$uri, err=${e.message}", e)
+                        Log.e(TAG, "importAudioFile: failed to process uri=$uri, err=${e.javaClass.simpleName}")
                         val errName = (uri.lastPathSegment ?: "unknown").replace("\\", "\\\\").replace("'", "\\'")
                         val escapedErr = (e.message ?: "Unknown error").replace("\\", "\\\\").replace("'", "\\'")
                         if (errors.isNotEmpty()) errors.append(",")
@@ -557,7 +557,7 @@ fun PluginWebViewPage(
                                         try {
                                             windowManager.removeView(existingOverlay)
                                         } catch (e: Exception) {
-                                            Log.w(TAG, "Error removing existing overlay", e)
+                                            Log.w(TAG, "Error removing existing overlay")
                                         }
                                         existingOverlay.destroy()
                                     }
@@ -598,7 +598,7 @@ fun PluginWebViewPage(
                                                         try {
                                                             windowManager.removeView(overlayWv)
                                                         } catch (e: Exception) {
-                                                            Log.w(TAG, "Error removing overlay", e)
+                                                            Log.w(TAG, "Error removing overlay")
                                                         }
                                                         overlayWv.destroy()
                                                         overlayWebView = null
@@ -727,7 +727,7 @@ fun PluginWebViewPage(
                                         try {
                                             windowManager?.removeView(existingOverlay)
                                         } catch (e: Exception) {
-                                            Log.w(TAG, "Error removing overlay", e)
+                                            Log.w(TAG, "Error removing overlay")
                                         }
                                         existingOverlay.destroy()
                                         overlayWebView = null
@@ -795,7 +795,7 @@ fun PluginWebViewPage(
                     val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
                     windowManager?.removeView(overlay)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Error removing overlay on dispose", e)
+                    Log.w(TAG, "Error removing overlay on dispose")
                 }
                 overlay.destroy()
             }
@@ -839,7 +839,7 @@ private class PluginWebViewClient(
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                 view?.context?.startActivity(intent)
             } catch (e: Exception) {
-                Log.w(TAG, "Cannot open external URL: $url", e)
+                Log.w(TAG, "Cannot open external URL: $url")
             }
             return true
         }
@@ -879,14 +879,14 @@ private class PluginWebViewClient(
 
                         val jsonObj = JsonObject(mergedConfig)
                         val result = json.encodeToString(JsonObject.serializer(), jsonObj)
-                        Log.d(TAG, "getPluginConfig for ${pluginInfo.manifest.id}: $result")
+                        Log.d(TAG, "getPluginConfig completed; config omitted")
                         webView.post {
                             webView.evaluateJavascript(
                                 "window.__bridgeResult('${params["callbackId"]}', $result);", null
                             )
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to get plugin config", e)
+                        Log.e(TAG, "Failed to get plugin config")
                         webView.post {
                             webView.evaluateJavascript(
                                 "window.__bridgeResult('${params["callbackId"]}', {});", null
@@ -1116,7 +1116,7 @@ private class PluginWebViewClient(
                     MusicPlayerService.seekTo(webView.context, position)
                     webView.post { webView.evaluateJavascript("window.__bridgeResult('${params["callbackId"]}', {success:true});", null) }
                 } catch (e: Exception) {
-                    Log.e(TAG, "musicSeek failed, position=$position, err=${e.message}", e)
+                    Log.e(TAG, "musicSeek failed, position=$position, err=${e.javaClass.simpleName}")
                     webView.post { webView.evaluateJavascript("window.__bridgeResult('${params["callbackId"]}', {success:false});", null) }
                 }
             }
@@ -1131,7 +1131,7 @@ private class PluginWebViewClient(
                         )
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "musicGetProgress failed, err=${e.message}", e)
+                    Log.e(TAG, "musicGetProgress failed, err=${e.javaClass.simpleName}")
                     webView.post { webView.evaluateJavascript("window.__bridgeResult('${params["callbackId"]}', {position:0,duration:0});", null) }
                 }
             }
@@ -1196,7 +1196,7 @@ private class PluginWebViewClient(
                             )
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "callAI failed", e)
+                        Log.e(TAG, "callAI failed")
                         val errorResult = """{"success":false,"error":"${e.message?.replace("\"", "\\\"")?.replace("\\", "\\\\")}"}"""
                         webView.post {
                             webView.evaluateJavascript(
@@ -1221,7 +1221,7 @@ private class PluginWebViewClient(
                             )
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "notifyHook failed", e)
+                        Log.e(TAG, "notifyHook failed")
                         val errorResult = """{"success":false,"error":"${e.message?.replace("\"", "\\\"")?.replace("\\", "\\\\")}"}"""
                         webView.post {
                             webView.evaluateJavascript(
@@ -1319,7 +1319,7 @@ private class PluginWebViewClient(
                     if (ctx.has("quote")) append("\n\u5F15\u7528\u539F\u6587\uFF1A").append(ctx.getString("quote"))
                     if (ctx.has("note")) append("\n\u7528\u6237\u6279\u6CE8\uFF1A").append(ctx.getString("note"))
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to parse context JSON", e)
+                    Log.w(TAG, "Failed to parse context JSON")
                 }
             }
         }
@@ -1355,7 +1355,7 @@ private class PluginWebViewClient(
                 .replace("\t", "\\t")
             """{"success":true,"text":"$escaped"}"""
         } catch (e: Exception) {
-            Log.e(TAG, "AI generation failed", e)
+            Log.e(TAG, "AI generation failed")
             """{"success":false,"error":"${e.message?.replace("\"", "\\\"")?.replace("\\", "\\\\")}"}"""
         }
     }

@@ -58,7 +58,7 @@ fun createToastTool(context: Context): Tool = Tool(
                 try {
                     Toast.makeText(context, text, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
-                    Logging.log("ToastTool", "Failed to show toast on main thread: ${e.message}\n${e.stackTraceToString()}")
+                    Logging.log("ToastTool", "Failed to show toast on main thread: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
                 }
             }
 
@@ -71,7 +71,7 @@ fun createToastTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("ToastTool", "Unexpected error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("ToastTool", "Unexpected error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)

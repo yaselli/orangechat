@@ -73,7 +73,7 @@ fun createMediaScannerTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("MediaScannerTool", "Error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("MediaScannerTool", "Error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)

@@ -13,6 +13,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -290,7 +292,7 @@ class ProactiveMessageReceiver : BroadcastReceiver() {
                             ProactiveMessageService.scheduleNext(context, proactiveSetting)
                         }
                     } catch (e: Exception) {
-                        Log.e(ProactiveMessageService.TAG, "Failed to reschedule after boot", e)
+                        Log.e(ProactiveMessageService.TAG, "Failed to reschedule after boot: ${e.javaClass.simpleName}")
                     }
                 }
             }
@@ -307,6 +309,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val chatService: ChatService by inject()
     private val extraInfoCollector: me.rerere.rikkahub.data.ai.transformers.ExtraInfoInjectionCollector by inject()
     private val proactiveMessageService = ProactiveMessageService()
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var latestStartId = 0
+    @Volatile private var serviceDestroyed = false
     private val activeRunCount = AtomicInteger(0)
     private val generationWakeLocks = ConcurrentHashMap<Int, PowerManager.WakeLock>()
 
@@ -341,6 +346,23 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         val triggerSource = intent?.getStringExtra(ProactiveMessageService.EXTRA_TRIGGER_SOURCE)
             ?: if (isForceTrigger) "external" else "service"
         val trace = ProactiveMessageTrace.start(triggerSource)
+        val notification = androidx.core.app.NotificationCompat.Builder(this, CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("主动消息处理中")
+            .setSmallIcon(me.rerere.rikkahub.R.drawable.small_icon)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
+            .setOngoing(true)
+            .build()
+        try {
+            startForeground(me.rerere.rikkahub.service.ServiceNotificationIds.PROACTIVE, notification)
+        } catch (e: RuntimeException) {
+            trace.finish("foreground_rejected", e)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        latestStartId = startId
+        trace.event("foreground", "startId=$startId")
+
         // 激进模式设备事件上下文（由 DeviceEventAiTriggerService 传入）
         val deviceEventContext = intent?.getStringExtra(EXTRA_DEVICE_EVENT_CONTEXT)
         val isFromDeviceEvent = deviceEventContext != null
@@ -353,24 +375,20 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         if (isForceTrigger) {
             Log.d(TAG, "Force trigger${if (isFromDeviceEvent) " from device event" else " from gateway poll"}, will skip min interval check")
         }
-        val notification = androidx.core.app.NotificationCompat.Builder(this, CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("主动消息处理中")
-            .setSmallIcon(me.rerere.rikkahub.R.drawable.small_icon)
-            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MIN)
-            .setSilent(true)
-            .setOngoing(true)
-            .build()
-        startForeground(20001, notification)
-        trace.event("foreground", "startId=$startId")
-
         // WorkManager 只负责把服务唤醒；真正耗时的是下面完整的流式生成、落库和通知流程。
         // WakeLock 必须由服务持有到该流程结束，否则华为/鸿蒙、红米/澎湃等 ROM 在息屏后
         // 可能暂停网络流：上游已经开始计费，但本地收不到完整正文。
+        try {
+            acquireGenerationWakeLock(startId)
+        } catch (e: RuntimeException) {
+            trace.finish("wake_lock_failed", e)
+            if (activeRunCount.get() == 0) stopSelf(startId)
+            return START_NOT_STICKY
+        }
         activeRunCount.incrementAndGet()
-        acquireGenerationWakeLock(startId)
         trace.event("wake_lock", "acquired=true")
 
-        CoroutineScope(Dispatchers.IO).launch {
+        serviceScope.launch {
             var conversationId: kotlin.uuid.Uuid? = null
             var nextDelayOverrideMinutes: Int? = null
             var outcome = "completed"
@@ -902,7 +920,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             startActivity(jumpIntent)
                             Log.d(TAG, "Force jump to conversation $conversationId")
                         } catch (e: Exception) {
-                            Log.e(TAG, "Force jump failed", e)
+                            Log.e(TAG, "Force jump failed: ${e.javaClass.simpleName}")
                         }
                     }
                 }
@@ -922,68 +940,64 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             } catch (e: Exception) {
                 outcome = "failed"
                 failure = e
-                Log.e(ProactiveMessageService.TAG, "Failed to trigger proactive message", e)
-                // 如果是 API 返回的 HTTP 错误, 把原始错误体也打出来便于定位
-                val cause = e.cause
-                if (cause != null) {
-                    Log.e(ProactiveMessageService.TAG, "Underlying cause: ${cause::class.simpleName}: ${cause.message}", cause)
-                }
+                Log.e(ProactiveMessageService.TAG, "Failed to trigger proactive message: ${e.javaClass.simpleName}")
             } finally {
                 // 确保无论成功/失败/取消都安排下一次，避免一次 API 错误或用户打断永久中断定时链。
                 // 激进模式设备事件触发时不需要安排下一次定时主动消息（由 DeviceEventAiTriggerService 自己驱动）。
                 // 用 NonCancellable 包裹：协程被取消后处于已取消状态，finally 里的挂起点
                 // (settingsFlow.first()) 会立刻抛 CancellationException，导致 scheduleNext 被跳过、
                 // 定时链断裂。NonCancellable 保证这段收尾逻辑跑完。
-                withContext(NonCancellable) {
-                    if ((outcome == "failed" || outcome == "cancelled") &&
-                        conversationId != null && runAssistantMessageIds.isNotEmpty()
-                    ) {
-                        runCatching {
-                            removeProactiveRunMessages(
-                                conversationId = conversationId!!,
-                                messageIds = runAssistantMessageIds,
-                                protectedMessageIds = protectedMessageIds,
-                                trace = trace,
-                                label = outcome,
-                            )
-                        }.onFailure { cleanupError ->
-                            Log.w(
-                                ProactiveMessageService.TAG,
-                                "Failed to clean exact proactive run messages",
-                                cleanupError,
-                            )
+                try {
+                    withContext(NonCancellable) {
+                        if ((outcome == "failed" || outcome == "cancelled") &&
+                            conversationId != null && runAssistantMessageIds.isNotEmpty()
+                        ) {
+                            runCatching {
+                                removeProactiveRunMessages(
+                                    conversationId = conversationId!!,
+                                    messageIds = runAssistantMessageIds,
+                                    protectedMessageIds = protectedMessageIds,
+                                    trace = trace,
+                                    label = outcome,
+                                )
+                            }.onFailure { cleanupError ->
+                                Log.w(
+                                    ProactiveMessageService.TAG,
+                                    "Failed to clean exact proactive run messages: ${cleanupError.javaClass.simpleName}",
+                                )
+                            }
+                        }
+                        val normalConversationOwnsTimer = !serviceDestroyed && outcome in setOf(
+                            "cancelled",
+                            "user_returned",
+                            "generation_busy",
+                            "user_not_idle",
+                        )
+                        if (!normalConversationOwnsTimer) {
+                            try {
+                                val currentSettings = settingsStore.settingsFlow.first()
+                                ProactiveMessageService.scheduleNext(
+                                    this@ProactiveMessageTriggerService,
+                                    currentSettings.proactiveMessageSetting,
+                                    nextDelayOverrideMinutes,
+                                )
+                            } catch (e: Exception) {
+                                Log.e(ProactiveMessageService.TAG, "Reschedule failed: ${e.javaClass.simpleName}")
+                            }
+                        } else {
+                            trace.event("reschedule", "skipped=true owner=normal_conversation")
                         }
                     }
-                    val normalConversationOwnsTimer = outcome in setOf(
-                        "cancelled",
-                        "user_returned",
-                        "generation_busy",
-                        "user_not_idle",
-                    )
-                    if (!normalConversationOwnsTimer) {
-                        try {
-                            val currentSettings = settingsStore.settingsFlow.first()
-                            ProactiveMessageService.scheduleNext(
-                                this@ProactiveMessageTriggerService,
-                                currentSettings.proactiveMessageSetting,
-                                nextDelayOverrideMinutes,
-                            )
-                        } catch (e: Exception) {
-                            Log.e(ProactiveMessageService.TAG, "Failed to reschedule after completion/error", e)
+                    conversationId?.let { chatService.removeConversationReference(it) }
+                } finally {
+                    withContext(NonCancellable + Dispatchers.Main.immediate) {
+                        releaseGenerationWakeLock(startId)
+                        trace.event("wake_lock", "acquired=false")
+                        trace.finish(outcome, failure)
+                        if (activeRunCount.updateAndGet { (it - 1).coerceAtLeast(0) } == 0) {
+                            stopSelfResult(latestStartId)
                         }
-                    } else {
-                        trace.event("reschedule", "skipped=true owner=normal_conversation")
                     }
-                }
-                conversationId?.let { chatService.removeConversationReference(it) }
-                releaseGenerationWakeLock(startId)
-                trace.event("wake_lock", "acquired=false")
-                trace.finish(outcome, failure)
-                val remainingRuns = activeRunCount.updateAndGet { count ->
-                    (count - 1).coerceAtLeast(0)
-                }
-                if (remainingRuns == 0) {
-                    stopSelf()
                 }
             }
         }
@@ -1012,6 +1026,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     }
 
     override fun onDestroy() {
+        serviceDestroyed = true
+        serviceScope.cancel()
         generationWakeLocks.keys.toList().forEach(::releaseGenerationWakeLock)
         activeRunCount.set(0)
         super.onDestroy()

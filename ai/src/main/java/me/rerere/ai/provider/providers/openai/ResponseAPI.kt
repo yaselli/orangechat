@@ -93,7 +93,7 @@ class ResponseAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
+        Log.d(TAG, "request prepared; payload omitted")
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
@@ -101,7 +101,7 @@ class ResponseAPI(
         }
 
         val bodyStr = response.body?.string() ?: ""
-        Log.i(TAG, "generateText: $bodyStr")
+        Log.d(TAG, "provider event; payload omitted")
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val output = parseResponseOutput(bodyJson)
 
@@ -130,7 +130,7 @@ class ResponseAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
+        Log.d(TAG, "request prepared; payload omitted")
 
         val listener = object : EventSourceListener() {
             override fun onEvent(
@@ -143,22 +143,13 @@ class ResponseAPI(
                     close()
                     return
                 }
-                Log.d(TAG, "onEvent: $id/$type $data")
+                Log.d(TAG, "stream event received; payload omitted")
                 val chunkJson = try {
                     json.parseToJsonElement(data).jsonObject
                 } catch (e: Throwable) {
                     // 上游真的发了坏数据时不要让整个流直接崩掉裸抛 Unexpected EOF。
-                    // 记录长度和前后片段便于定位, 但避免把整个超长内容打进日志。
-                    val preview = if (data.length > 200) {
-                        "${data.take(100)}...(${data.length} chars)...${data.takeLast(100)}"
-                    } else {
-                        data
-                    }
-                    Log.w(
-                        TAG,
-                        "onEvent: failed to parse SSE data (len=${data.length}, preview=$preview)",
-                        e
-                    )
+                    // Only record size: parser messages and previews can expose reply/tool content.
+                    Log.w(TAG, "onEvent: failed to parse SSE data (len=${data.length})")
                     close(
                         Exception("Failed to parse stream data: ${e.message} (data length=${data.length})", e)
                     )
@@ -176,20 +167,20 @@ class ResponseAPI(
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 var exception = t
 
-                t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
+                Log.w(TAG, "Exception details omitted from diagnostics")
+                Log.d(TAG, "provider event; payload omitted")
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        println(bodyElement)
+                        Log.d(TAG, "Provider payload omitted")
                         exception = bodyElement.parseErrorDetail()
-                        Log.i(TAG, "onFailure: $exception")
+                        Log.d(TAG, "provider event; payload omitted")
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
+                    Log.d(TAG, "provider event; payload omitted")
+                    Log.w(TAG, "Exception details omitted from diagnostics")
                 } finally {
                     close(exception)
                 }
@@ -468,7 +459,7 @@ class ResponseAPI(
                                         put("type", if (role == MessageRole.USER) "input_image" else "output_image")
                                         put("image_url", encodedImage.base64)
                                     }.onFailure {
-                                        it.printStackTrace()
+                                        Log.w(TAG, "Exception details omitted from diagnostics")
                                         put("type", "input_text")
                                         put("text", "Error: Failed to encode image to base64")
                                     }
@@ -712,7 +703,7 @@ class ResponseAPI(
     }
 
     private fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
-        println(jsonObject)
+        Log.d(TAG, "Provider payload omitted")
         val outputs = jsonObject["output"]?.jsonArray ?: error("output not found")
         val parts = arrayListOf<UIMessagePart>()
 

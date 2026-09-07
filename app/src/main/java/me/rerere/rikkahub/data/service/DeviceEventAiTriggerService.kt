@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -54,7 +54,7 @@ private const val TAG = "DeviceEventAiTrigger"
 class DeviceEventAiTriggerService : Service() {
 
     companion object {
-        const val NOTIFICATION_ID = 20005
+        const val NOTIFICATION_ID = me.rerere.rikkahub.service.ServiceNotificationIds.DEVICE_EVENT
         private const val POLL_INTERVAL_MS = 3000L
         // 默认防抖延迟（毫秒），仅在读取设置失败/值非法时兜底使用
         private const val DEFAULT_DEBOUNCE_DELAY_MS = 30_000L
@@ -162,7 +162,9 @@ class DeviceEventAiTriggerService : Service() {
         try {
             startForegroundCompat()
         } catch (e: Exception) {
-            Log.e(TAG, "onStartCommand: startForeground failed", e)
+            Log.e(TAG, "Foreground start rejected: ${e.javaClass.simpleName}")
+            stopSelf(startId)
+            return START_NOT_STICKY
         }
         return START_STICKY
     }

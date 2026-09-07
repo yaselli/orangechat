@@ -98,7 +98,7 @@ fun createWifiInfoTool(context: Context): Tool = Tool(
 
             listOf(UIMessagePart.Text(result.toString()))
         } catch (e: SecurityException) {
-            Logging.log("WifiInfoTool", "SecurityException: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("WifiInfoTool", "SecurityException: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)
@@ -107,7 +107,7 @@ fun createWifiInfoTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("WifiInfoTool", "Unexpected error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("WifiInfoTool", "Unexpected error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject { put("success", false); put("error", e.message ?: "Unknown error") }.toString()
             ))

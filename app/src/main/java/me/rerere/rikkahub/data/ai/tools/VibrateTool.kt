@@ -133,7 +133,7 @@ fun createVibrateTool(context: Context): Tool = Tool(
                 ))
             }
         } catch (e: Exception) {
-            Logging.log("VibrateTool", "Error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("VibrateTool", "Error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)

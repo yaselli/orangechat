@@ -273,7 +273,7 @@ function fetch(url, options) {
                 try {
                     nativeFetch(url, optionsJson)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Native fetch error: url=$url", e)
+                    Log.d(TAG, "Plugin operation; payload omitted")
                     """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
                 }
             })
@@ -285,7 +285,7 @@ function fetch(url, options) {
                 try {
                     nativeMemoryBankBridge(action, paramsJson)
                 } catch (e: Exception) {
-                    Log.e(TAG, "MemoryBank bridge error: action=$action", e)
+                    Log.e(TAG, "MemoryBank bridge error: action=$action")
                     """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
                 }
             })
@@ -297,7 +297,7 @@ function fetch(url, options) {
                 try {
                     nativeMusicPlayerBridge(action, paramsJson)
                 } catch (e: Exception) {
-                    Log.e(TAG, "MusicPlayer bridge error: action=$action", e)
+                    Log.e(TAG, "MusicPlayer bridge error: action=$action")
                     """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
                 }
             })
@@ -309,7 +309,7 @@ function fetch(url, options) {
                 try {
                     nativeDataStoreBridge(action, paramsJson)
                 } catch (e: Exception) {
-                    Log.e(TAG, "DataStore bridge error: action=$action, params=$paramsJson", e)
+                    Log.d(TAG, "Plugin operation; payload omitted")
                     """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
                 }
             })
@@ -323,7 +323,7 @@ function fetch(url, options) {
      * 使用 OkHttp 执行同步 HTTP 请求
      */
     private fun nativeFetch(url: String, optionsJson: String): String {
-        Log.d(TAG, "nativeFetch: $url")
+        Log.d(TAG, "Plugin operation; payload omitted")
         return try {
             // 域名白名单检查
             if (allowedHosts.isNotEmpty() && !allowedHosts.contains("*")) {
@@ -392,7 +392,7 @@ function fetch(url, options) {
             Log.d(TAG, "nativeFetch response: status=$statusCode, bodyLength=${responseBody.length}")
             result
         } catch (e: Exception) {
-            Log.e(TAG, "nativeFetch failed: url=$url", e)
+            Log.d(TAG, "Plugin operation; payload omitted")
             """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
         }
     }
@@ -440,7 +440,7 @@ function fetch(url, options) {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "MusicPlayer bridge action='$action' failed", e)
+            Log.e(TAG, "MusicPlayer bridge action='$action' failed")
             """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
         }
     }
@@ -492,7 +492,7 @@ function fetch(url, options) {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "DataStore bridge action='$action' failed, params=$paramsJson", e)
+            Log.d(TAG, "Plugin operation; payload omitted")
             """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
         }
     }
@@ -570,11 +570,11 @@ function fetch(url, options) {
                     }
                 }
                 else -> {
-                    Log.w(TAG, "Unexpected keys result type: ${keysResult?.javaClass?.simpleName}, value: $keysResult")
+                    Log.d(TAG, "Plugin operation; payload omitted")
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get Object.keys(exports)", e)
+            Log.e(TAG, "Failed to get Object.keys(exports)")
         }
  
         for (key in exportedFunctionNames.toSet()) {
@@ -582,7 +582,7 @@ function fetch(url, options) {
                 val typeCheck = jsContext.evaluate("typeof exports['$key']")?.toString()
                 Log.d(TAG, "exports['$key'] type: $typeCheck")
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to check type of exports['$key']: ${e.message}")
+                Log.w(TAG, "Failed to check type of exports['$key']: ${e.javaClass.simpleName}")
             }
         }
  
@@ -600,7 +600,7 @@ function fetch(url, options) {
             throw IllegalArgumentException("Function '$name' not found in exports. Available: $exportedFunctionNames")
         }
  
-        Log.d(TAG, "Calling function: $name with params: $params")
+        Log.d(TAG, "Calling plugin function; parameters omitted")
  
         return try {
             val paramsJson = json.encodeToString(JsonElement.serializer(), params)
@@ -626,7 +626,7 @@ function fetch(url, options) {
 """.trimIndent()
  
             val result = jsContext.evaluate(callCode)
-            Log.d(TAG, "Function $name raw result: $result")
+            Log.d(TAG, "Plugin function completed; result omitted")
  
             when (result) {
                 is String -> {
@@ -644,7 +644,7 @@ function fetch(url, options) {
                 else -> JsonPrimitive(result.toString())
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to call function '$name'", e)
+            Log.e(TAG, "Failed to call function '$name'")
             buildJsonObject {
                 put("success", JsonPrimitive(false))
                 put("error", JsonPrimitive(e.message ?: "Unknown error"))
@@ -718,7 +718,7 @@ function fetch(url, options) {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "MemoryBank bridge action='$action' failed", e)
+            Log.e(TAG, "MemoryBank bridge action='$action' failed")
             """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
         }
     }

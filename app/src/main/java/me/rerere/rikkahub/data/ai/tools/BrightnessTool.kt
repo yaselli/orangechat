@@ -34,10 +34,10 @@ fun createGetBrightnessTool(context: Context): Tool = Tool(
             val brightness = try {
                 Settings.System.getInt(cr, Settings.System.SCREEN_BRIGHTNESS)
             } catch (e: SettingNotFoundException) {
-                Logging.log("BrightnessTool", "SCREEN_BRIGHTNESS not found, using default 128: ${e.message}")
+                Logging.log("BrightnessTool", "SCREEN_BRIGHTNESS not found, using default 128: ${e.javaClass.simpleName}")
                 128
             } catch (e: Exception) {
-                Logging.log("BrightnessTool", "Error reading brightness, using default 128: ${e.message}")
+                Logging.log("BrightnessTool", "Error reading brightness, using default 128: ${e.javaClass.simpleName}")
                 128
             }
 
@@ -45,7 +45,7 @@ fun createGetBrightnessTool(context: Context): Tool = Tool(
                 Settings.System.getInt(cr, Settings.System.SCREEN_BRIGHTNESS_MODE) ==
                     Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
             } catch (e: Exception) {
-                Logging.log("BrightnessTool", "Error reading brightness mode: ${e.message}")
+                Logging.log("BrightnessTool", "Error reading brightness mode: ${e.javaClass.simpleName}")
                 false
             }
 
@@ -59,7 +59,7 @@ fun createGetBrightnessTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("BrightnessTool", "Unexpected error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("BrightnessTool", "Unexpected error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)
@@ -120,7 +120,7 @@ fun createSetBrightnessTool(context: Context): Tool = Tool(
                     Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
                 )
             } catch (e: Exception) {
-                Logging.log("BrightnessTool", "Failed to set manual brightness mode: ${e.message}")
+                Logging.log("BrightnessTool", "Failed to set manual brightness mode: ${e.javaClass.simpleName}")
             }
 
             Settings.System.putInt(cr, Settings.System.SCREEN_BRIGHTNESS, clampedValue)
@@ -134,7 +134,7 @@ fun createSetBrightnessTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: SecurityException) {
-            Logging.log("BrightnessTool", "SecurityException: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("BrightnessTool", "SecurityException: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)
@@ -143,7 +143,7 @@ fun createSetBrightnessTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("BrightnessTool", "Unexpected error: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("BrightnessTool", "Unexpected error: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject {
                     put("success", false)

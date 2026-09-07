@@ -79,7 +79,7 @@ fun createGetVolumeTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("VolumeTool", "Error reading volume for $streamName: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("VolumeTool", "Error reading volume for $streamName: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject { put("success", false); put("error", e.message ?: "Unknown error") }.toString()
             ))
@@ -149,7 +149,7 @@ fun createSetVolumeTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: SecurityException) {
-            Logging.log("VolumeTool", "SecurityException setting $streamName volume: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("VolumeTool", "SecurityException setting $streamName volume: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             val needsDnd = streamName == "ring" || streamName == "notification"
             listOf(UIMessagePart.Text(
                 buildJsonObject {
@@ -162,7 +162,7 @@ fun createSetVolumeTool(context: Context): Tool = Tool(
                 }.toString()
             ))
         } catch (e: Exception) {
-            Logging.log("VolumeTool", "Error setting volume for $streamName: ${e.message}\n${e.stackTraceToString()}")
+            Logging.log("VolumeTool", "Error setting volume for $streamName: ${e.javaClass.simpleName}\n${e.javaClass.simpleName}")
             listOf(UIMessagePart.Text(
                 buildJsonObject { put("success", false); put("error", e.message ?: "Unknown error") }.toString()
             ))
@@ -175,7 +175,7 @@ fun hasNotificationPolicyAccess(context: Context): Boolean {
         val nm = context.getSystemService(NotificationManager::class.java)
         nm?.isNotificationPolicyAccessGranted == true
     } catch (e: Exception) {
-        Logging.log("VolumeTool", "Error checking notification policy access: ${e.message}")
+        Logging.log("VolumeTool", "Error checking notification policy access: ${e.javaClass.simpleName}")
         false
     }
 }

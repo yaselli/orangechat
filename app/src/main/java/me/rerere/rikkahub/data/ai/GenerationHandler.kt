@@ -301,11 +301,11 @@ class GenerationHandler(
                             }.getOrElse {
                                 error("Invalid tool arguments JSON for ${tool.toolName}: ${it.message}")
                             }
-                            Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
+                            Log.i(TAG, "generateText: executing tool ${toolDef.name}; arguments omitted")
                             val result = toolDef.execute(args)
                             executedTools += tool.copy(output = result)
                         }.onFailure {
-                            it.printStackTrace()
+                            Log.w(TAG, "Operation failed: ${it.javaClass.simpleName}")
                             executedTools += tool.copy(
                                 output = listOf(
                                     UIMessagePart.Text(
@@ -480,9 +480,8 @@ class GenerationHandler(
         if (stream) {
             aiLoggingManager.addLog(
                 AILogging.Generation(
-                    params = params,
-                    messages = messages,
-                    providerSetting = provider,
+                    messageCount = messages.size,
+                    toolCount = params.tools.size,
                     stream = true
                 )
             )
@@ -506,9 +505,8 @@ class GenerationHandler(
         } else {
             aiLoggingManager.addLog(
                 AILogging.Generation(
-                    params = params,
-                    messages = messages,
-                    providerSetting = provider,
+                    messageCount = messages.size,
+                    toolCount = params.tools.size,
                     stream = false
                 )
             )
