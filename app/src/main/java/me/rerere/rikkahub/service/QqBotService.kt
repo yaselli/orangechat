@@ -135,7 +135,7 @@ class QqBotService : Service(), org.koin.core.component.KoinComponent {
             // 3. 建立 WebSocket
             alive = true
             val request = Request.Builder().url(wssUrl).build()
-            webSocket = okHttpClient.newWebSocket(request, QqWsListener())
+            webSocket = okHttpClient.newBuilder().followRedirects(false).build().newWebSocket(request, QqWsListener())
         } catch (e: Exception) {
             Log.e(TAG, "connect failed: ${e.javaClass.simpleName}")
             alive = false

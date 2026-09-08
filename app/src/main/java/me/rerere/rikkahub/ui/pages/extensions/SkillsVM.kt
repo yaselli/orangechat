@@ -18,8 +18,6 @@ import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import java.util.LinkedHashMap
 import org.json.JSONArray
-import java.net.HttpURLConnection
-import java.net.URL
 
 class SkillsVM(
     private val skillManager: SkillManager,
@@ -167,15 +165,11 @@ class SkillsVM(
     }
 
     private fun downloadText(url: String): String? {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.connectTimeout = 10_000
-        connection.readTimeout = 30_000
-        connection.setRequestProperty("Accept", "application/vnd.github+json")
-        return try {
-            if (connection.responseCode == 200) connection.inputStream.bufferedReader().readText()
-            else null
-        } finally {
-            connection.disconnect()
+        return me.rerere.common.network.HttpAccess.get(
+            url, connectTimeoutMillis = 10_000, readTimeoutMillis = 30_000,
+            headers = mapOf("Accept" to "application/vnd.github+json"),
+        ).use { response ->
+            if (response.code == 200) response.body.string() else null
         }
     }
 }

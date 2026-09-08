@@ -27,7 +27,7 @@ class AmapService(
     companion object {
         private const val BASE_URL = "https://restapi.amap.com/v3"
         
-        private val defaultClient = OkHttpClient.Builder()
+        private val defaultClient = OkHttpClient.Builder().apply { me.rerere.common.network.HttpAccess.configure(this) }
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
             .build()

@@ -114,7 +114,7 @@ internal class MiMoSseProcessor(
 }
 
 class MiMoTTSProvider : TTSProvider<TTSProviderSetting.MiMo> {
-    private val httpClient = OkHttpClient.Builder()
+    private val httpClient = OkHttpClient.Builder().apply { me.rerere.common.network.HttpAccess.configure(this) }
         .readTimeout(120, TimeUnit.SECONDS)
         .build()
 

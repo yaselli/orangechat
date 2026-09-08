@@ -47,6 +47,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":common"))
     testImplementation(libs.junit)
     implementation(project(":ai"))
     implementation(libs.okhttp)

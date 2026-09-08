@@ -205,7 +205,7 @@ val dataSourceModule = module {
             maxRequestsPerHost = 32
         }
 
-        OkHttpClient.Builder()
+        OkHttpClient.Builder().apply { me.rerere.common.network.HttpAccess.configure(this) }
             .dispatcher(dispatcher)
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.MINUTES)
@@ -213,7 +213,7 @@ val dataSourceModule = module {
             // WebSocket 保活: 每 10s 发 PING 帧, 防止 ASR Realtime 连接被空闲断开
             // (pingInterval 只对 WebSocket/HTTP2 连接生效, 不影响普通短连接 HTTP 请求)
             .pingInterval(10, TimeUnit.SECONDS)
-            .followSslRedirects(true)
+            .followSslRedirects(false)
             .followRedirects(true)
             .retryOnConnectionFailure(true)
             .addInterceptor { chain ->
@@ -271,10 +271,11 @@ val dataSourceModule = module {
         HttpClient(OkHttp) {
             engine {
                 config {
+                    me.rerere.common.network.HttpAccess.configure(this)
                     connectTimeout(20, TimeUnit.SECONDS)
                     readTimeout(10, TimeUnit.MINUTES)
                     writeTimeout(120, TimeUnit.SECONDS)
-                    followSslRedirects(true)
+                    followSslRedirects(false)
                     followRedirects(true)
                     retryOnConnectionFailure(true)
                 }

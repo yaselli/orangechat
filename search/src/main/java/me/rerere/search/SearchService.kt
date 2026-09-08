@@ -72,10 +72,10 @@ interface SearchService<T : SearchServiceOptions> {
         }
 
         @Volatile
-        internal var httpClient: OkHttpClient = OkHttpClient.Builder()
+        internal var httpClient: OkHttpClient = OkHttpClient.Builder().apply { me.rerere.common.network.HttpAccess.configure(this) }
             .retryOnConnectionFailure(true)
             .followRedirects(true)
-            .followSslRedirects(true)
+            .followSslRedirects(false)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
 

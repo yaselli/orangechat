@@ -11,8 +11,6 @@ import java.io.EOFException
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.nio.file.Files
 import java.util.Locale
 import java.util.zip.GZIPInputStream
@@ -57,16 +55,16 @@ class RootfsInstaller(
         target: File,
         onProgress: (RootfsInstallProgress) -> Unit,
     ) {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.connectTimeout = CONNECT_TIMEOUT_MS
-        connection.readTimeout = READ_TIMEOUT_MS
-        connection.instanceFollowRedirects = true
-        try {
-            val code = connection.responseCode
+        me.rerere.common.network.HttpAccess.get(
+            url,
+            connectTimeoutMillis = CONNECT_TIMEOUT_MS.toLong(),
+            readTimeoutMillis = READ_TIMEOUT_MS.toLong(),
+        ).use { response ->
+            val code = response.code
             require(code in 200..299) { "Rootfs download failed: HTTP $code" }
-            val totalBytes = connection.contentLengthLong.takeIf { it > 0 }
+            val totalBytes = response.body.contentLength().takeIf { it > 0 }
             target.parentFile?.mkdirs()
-            connection.inputStream.use { input ->
+            response.body.byteStream().use { input ->
                 target.outputStream().use { output ->
                     val buffer = ByteArray(BUFFER_SIZE)
                     var bytesRead = 0L
@@ -99,8 +97,6 @@ class RootfsInstaller(
                     }
                 }
             }
-        } finally {
-            connection.disconnect()
         }
     }
 

@@ -113,7 +113,7 @@ class VolcengineASRController(
             .addHeader("X-Api-Sequence", "-1")
             .build()
 
-        webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
+        webSocket = httpClient.newBuilder().followRedirects(false).build().newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 val payload = buildFullClientRequestPayload()
                 val compressed = gzipCompress(payload)

@@ -188,6 +188,10 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
+            item("httpConnections") {
+                HttpConnectionsCard()
+            }
+
             item("generalSettings") {
                 var colorMode by rememberColorMode()
                 val selectedColorModeText = when (colorMode) {

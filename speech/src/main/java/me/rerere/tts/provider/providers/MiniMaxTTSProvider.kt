@@ -42,7 +42,7 @@ private data class MiniMaxResponse(
 )
 
 class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
-    private val httpClient = OkHttpClient.Builder()
+    private val httpClient = OkHttpClient.Builder().apply { me.rerere.common.network.HttpAccess.configure(this) }
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 

@@ -456,19 +456,13 @@ class LocalTools(
                 val maxLen = it.jsonObject["max_length"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 10000
                 val raw = it.jsonObject["raw"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
                 try {
-                    val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                    connection.requestMethod = "GET"
-                    connection.connectTimeout = 15000
-                    connection.readTimeout = 15000
-                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; AI Assistant)")
-                    connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml,text/plain,application/json,*/*")
-                    connection.instanceFollowRedirects = true
-                    val code = connection.responseCode
-                    val body = if (code in 200..299) {
-                        connection.inputStream.bufferedReader().use { it.readText() }
-                    } else {
-                        connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $code"
-                    }
+                    val (code, body) = me.rerere.common.network.HttpAccess.get(
+                        url,
+                        headers = mapOf(
+                            "User-Agent" to "Mozilla/5.0 (Android; AI Assistant)",
+                            "Accept" to "text/html,application/xhtml+xml,application/xml,text/plain,application/json,*/*",
+                        ),
+                    ).use { response -> response.code to response.body.string() }
                     val content = if (raw || !body.contains("<")) body else HtmlToText.convert(body)
                     val truncated = if (content.length > maxLen) content.take(maxLen) + "...[truncated]" else content
                     listOf(UIMessagePart.Text(buildJsonObject {

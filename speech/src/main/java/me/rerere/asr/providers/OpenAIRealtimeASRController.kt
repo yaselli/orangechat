@@ -111,7 +111,7 @@ class OpenAIRealtimeASRController(
             .addHeader("Authorization", "Bearer ${provider.apiKey}")
             .build()
 
-        webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
+        webSocket = httpClient.newBuilder().followRedirects(false).build().newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send(provider.sessionUpdateEvent().toString())
                 // 连上了, 重置重连计数

@@ -80,11 +80,11 @@ class McpManager(
     private val filesManager: FilesManager,
     private val appEventBus: AppEventBus,
 ) {
-    private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+    private val okHttpClient: OkHttpClient = OkHttpClient.Builder().apply { me.rerere.common.network.HttpAccess.configure(this) }
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.MINUTES)
         .writeTimeout(120, TimeUnit.SECONDS)
-        .followSslRedirects(true)
+        .followSslRedirects(false)
         .followRedirects(true)
         .build()
 

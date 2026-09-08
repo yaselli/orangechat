@@ -10,7 +10,6 @@ import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.BitmapFactory
 import java.io.File
-import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -218,25 +217,19 @@ private suspend fun resolveImageToFile(context: Context, imageUrl: String, files
         // Remote HTTP/HTTPS image - download to temp file
         imageUrl.startsWith("http://") || imageUrl.startsWith("https://") -> {
             runCatching {
-                val url = URL(imageUrl)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.connectTimeout = 15000
-                connection.readTimeout = 15000
-                connection.connect()
-
-                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                    val tempDir = context.filesDir.resolve("images")
-                    if (!tempDir.exists()) tempDir.mkdirs()
-                    val tempFile = File(tempDir, "wallpaper_${System.currentTimeMillis()}.png")
-                    connection.inputStream.use { input ->
-                        tempFile.outputStream().use { output ->
-                            input.copyTo(output)
+                me.rerere.common.network.HttpAccess.get(imageUrl).use { response ->
+                    if (response.isSuccessful) {
+                        val tempDir = context.filesDir.resolve("images")
+                        if (!tempDir.exists()) tempDir.mkdirs()
+                        val tempFile = File(tempDir, "wallpaper_${System.currentTimeMillis()}.png")
+                        response.body.byteStream().use { input ->
+                            tempFile.outputStream().use { output -> input.copyTo(output) }
                         }
+                        tempFile
+                    } else {
+                        Logging.log("SetWallpaperTool", "Image download failed, code=${response.code}")
+                        null
                     }
-                    tempFile
-                } else {
-                    Logging.log("SetWallpaperTool", "Failed to download image from [omitted], response code: ${connection.responseCode}")
-                    null
                 }
             }.getOrNull()
         }

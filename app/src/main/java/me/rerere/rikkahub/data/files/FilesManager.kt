@@ -13,8 +13,6 @@ import android.util.Log
 import androidx.core.net.toFile
 import androidx.core.net.toUri
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -310,18 +308,13 @@ class FilesManager(
 
             image.startsWith("http") -> {
                 runCatching {
-                    val url = URL(image)
-                    val connection = url.openConnection() as HttpURLConnection
-                    connection.connect()
-
-                    if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                        val bitmap = BitmapFactory.decodeStream(connection.inputStream)
-                        activityContext.exportImage(activity, bitmap)
-                    } else {
-                        Log.e(
-                            TAG,
-                            "saveMessageImage: Failed to download image from $image, response code: ${connection.responseCode}"
-                        )
+                    me.rerere.common.network.HttpAccess.get(image).use { response ->
+                        if (response.isSuccessful) {
+                            val bitmap = BitmapFactory.decodeStream(response.body.byteStream())
+                            activityContext.exportImage(activity, bitmap)
+                        } else {
+                            Log.e(TAG, "saveMessageImage: download failed, code=${response.code}")
+                        }
                     }
                 }.getOrNull()
             }
