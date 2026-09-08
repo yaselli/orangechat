@@ -122,6 +122,7 @@ fun ChatExportSheet(
     conversation: Conversation,
     selectedMessages: List<UIMessage>
 ) {
+    val exportMessages = remember(selectedMessages) { me.rerere.rikkahub.data.export.prepareChatExportMessages(selectedMessages) }
     val context = LocalContext.current
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
@@ -147,7 +148,7 @@ fun ChatExportSheet(
                     stringResource(id = R.string.chat_page_export_success, "Markdown")
                 OutlinedCard(
                     onClick = {
-                        exportToMarkdown(context, conversation, selectedMessages)
+                        exportToMarkdown(context, conversation, exportMessages)
                         toaster.show(
                             markdownSuccessMessage,
                             type = ToastType.Success
@@ -216,7 +217,7 @@ fun ChatExportSheet(
                                                 scope = scope,
                                                 density = density,
                                                 conversation = conversation,
-                                                messages = selectedMessages,
+                                                messages = exportMessages,
                                                 settings = settings,
                                                 options = imageExportOptions
                                             )
