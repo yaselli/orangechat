@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="about_page_upstream_name">RikkaHub</string>
+  <string name="about_page_upstream_desc">https://github.com/rikkahub/rikkahub</string>
+  <string name="theme_name_claude">Claude</string>
+  <string name="keep_alive_notification_title">西瓜瓣</string>
+  <string name="about_page_derivation_notice">本專案【西瓜瓣】基於 RikkaHub 二次開發而成。西瓜瓣是獨立專案，其功能與問題由本專案自行維護。請不要因為本專案去打擾 RikkaHub 原作者以及各位開源貢獻者。感謝他們的付出與開源精神。</string>
+  <string name="keep_alive_notification_content">保持連線中</string>
+  <string name="keep_alive_channel_name">背景保活</string>
+  <string name="keep_alive_channel_desc">用於維持應用程式在背景執行，確保定時訊息等功能穩定運作</string>
+  <string name="setting_system_tools_keep_alive">背景保活</string>
+  <string name="setting_system_tools_keep_alive_desc">開啟後顯示前景常駐通知，降低被系統終止的機率，保障定時訊息正常觸發</string>
+</resources>

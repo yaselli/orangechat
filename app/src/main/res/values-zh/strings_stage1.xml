@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="about_page_upstream_name">RikkaHub</string>
+  <string name="about_page_upstream_desc">https://github.com/rikkahub/rikkahub</string>
+  <string name="keep_alive_notification_title">西瓜瓣</string>
+  <string name="about_page_derivation_notice">本项目【西瓜瓣】基于 RikkaHub 二次开发而成。西瓜瓣是独立项目，其功能与问题由本项目自行维护。请不要因为本项目去打扰 RikkaHub 原作者以及各位开源贡献者。感谢他们的付出与开源精神。</string>
+  <string name="keep_alive_notification_content">保持连接中</string>
+  <string name="keep_alive_channel_name">后台保活</string>
+  <string name="keep_alive_channel_desc">用于维持应用后台运行，确保定时消息等功能稳定工作</string>
+  <string name="setting_system_tools_keep_alive">后台保活</string>
+  <string name="setting_system_tools_keep_alive_desc">开启后前台常驻通知，降低被系统杀死概率，保障定时消息正常触发</string>
+</resources>
