@@ -27,6 +27,14 @@ val appModule = module {
     single<Json> { JsonInstant }
 
     single {
+        me.rerere.rikkahub.data.ai.transformers.ExtraInfoInjectionCollector(
+            context = get(),
+            memoryBankService = get(),
+            okHttpClient = get(),
+        )
+    }
+
+    single {
         Highlighter(get())
     }
 
