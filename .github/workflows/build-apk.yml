@@ -55,7 +55,21 @@ jobs:
           keytool -list -keystore app/debug.keystore -storepass android -alias androiddebugkey
 
       - name: Unit tests
-        run: ./gradlew testDebugUnitTest --continue
+        shell: bash
+        run: |
+          mkdir -p verification-logs
+          ./gradlew testDebugUnitTest --continue 2>&1 | tee verification-logs/unit-tests.txt
+
+      - name: Upload unit test diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrangeChat-unit-test-diagnostics
+          path: |
+            verification-logs/unit-tests.txt
+            **/build/reports/tests/**
+            **/build/test-results/**
+          if-no-files-found: warn
 
       - name: Android Lint
         if: ${{ !cancelled() }}

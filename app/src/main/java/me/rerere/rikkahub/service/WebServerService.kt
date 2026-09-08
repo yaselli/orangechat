@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -43,7 +44,12 @@ class WebServerService : Service() {
     private val webServerManager: WebServerManager by inject()
     private val settingsStore: SettingsStore by inject()
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val serviceScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main + CoroutineExceptionHandler { _, error ->
+            Log.e(TAG, "Web service task failed: ${error.javaClass.simpleName}")
+            stopSelf()
+        }
+    )
     private var stateObserverJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -67,6 +73,9 @@ class WebServerService : Service() {
             }
 
             ACTION_STOP -> {
+                // Let the settings write finish before destruction cancels this scope.
+                stateObserverJob?.cancel()
+                stateObserverJob = null
                 webServerManager.stop()
                 serviceScope.launch {
                     try {
