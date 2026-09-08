@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.components.richtext
 
+import androidx.compose.ui.platform.LocalResources
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.webkit.JavascriptInterface
@@ -72,6 +73,7 @@ fun Mermaid(
     val darkMode = LocalDarkMode.current
     val density = LocalDensity.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val activity = LocalActivity.current
     val toaster = LocalToaster.current
 
@@ -105,13 +107,13 @@ fun Mermaid(
                         }
                     }
                     toaster.show(
-                        context.getString(R.string.mermaid_export_success),
+                        resources.getString(R.string.mermaid_export_success),
                         type = ToastType.Success
                     )
                 }.onFailure {
                     it.printStackTrace()
                     toaster.show(
-                        context.getString(R.string.mermaid_export_failed),
+                        resources.getString(R.string.mermaid_export_failed),
                         type = ToastType.Error
                     )
                 }

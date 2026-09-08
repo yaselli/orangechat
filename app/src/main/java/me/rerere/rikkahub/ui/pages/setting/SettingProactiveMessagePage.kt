@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.pages.setting
 
+import androidx.compose.ui.platform.LocalConfiguration
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -116,7 +117,7 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                                     val remaining = triggerTime - currentTime
                                     val remainMinutes = remaining / 60_000
                                     val remainSeconds = (remaining % 60_000) / 1000
-                                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", LocalConfiguration.current.locales[0])
                                     Text("🕐 ${sdf.format(java.util.Date(triggerTime))}（剩余 ${remainMinutes}分${remainSeconds}秒）")
                                 } else {
                                     Text("等待调度中...")

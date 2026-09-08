@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.pages.imggen
 
+import androidx.compose.ui.platform.LocalResources
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -523,6 +524,7 @@ private fun ImageGalleryScreen(
 ) {
     val generatedImages = vm.generatedImages.collectAsLazyPagingItems()
     val context = LocalContext.current
+    val resources = LocalResources.current
     val filesManager: FilesManager = koinInject()
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
@@ -632,12 +634,12 @@ private fun ImageGalleryScreen(
                                                     try {
                                                         filesManager.saveMessageImage(context, "file://${it.filePath}")
                                                         toaster.show(
-                                                            message = context.getString(R.string.imggen_page_image_saved_success),
+                                                            message = resources.getString(R.string.imggen_page_image_saved_success),
                                                             type = ToastType.Success
                                                         )
                                                     } catch (e: Exception) {
                                                         toaster.show(
-                                                            message = context.getString(
+                                                            message = resources.getString(
                                                                 R.string.imggen_page_save_failed,
                                                                 e.message
                                                             ),

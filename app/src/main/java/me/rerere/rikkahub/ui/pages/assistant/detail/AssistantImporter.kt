@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import androidx.compose.ui.platform.LocalResources
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
@@ -70,6 +71,7 @@ private fun SillyTavernImporter(
     onImport: (Assistant) -> Unit
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val filesManager: FilesManager = koinInject()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -92,7 +94,7 @@ private fun SillyTavernImporter(
                         )
                     }.onFailure { exception ->
                         exception.printStackTrace()
-                        toaster.show(exception.message ?: context.getString(R.string.assistant_importer_import_failed))
+                        toaster.show(exception.message ?: resources.getString(R.string.assistant_importer_import_failed))
                     }
                 } finally {
                     isLoading = false
@@ -118,7 +120,7 @@ private fun SillyTavernImporter(
                         )
                     }.onFailure { exception ->
                         exception.printStackTrace()
-                        toaster.show(exception.message ?: context.getString(R.string.assistant_importer_import_failed))
+                        toaster.show(exception.message ?: resources.getString(R.string.assistant_importer_import_failed))
                     }
                 } finally {
                     isLoading = false

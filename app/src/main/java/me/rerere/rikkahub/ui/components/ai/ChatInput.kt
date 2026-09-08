@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.components.ai
 
+import androidx.compose.ui.platform.LocalResources
 import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.BackHandler
@@ -202,6 +203,7 @@ fun ChatInput(
     }
 
     val context = LocalContext.current
+    val resources = LocalResources.current
     val filesManager: FilesManager = koinInject()
     val asr = LocalASRState.current
     val asrState by asr.state.collectAsState()
@@ -458,7 +460,7 @@ fun ChatInput(
                             allDocuments.add(UIMessagePart.Document(url = localUri.toString(), fileName = fileName, mime = mime))
                         } else {
                             toaster.show(
-                                context.getString(R.string.chat_input_unsupported_file_type, fileName),
+                                resources.getString(R.string.chat_input_unsupported_file_type, fileName),
                                 type = ToastType.Error
                             )
                         }

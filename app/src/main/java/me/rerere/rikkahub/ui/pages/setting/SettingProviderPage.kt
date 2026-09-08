@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.pages.setting
 
+import androidx.compose.ui.platform.LocalConfiguration
 import android.net.Uri
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Camera01
@@ -128,7 +129,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
-                    if(Locale.getDefault().language == "zh") {
+                    if(LocalConfiguration.current.locales[0].language == "zh") {
                         IconButton(
                             onClick = {
                                 val aihubmixIndex = filteredProviders.indexOfFirst {

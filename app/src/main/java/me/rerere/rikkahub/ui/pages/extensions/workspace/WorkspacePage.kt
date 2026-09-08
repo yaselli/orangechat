@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,6 +72,7 @@ fun WorkspacePage() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val toaster = LocalToaster.current
     val context = LocalContext.current
+    val resources = LocalResources.current
 
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<WorkspaceEntity?>(null) }
@@ -143,7 +145,7 @@ fun WorkspacePage() {
                 vm.createWorkspace(name) { result ->
                     showAddDialog = false
                     result.onFailure {
-                        toaster.show(it.message ?: context.getString(R.string.workspace_page_create_failed))
+                        toaster.show(it.message ?: resources.getString(R.string.workspace_page_create_failed))
                     }
                 }
             },

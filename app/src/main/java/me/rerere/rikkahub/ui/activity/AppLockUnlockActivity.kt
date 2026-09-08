@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import androidx.activity.addCallback
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.Animatable
@@ -64,6 +65,13 @@ class AppLockUnlockActivity : ComponentActivity() {
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        onBackPressedDispatcher.addCallback(this) {
+            // B模式(require_pin=false)下:只退出拦截页,不调用 grantGraceUnlock,
+            // 用户下次打开 App 仍会被拦截,只有 AI 调用 unlock_app 才真正解除。
+            AppLockGuard.goHome()
+            finish()
+        }
         overridePendingTransition(0, 0)
         val targetPackage = intent.getStringExtra(EXTRA_TARGET_PACKAGE)
         if (targetPackage.isNullOrBlank()) {
@@ -89,12 +97,7 @@ class AppLockUnlockActivity : ComponentActivity() {
         }
     }
 
-    override fun onBackPressed() {
-        // B模式(require_pin=false)下:只退出拦截页,不调用 grantGraceUnlock,
-        // 用户下次打开 App 仍会被拦截,只有 AI 调用 unlock_app 才真正解除。
-        AppLockGuard.goHome()
-        finish()
-    }
+
 }
 
 private fun loadAppLabel(context: android.content.Context, packageName: String): String =

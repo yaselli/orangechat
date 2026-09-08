@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.pages.chat
 
+import androidx.compose.ui.platform.LocalResources
 import androidx.activity.ComponentActivity
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
@@ -133,6 +134,7 @@ fun ChatDrawerContent(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val resources = LocalResources.current
     val toaster = LocalToaster.current
     val isPlayStore = rememberIsPlayStoreVersion()
     val repo = koinInject<ConversationRepository>()
@@ -795,7 +797,7 @@ fun ChatDrawerContent(
                             folderToDelete = null
                             conversations.refresh()
                         } else {
-                            toaster.show(context.getString(R.string.chat_page_delete_folder_generating), type = ToastType.Warning)
+                            toaster.show(resources.getString(R.string.chat_page_delete_folder_generating), type = ToastType.Warning)
                         }
                     }
                 ) { Text(stringResource(R.string.chat_page_delete)) }

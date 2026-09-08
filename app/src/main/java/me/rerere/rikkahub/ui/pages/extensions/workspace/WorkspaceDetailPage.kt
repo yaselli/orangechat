@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
+import androidx.compose.ui.platform.LocalResources
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -96,6 +97,7 @@ fun WorkspaceDetailPage(id: String) {
     val navController = LocalNavController.current
     val toaster = LocalToaster.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val vm: WorkspaceDetailVM = koinViewModel(parameters = { parametersOf(id) })
     val state by vm.state.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -129,7 +131,7 @@ fun WorkspaceDetailPage(id: String) {
         if (inputStream != null) {
             vm.importFile(fileName, inputStream)
         } else {
-            toaster.show(context.getString(R.string.workspace_detail_import_failed))
+            toaster.show(resources.getString(R.string.workspace_detail_import_failed))
         }
     }
 
@@ -141,7 +143,7 @@ fun WorkspaceDetailPage(id: String) {
         if (uri != null && target != null) {
             context.contentResolver.openOutputStream(uri)?.let { out ->
                 vm.exportFile(target, out)
-            } ?: toaster.show(context.getString(R.string.workspace_detail_export_failed))
+            } ?: toaster.show(resources.getString(R.string.workspace_detail_export_failed))
         }
         exportTarget = null
     }

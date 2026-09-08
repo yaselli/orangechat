@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import androidx.compose.ui.platform.LocalResources
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
@@ -129,6 +130,7 @@ fun CustomHeaders(headers: List<CustomHeader>, onUpdate: (List<CustomHeader>) ->
 @Composable
 fun CustomBodies(customBodies: List<CustomBody>, onUpdate: (List<CustomBody>) -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     Column(
         modifier = Modifier.padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -174,7 +176,7 @@ fun CustomBodies(customBodies: List<CustomBody>, onUpdate: (List<CustomBody>) ->
                                         jsonParseError = null
                                     } catch (e: Exception) {
                                         jsonParseError =
-                                            context.getString(
+                                            resources.getString(
                                                 R.string.assistant_page_invalid_json,
                                                 e.message?.take(100) ?: ""
                                             )
