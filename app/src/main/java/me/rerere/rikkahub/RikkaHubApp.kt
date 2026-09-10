@@ -71,7 +71,6 @@ class RikkaHubApp : Application() {
     override fun onCreate() {
         super.onCreate()
         INSTANCE = this
-        me.rerere.common.network.HttpAccess.initialize(this)
         startKoin {
             androidLogger()
             androidContext(this@RikkaHubApp)
