@@ -39,13 +39,21 @@ class SettingVM(
         }
     }
 
-    fun updateSettings(settings: Settings, previous: Settings = this.settings.value) {
+    fun updateSettings(
+        settings: Settings,
+        previous: Settings = this.settings.value,
+        onCommitted: ((Settings) -> Unit)? = null,
+    ) {
         // Compose sees the new switch value before encryption or disk I/O starts.
         mutableSettings.value = settings
         pendingWrites++
         viewModelScope.launch {
             try {
-                settingsStore.updateFrom(previous, settings)
+                persistThenNotify(
+                    persist = { settingsStore.updateFrom(previous, settings) },
+                    readCommitted = { settingsStore.settingsFlowRaw.first() },
+                    onCommitted = onCommitted,
+                )
             } finally {
                 pendingWrites--
                 if (pendingWrites == 0) {

@@ -56,9 +56,14 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
             onConfirm = {
                 showProactiveRiskDialog = false
                 val newSetting = settings.proactiveMessageSetting.copy(enabled = true, aggressiveModeEnabled = false)
-                vm.updateSettings(settings.copy(proactiveMessageSetting = newSetting))
-                me.rerere.rikkahub.data.service.DeviceEventAiTriggerService.stop(context)
-                ProactiveMessageService.triggerNow(context, newSetting)
+                vm.updateSettings(settings.copy(proactiveMessageSetting = newSetting)) { committed ->
+                    if (vm.settings.value.proactiveMessageSetting.enabled &&
+                        committed.proactiveMessageSetting.enabled
+                    ) {
+                        me.rerere.rikkahub.data.service.DeviceEventAiTriggerService.stop(context)
+                        ProactiveMessageService.triggerNow(context, committed.proactiveMessageSetting)
+                    }
+                }
             },
             onDismiss = { showProactiveRiskDialog = false }
         )
@@ -92,8 +97,13 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                                         showProactiveRiskDialog = true
                                     } else {
                                         val newSetting = settings.proactiveMessageSetting.copy(enabled = false)
-                                        vm.updateSettings(settings.copy(proactiveMessageSetting = newSetting))
-                                        ProactiveMessageService.cancel(context)
+                                        vm.updateSettings(settings.copy(proactiveMessageSetting = newSetting)) { committed ->
+                                            if (!vm.settings.value.proactiveMessageSetting.enabled &&
+                                                !committed.proactiveMessageSetting.enabled
+                                            ) {
+                                                ProactiveMessageService.cancel(context)
+                                            }
+                                        }
                                     }
                                 }
                             )

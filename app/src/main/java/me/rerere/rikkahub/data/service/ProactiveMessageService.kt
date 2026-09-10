@@ -287,7 +287,7 @@ class ProactiveMessageReceiver : BroadcastReceiver() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val settingsStore = org.koin.core.context.GlobalContext.get().get<SettingsStore>()
-                        val settings = settingsStore.settingsFlow.first()
+                        val settings = settingsStore.settingsFlowRaw.first()
                         val proactiveSetting = settings.proactiveMessageSetting
                         if (proactiveSetting.enabled) {
                             ProactiveMessageService.scheduleNext(context, proactiveSetting)
@@ -401,7 +401,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             val runAssistantMessageIds = linkedSetOf<Uuid>()
             val protectedMessageIds = linkedSetOf<Uuid>()
             try {
-                val settings = settingsStore.settingsFlow.first()
+                val settings = settingsStore.settingsFlowRaw.first()
                 val proactiveSetting = settings.proactiveMessageSetting
                 trace.event("settings", "enabled=${proactiveSetting.enabled}")
 
@@ -980,7 +980,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         )
                         if (!normalConversationOwnsTimer) {
                             try {
-                                val currentSettings = settingsStore.settingsFlow.first()
+                                val currentSettings = settingsStore.settingsFlowRaw.first()
                                 ProactiveMessageService.scheduleNext(
                                     this@ProactiveMessageTriggerService,
                                     currentSettings.proactiveMessageSetting,
