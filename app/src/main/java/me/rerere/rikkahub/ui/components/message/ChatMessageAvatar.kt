@@ -6,8 +6,6 @@
 
 package me.rerere.rikkahub.ui.components.message
 
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,14 +17,12 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
@@ -50,23 +46,16 @@ private fun AvatarFrameOverlay(
     baseSize: Float,
 ) {
     if (framePath.isNotBlank() && File(framePath).exists()) {
-        val context = LocalContext.current
-        val bitmap = remember(framePath) {
-            runCatching {
-                BitmapFactory.decodeFile(framePath)?.asImageBitmap()
-            }.getOrNull()
-        }
-        if (bitmap != null) {
-            Image(
-                bitmap = bitmap,
-                contentDescription = "Avatar Frame",
-                modifier = Modifier
-                    .size((baseSize * scale).dp)
-                    .offset(x = offsetX.dp, y = offsetY.dp),
-                contentScale = ContentScale.Fit,
-                alpha = 1f,
-            )
-        }
+        // Decode to layout constraints and reuse Coil's shared cache across message rows.
+        AsyncImage(
+            model = File(framePath),
+            contentDescription = "Avatar Frame",
+            modifier = Modifier
+                .size((baseSize * scale).dp)
+                .offset(x = offsetX.dp, y = offsetY.dp),
+            contentScale = ContentScale.Fit,
+            alpha = 1f,
+        )
     }
 }
 

@@ -18,7 +18,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -75,7 +74,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -135,6 +133,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.SoundEffectPlayer
 import org.koin.compose.koinInject
+import coil3.compose.AsyncImage
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
@@ -488,10 +487,8 @@ fun ChatInput(
 
     // Load input background image
     val inputBgPath = settings.displaySetting.inputBackgroundPath
-    val inputBgBitmap = remember(inputBgPath) {
-        if (inputBgPath.isNotBlank() && File(inputBgPath).exists()) {
-            android.graphics.BitmapFactory.decodeFile(inputBgPath)?.asImageBitmap()
-        } else null
+    val inputBgFile = remember(inputBgPath) {
+        inputBgPath.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.exists() }
     }
 
     if (showStickerPicker) {
@@ -561,7 +558,7 @@ fun ChatInput(
                 shape = MaterialTheme.shapes.largeIncreased,
                 tonalElevation = 0.dp,
                 // When background image is set, make surface transparent so image is visible
-                color = if (inputBgBitmap != null) Color.Transparent
+                color = if (inputBgFile != null) Color.Transparent
                     else if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS) Color.Transparent
                     else if (inputMaterialStyle == UiMaterialStyle.FROSTED) {
                         MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.74f)
@@ -572,9 +569,9 @@ fun ChatInput(
                 // Use Box so background image can match parent size
                 Box {
                     // Background image inside input area (matches content size exactly)
-                    if (inputBgBitmap != null) {
-                        Image(
-                            bitmap = inputBgBitmap,
+                    if (inputBgFile != null) {
+                        AsyncImage(
+                            model = inputBgFile,
                             contentDescription = null,
                             modifier = Modifier
                                 .matchParentSize()
