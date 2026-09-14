@@ -225,16 +225,6 @@
         android:value="proactive message scheduling" />
     </service>
 
-    <!-- Device Event AI Trigger Service (aggressive mode: triggers AI thinking on app switch/screen on-off) -->
-    <service
-      android:name=".data.service.DeviceEventAiTriggerService"
-      android:exported="false"
-      android:foregroundServiceType="specialUse">
-      <property
-        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="device event ai trigger for proactive messaging" />
-    </service>
-
     <!-- Daily Cron Receiver (handles daily_cron alarm and boot completed) -->
     <receiver
       android:name=".data.service.DailySummaryReceiver"

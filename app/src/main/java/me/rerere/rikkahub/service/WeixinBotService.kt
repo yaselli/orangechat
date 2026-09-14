@@ -46,7 +46,7 @@ import kotlin.uuid.Uuid
  * 调 chatService.sendMessage 触发 AI, 等生成完成, 把回复发回微信.
  *
  * 模板参考: ProactiveMessageTriggerService (KoinComponent 注入 + foreground service),
- * DeviceEventAiTriggerService (常驻 while 循环), KeepAliveService (START_STICKY 保活).
+ * KeepAliveService (START_STICKY 保活).
  *
  * 生命周期: enabled=true 时 startForegroundService 启动; enabled=false 或 token 过期时 stopSelf.
  */

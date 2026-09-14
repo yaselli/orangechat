@@ -43,7 +43,9 @@ android {
             isEnable = !isBuildingBundle
             reset()
             include("arm64-v8a", "x86_64")
-            isUniversalApk = true
+            // Keep per-ABI APKs small. Normal phones should install arm64-v8a;
+            // x86_64 remains available for emulators.
+            isUniversalApk = false
         }
     }
 

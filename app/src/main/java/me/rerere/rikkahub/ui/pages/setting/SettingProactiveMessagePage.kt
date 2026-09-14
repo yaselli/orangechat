@@ -55,12 +55,11 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
             message = stringResource(R.string.risk_proactive_message_message),
             onConfirm = {
                 showProactiveRiskDialog = false
-                val newSetting = settings.proactiveMessageSetting.copy(enabled = true, aggressiveModeEnabled = false)
+                val newSetting = settings.proactiveMessageSetting.copy(enabled = true)
                 vm.updateSettings(settings.copy(proactiveMessageSetting = newSetting)) { committed ->
                     if (vm.settings.value.proactiveMessageSetting.enabled &&
                         committed.proactiveMessageSetting.enabled
                     ) {
-                        me.rerere.rikkahub.data.service.DeviceEventAiTriggerService.stop(context)
                         ProactiveMessageService.triggerNow(context, committed.proactiveMessageSetting)
                     }
                 }

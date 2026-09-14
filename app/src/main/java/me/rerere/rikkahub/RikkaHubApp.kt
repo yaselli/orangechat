@@ -7,8 +7,6 @@
 package me.rerere.rikkahub
 
 import android.app.Application
-import android.app.AlarmManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -39,7 +37,6 @@ import me.rerere.rikkahub.plugin.di.pluginModule
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.service.DailySummaryService
-import me.rerere.rikkahub.data.service.DeviceEventAiTriggerService
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.WebServerService
@@ -58,7 +55,6 @@ const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 const val POMODORO_NOTIFICATION_CHANNEL_ID = "pomodoro_timer"
 const val MUSIC_PLAYER_NOTIFICATION_CHANNEL_ID = "music_player"
-const val DEVICE_EVENT_NOTIFICATION_CHANNEL_ID = "device_event_tracking"
 const val VOICE_CALL_NOTIFICATION_CHANNEL_ID = "voice_call"
 const val ANNOUNCEMENT_NOTIFICATION_CHANNEL_ID = "announcement"
 
@@ -115,25 +111,14 @@ class RikkaHubApp : Application() {
         // Reschedule proactive message alarm if enabled
         rescheduleProactiveMessageIfEnabled()
 
-        // This build keeps Supabase only as the remote host of sticker images.
-        // Cancel alarms/services and preferences left by older sync builds.
-        cleanupRemovedSupabaseFeatures()
-
         // Start workflow trigger registry (event-driven automation)
         startWorkflowTriggers()
 
         // Start network change monitor (invalidates SSH DNS cache on WiFi<->cell handoff)
         startNetworkChangeMonitor()
 
-        // This build no longer ships jealousy inspection. Clean up jobs and locks
-        // left by an older installation before the normal app-lock guard starts.
-        disableLegacyJealousyInspection()
-
         // Start App Lock guard (intercepts locked apps when opened) if any app is locked
         startAppLockGuardIfEnabled()
-
-        // 激进模式已退役：迁移期间主动停止旧版本遗留的常驻服务。
-        stopLegacyAggressiveMode()
 
         // Reschedule daily_cron alarm if plugins need it
         rescheduleDailyCronIfEnabled()
@@ -190,48 +175,6 @@ class RikkaHubApp : Application() {
         }
     }
 
-    private fun cleanupRemovedSupabaseFeatures() {
-        runCatching {
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            listOf(
-                Triple(
-                    10002,
-                    "me.rerere.orangechat.SUPABASE_SYNC",
-                    "me.rerere.rikkahub.data.service.SupabaseSyncReceiver",
-                ),
-                Triple(
-                    10004,
-                    "me.rerere.rikkahub.DIARY_SUMMARY",
-                    "me.rerere.rikkahub.data.service.DiarySummaryReceiver",
-                ),
-            ).forEach { (requestCode, action, receiverClass) ->
-                val intent = Intent(action).setClassName(packageName, receiverClass)
-                PendingIntent.getBroadcast(
-                    this,
-                    requestCode,
-                    intent,
-                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-                )?.let { pendingIntent ->
-                    alarmManager.cancel(pendingIntent)
-                    pendingIntent.cancel()
-                }
-            }
-
-            listOf(
-                "me.rerere.rikkahub.data.service.SupabaseSyncService",
-                "me.rerere.rikkahub.data.service.DeviceEventTrackingService",
-                "me.rerere.rikkahub.data.service.DiarySummaryTriggerService",
-            ).forEach { serviceClass ->
-                stopService(Intent().setClassName(packageName, serviceClass))
-            }
-
-            getSharedPreferences("supabase_sync_prefs", MODE_PRIVATE).edit().clear().apply()
-            getSharedPreferences("diary_summary_prefs", MODE_PRIVATE).edit().clear().apply()
-        }.onFailure {
-            Log.w(TAG, "Failed to clean removed Supabase features", it)
-        }
-    }
-
     private fun startWorkflowTriggers() {
         runCatching {
             val registry = get<me.rerere.rikkahub.workflow.trigger.TriggerRegistry>()
@@ -256,38 +199,6 @@ class RikkaHubApp : Application() {
             me.rerere.rikkahub.data.service.AppLockGuard.init(this)
         }.onFailure {
             Log.e(TAG, "startAppLockGuardIfEnabled failed", it)
-        }
-    }
-
-    private fun disableLegacyJealousyInspection() {
-        runCatching {
-            androidx.work.WorkManager.getInstance(this)
-                .cancelUniqueWork("jealousy_inspection_work")
-
-            val preferences = getSharedPreferences("jealousy_inspection", MODE_PRIVATE)
-            val lockedPackages = preferences
-                .getStringSet("jealousy_locked_packages", emptySet())
-                ?.toSet()
-                .orEmpty()
-            lockedPackages.forEach { packageName ->
-                me.rerere.rikkahub.data.service.AppLockStore.unlockApp(this, packageName)
-            }
-            preferences.edit()
-                .putBoolean("enabled", false)
-                .remove("jealousy_locked_packages")
-                .putBoolean("reconciling", false)
-                .putBoolean("forced_open", false)
-                .apply()
-        }.onFailure {
-            Log.e(TAG, "disableLegacyJealousyInspection failed", it)
-        }
-    }
-
-    private fun stopLegacyAggressiveMode() {
-        runCatching {
-            DeviceEventAiTriggerService.stop(this)
-        }.onFailure {
-            Log.e(TAG, "stopLegacyAggressiveMode failed", it)
         }
     }
 
@@ -378,14 +289,6 @@ class RikkaHubApp : Application() {
             .setShowBadge(false)
             .build()
         notificationManager.createNotificationChannel(musicChannel)
-
-        val deviceEventChannel = NotificationChannelCompat
-            .Builder(DEVICE_EVENT_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-            .setName("设备状态同步")
-            .setVibrationEnabled(false)
-            .setShowBadge(false)
-            .build()
-        notificationManager.createNotificationChannel(deviceEventChannel)
 
         val voiceCallChannel = NotificationChannelCompat
             .Builder(VOICE_CALL_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
