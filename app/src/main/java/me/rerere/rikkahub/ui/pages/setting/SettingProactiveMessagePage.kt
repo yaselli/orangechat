@@ -232,51 +232,11 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                         },
                     )
                     item(
-                        headlineContent = { Text("定时屏幕 OCR") },
+                        headlineContent = { Text("额外注入") },
                         supportingContent = {
-                            Text(
-                                "达到单独设定的沉默时间后，由系统直接截图识别，" +
-                                    "再交给 AI 判断是否发消息。",
-                            )
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = settings.proactiveMessageSetting.proactiveScreenOcrEnabled,
-                                onCheckedChange = { enabled ->
-                                    vm.updateSettings(
-                                        settings.copy(
-                                            proactiveMessageSetting = settings.proactiveMessageSetting.copy(
-                                                proactiveScreenOcrEnabled = enabled,
-                                            ),
-                                        ),
-                                    )
-                                },
-                            )
+                            Text("主动消息会收集额外注入中已开启的内容，再由 AI 决定如何回复。屏幕文字识别也使用额外注入设置；应用使用信息仍需开启主动消息查岗。")
                         },
                     )
-                    if (settings.proactiveMessageSetting.proactiveScreenOcrEnabled) {
-                        item(
-                            headlineContent = { Text("OCR 等待时间（分钟）") },
-                            supportingContent = {
-                                OutlinedTextField(
-                                    value = settings.proactiveMessageSetting.proactiveScreenOcrDelayMinutes.toString(),
-                                    onValueChange = { value ->
-                                        value.toIntOrNull()?.takeIf { it in 1..1440 }?.let { minutes ->
-                                            vm.updateSettings(
-                                                settings.copy(
-                                                    proactiveMessageSetting = settings.proactiveMessageSetting.copy(
-                                                        proactiveScreenOcrDelayMinutes = minutes,
-                                                    ),
-                                                ),
-                                            )
-                                        }
-                                    },
-                                    singleLine = true,
-                                    modifier = Modifier.padding(top = 8.dp),
-                                )
-                            },
-                        )
-                    }
                 }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

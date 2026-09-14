@@ -12,6 +12,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import me.rerere.rikkahub.data.ai.transformers.forProactiveExtraInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -96,12 +97,7 @@ class ProactiveMessageService {
             val minMinutes = setting.minIntervalMinutes.coerceAtLeast(1)
             val maxMinutes = setting.maxIntervalMinutes.coerceAtLeast(minMinutes)
             val randomDelay = Random.nextInt(minMinutes, maxMinutes + 1)
-            val configuredDelay = if (setting.proactiveScreenOcrEnabled) {
-                minOf(randomDelay, setting.proactiveScreenOcrDelayMinutes.coerceAtLeast(1))
-            } else {
-                randomDelay
-            }
-            val delayMinutes = delayMinutesOverride?.coerceAtLeast(1) ?: configuredDelay
+            val delayMinutes = delayMinutesOverride?.coerceAtLeast(1) ?: randomDelay
             val triggerTime = java.lang.System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(delayMinutes.toLong())
 
             // 保存下次触发时间到SharedPreferences
@@ -522,14 +518,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val idleMinutes = latestUserMessage.createdAt
                     .toInstant(TimeZone.currentSystemDefault())
                     .let { ((kotlin.time.Clock.System.now() - it).inWholeMinutes).toInt().coerceAtLeast(0) }
-                val requiredIdleMinutes = if (proactiveSetting.proactiveScreenOcrEnabled) {
-                    minOf(
-                        proactiveSetting.minIntervalMinutes.coerceAtLeast(1),
-                        proactiveSetting.proactiveScreenOcrDelayMinutes.coerceAtLeast(1),
-                    )
-                } else {
-                    proactiveSetting.minIntervalMinutes.coerceAtLeast(1)
-                }
+                val requiredIdleMinutes = proactiveSetting.minIntervalMinutes.coerceAtLeast(1)
                 if (!isForceTrigger && idleMinutes < requiredIdleMinutes) {
                     outcome = "user_not_idle"
                     trace.event(
@@ -540,14 +529,19 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
                 trace.event("idle_guard", "passed=true idleMinutes=$idleMinutes")
                 var contextStr = proactiveMessageService.buildProactiveContext(settings, idleMinutes)
-                if (proactiveSetting.proactiveScreenOcrEnabled &&
-                    idleMinutes >= proactiveSetting.proactiveScreenOcrDelayMinutes.coerceAtLeast(1)
-                ) {
-                    extraInfoCollector.collectScreenTextForProactive(20_000L)?.let { screenText ->
-                        contextStr += "\n当前屏幕 OCR（只属于本次普通主动消息判断）：\n" +
-                            screenText.take(4_000)
-                    }
-                }
+                val injectionSettings = settings.forProactiveExtraInfo()
+                trace.event("extra_info_start", "enabled=${injectionSettings.systemToolsSetting.extraInfoInjectionEnabled}")
+                val extraContext = extraInfoCollector.collect(
+                    settings = injectionSettings,
+                    assistantId = assistantUuid.toString(),
+                    queryText = latestUserMessage.visibleTextForProactiveContext(),
+                    proactive = true,
+                    onItem = { name, status, chars ->
+                        trace.event("extra_info_item", "item=$name status=$status chars=$chars")
+                    },
+                )
+                if (!extraContext.isNullOrBlank()) contextStr += "\n\n$extraContext"
+                trace.event("extra_info_end", "included=${!extraContext.isNullOrBlank()} chars=${extraContext?.length ?: 0}")
                 trace.event(
                     "proactive_context",
                     "idleIncluded=true currentTimeIncluded=${settings.systemToolsSetting.timeContextInjectionEnabled}",

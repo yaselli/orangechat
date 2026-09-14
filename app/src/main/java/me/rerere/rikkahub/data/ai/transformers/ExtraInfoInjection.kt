@@ -27,7 +27,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
@@ -72,6 +71,8 @@ class ExtraInfoInjectionCollector(
         settings: Settings,
         assistantId: String,
         queryText: String,
+        proactive: Boolean = false,
+        onItem: (String, String, Int) -> Unit = { _, _, _ -> },
     ): String? {
         val option = settings.systemToolsSetting
         if (!option.extraInfoInjectionEnabled) return null
@@ -91,7 +92,10 @@ class ExtraInfoInjectionCollector(
             if (option.recentAppUsageContextInjectionEnabled) {
                 add(Item("最近应用使用情况", ::recentAppUsage))
             }
-            if (option.screenTextContextInjectionEnabled) add(Item("当前屏幕文字", ::screenText))
+            if (option.screenTextContextInjectionEnabled) add(Item("当前屏幕文字") {
+                if (proactive) requireProactiveScreenAllowed()
+                screenText()
+            })
             if (option.notificationsContextInjectionEnabled) add(Item("最近通知", ::notifications))
             if (option.memoryContextInjectionEnabled) {
                 add(Item("相关记忆") {
@@ -106,18 +110,14 @@ class ExtraInfoInjectionCollector(
         if (items.isEmpty()) return null
 
         val timeoutMillis = option.extraInfoInjectionTimeoutSeconds.coerceIn(1, 120) * 1_000L
-        val blocks = supervisorScope {
+        val results = supervisorScope {
             items.map { item ->
-                async {
-                    withTimeoutOrNull(timeoutMillis) {
-                        runCatching { item.collect() }
-                            .onFailure {
-                                android.util.Log.w(TAG, "Failed to collect ${item.name}", it)
-                            }
-                            .getOrNull()
-                    }?.takeIf { it.isNotBlank() }?.let { "### ${item.name}\n$it" }
-                }
-            }.awaitAll().filterNotNull()
+                async { item.name to collectExtraInfoItem(timeoutMillis, item.collect) }
+            }.awaitAll()
+        }
+        val blocks = results.mapNotNull { (name, result) ->
+            onItem(name, result.status, result.text?.length ?: 0)
+            result.text?.let { "### $name\n$it" }
         }
         if (blocks.isEmpty()) return null
 
@@ -138,16 +138,13 @@ class ExtraInfoInjectionCollector(
         }
     }
 
-    suspend fun collectScreenTextForProactive(timeoutMillis: Long): String? {
-        val service = RikkaAccessibilityService.instance ?: return null
+    private fun requireProactiveScreenAllowed() {
+        val service = RikkaAccessibilityService.instance ?: error("Accessibility unavailable")
         val packageName = service.rootInActiveWindow?.packageName?.toString().orEmpty()
         val sensitiveTokens = listOf("bank", "pay", "wallet", "password", "permissioncontroller")
-        if (sensitiveTokens.any { token -> packageName.contains(token, ignoreCase = true) }) return null
-        return withTimeoutOrNull(timeoutMillis.coerceIn(1_000L, 120_000L)) {
-            runCatching { screenText() }
-                .onFailure { android.util.Log.w(TAG, "Proactive screen OCR failed", it) }
-                .getOrNull()
-        }?.takeIf { it.isNotBlank() }
+        check(sensitiveTokens.none { packageName.contains(it, ignoreCase = true) }) {
+            "Screen capture excluded for this app"
+        }
     }
 
     private fun currentTime(): String =
@@ -254,7 +251,7 @@ class ExtraInfoInjectionCollector(
 
             is RikkaAccessibilityService.ScreenshotOutcome.Success -> {
                 try {
-                    recognizeScreenText(screenshot.bitmap).ifBlank { "当前屏幕没有识别到文字" }.take(4_000)
+                    recognizeScreenText(screenshot.bitmap).take(4_000)
                 } finally {
                     screenshot.bitmap.recycle()
                 }
