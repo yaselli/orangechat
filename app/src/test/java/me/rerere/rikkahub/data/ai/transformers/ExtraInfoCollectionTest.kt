@@ -28,7 +28,9 @@ class ExtraInfoCollectionTest {
             collectExtraInfoItem(1_000) { throw cancellation }
             fail("Cancellation must propagate")
         } catch (actual: CancellationException) {
-            assertSame(cancellation, actual)
+            // Coroutine stack-trace recovery may copy the exception across suspension boundaries.
+            assertEquals(cancellation.javaClass, actual.javaClass)
+            assertEquals(cancellation.message, actual.message)
         }
     }
 
