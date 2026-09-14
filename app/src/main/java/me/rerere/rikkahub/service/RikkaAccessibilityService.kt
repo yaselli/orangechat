@@ -9,13 +9,23 @@ package me.rerere.rikkahub.service
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Path
+import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.util.Log
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +55,13 @@ class RikkaAccessibilityService : AccessibilityService() {
     private val gestureHandlerThread = HandlerThread("RikkaAcc-Callback").apply { start() }
     private val gestureHandler = Handler(gestureHandlerThread.looper)
 
+    // 应用锁止血悬浮窗。
+    // Service 构造时 baseContext 尚未 attach，不能通过 ContextWrapper.mainLooper 取主线程，
+    // 这里直接用 Looper.getMainLooper()。
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var lockOverlay: View? = null
+    private var lockOverlayPackage: String? = null
+
     private val _running = MutableStateFlow(false)
     val running = _running.asStateFlow()
 
@@ -67,6 +84,8 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
+        mainHandler.removeCallbacksAndMessages(null)
+        removeLockOverlayNow()
         instance = null
         _running.value = false
         _lastActions.value = emptyList()
@@ -75,6 +94,8 @@ class RikkaAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null)
+        removeLockOverlayNow()
         instance = null
         _running.value = false
         gestureHandlerThread.quitSafely()
@@ -95,6 +116,108 @@ class RikkaAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {
         // Required override; no-op.
     }
+
+    // ------------------------------------------------------------------
+    // 应用锁止血悬浮窗
+    //
+    // 设计原则（历史闪烁 bug 的教训）：
+    // 1. 悬浮窗只负责"盖住"，是三段式拦截的第一段（止血），真正的锁屏由
+    //    AppLockUnlockActivity 接管；
+    // 2. 悬浮窗的消失永远不由前台事件驱动（本服务产生的事件会形成回路），
+    //    只能由 AppLockGuard 在"确认用户已离开被锁应用"时、或解锁页销毁时调用
+    //    [hideLockOverlay]；
+    // 3. 对同一包名幂等，重复调用不产生闪烁。
+    // ------------------------------------------------------------------
+
+    fun showLockOverlay(packageName: String) {
+        mainHandler.post {
+            if (instance !== this) return@post
+            if (lockOverlay != null && lockOverlayPackage == packageName) return@post
+            removeLockOverlayNow()
+
+            val appName = runCatching {
+                val info = packageManager.getApplicationInfo(packageName, 0)
+                packageManager.getApplicationLabel(info).toString()
+            }.getOrDefault(packageName)
+            val message = me.rerere.rikkahub.data.service.AppLockStore
+                .getLockMessage(this, packageName)
+                .orEmpty()
+
+            val root = FrameLayout(this).apply {
+                setBackgroundColor(Color.argb(242, 250, 247, 240))
+                isClickable = true
+                isFocusable = true
+            }
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(dp(28), dp(30), dp(28), dp(30))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(28).toFloat()
+                    setColor(Color.argb(248, 255, 255, 255))
+                }
+            }
+            card.addView(TextView(this).apply {
+                text = "🔒"
+                textSize = 40f
+                gravity = Gravity.CENTER
+            })
+            card.addView(TextView(this).apply {
+                text = "$appName 已被锁定"
+                textSize = 20f
+                setTextColor(Color.rgb(35, 31, 30))
+                gravity = Gravity.CENTER
+                setPadding(0, dp(10), 0, if (message.isBlank()) 0 else dp(8))
+            })
+            if (message.isNotBlank()) {
+                card.addView(TextView(this).apply {
+                    text = message
+                    textSize = 15f
+                    setTextColor(Color.rgb(100, 82, 80))
+                    gravity = Gravity.CENTER
+                })
+            }
+            root.addView(
+                card,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    gravity = Gravity.CENTER
+                    marginStart = dp(24)
+                    marginEnd = dp(24)
+                },
+            )
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT,
+            )
+            runCatching {
+                val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+                windowManager.addView(root, params)
+            }.onSuccess {
+                lockOverlay = root
+                lockOverlayPackage = packageName
+            }.onFailure { Log.e(TAG, "Failed to show lock overlay", it) }
+        }
+    }
+
+    fun hideLockOverlay() {
+        mainHandler.post { removeLockOverlayNow() }
+    }
+
+    private fun removeLockOverlayNow() {
+        val view = lockOverlay ?: return
+        runCatching { (getSystemService(WINDOW_SERVICE) as WindowManager).removeViewImmediate(view) }
+        lockOverlay = null
+        lockOverlayPackage = null
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     fun appendLog(entry: ActionLogEntry) {
         val current = _lastActions.value

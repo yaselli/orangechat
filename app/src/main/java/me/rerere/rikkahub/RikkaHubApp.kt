@@ -120,6 +120,15 @@ class RikkaHubApp : Application() {
         // Start App Lock guard (intercepts locked apps when opened) if any app is locked
         startAppLockGuardIfEnabled()
 
+        // Bridge foreground-app events to plugin hooks ("app_foreground") and ensure
+        // plugins are loaded at startup so subscribers never miss events.
+        runCatching {
+            me.rerere.rikkahub.plugin.PluginForegroundHook.init { get<me.rerere.rikkahub.plugin.loader.PluginLoader>() }
+            get<AppScope>().launch {
+                runCatching { get<me.rerere.rikkahub.plugin.manager.PluginManager>() }
+            }
+        }.onFailure { Log.e(TAG, "PluginForegroundHook init failed", it) }
+
         // Reschedule daily_cron alarm if plugins need it
         rescheduleDailyCronIfEnabled()
 

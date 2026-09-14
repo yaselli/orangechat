@@ -91,6 +91,7 @@ class PluginLoader(
 
             val sandbox = PluginSandbox(context, okHttpClient, memoryBankService, dataStore)
             sandbox.allowedHosts = pluginInfo.manifest.allowedHosts
+            sandbox.declaredPermissions = pluginInfo.manifest.permissions
             sandbox.initialize()
  
             val resolvedConfig = resolveModelConfig(pluginInfo)
@@ -140,6 +141,12 @@ class PluginLoader(
     fun getAllLoadedPlugins(): List<LoadedPlugin> = loadedPlugins.values.toList()
  
     fun getEnabledPlugins(): List<LoadedPlugin> = loadedPlugins.values.filter { it.info.isEnabled }
+
+    /** 是否有已启用插件订阅了指定事件钩子（用于高频事件的提前过滤） */
+    fun hasHookSubscribers(event: String): Boolean =
+        loadedPlugins.values.any { plugin ->
+            plugin.info.isEnabled && plugin.info.manifest.hooks.any { it.event == event }
+        }
  
     /**
      * 调用插件工具

@@ -55,6 +55,12 @@ class PluginSandbox(
      * 空列表表示禁止所有外部网络请求。
      */
     var allowedHosts: List<String> = emptyList()
+
+    /**
+     * 插件在 manifest.permissions 中声明的权限。
+     * 设备能力桥接（appLock / appUsage）要求声明 "device_apps"，否则拒绝调用。
+     */
+    var declaredPermissions: List<String> = emptyList()
  
     // QuickJS上下文
     private var quickJSContext: QuickJSContext? = null
@@ -186,6 +192,54 @@ var exports = {};
 var __nativeFetch = null;
 var __memoryBankBridge = null;
 var __dataStoreBridge = null;
+var __appLockBridge = null;
+var __appUsageBridge = null;
+
+// appLock 桥接对象 - 应用锁能力（需要 manifest 声明 device_apps 权限）
+var appLock = {
+    lock: function(packageName, message, requirePin) {
+        if (!__appLockBridge) throw new Error('appLock bridge not available');
+        return JSON.parse(__appLockBridge('lock', JSON.stringify({
+            'package': packageName, message: message || '', requirePin: !!requirePin
+        })));
+    },
+    unlock: function(packageName) {
+        if (!__appLockBridge) throw new Error('appLock bridge not available');
+        return JSON.parse(__appLockBridge('unlock', JSON.stringify({'package': packageName})));
+    },
+    list: function() {
+        if (!__appLockBridge) return {success: false, locked: []};
+        return JSON.parse(__appLockBridge('list', '{}'));
+    },
+    isLocked: function(packageName) {
+        if (!__appLockBridge) return {success: false, locked: false};
+        return JSON.parse(__appLockBridge('isLocked', JSON.stringify({'package': packageName})));
+    },
+    consumeEvents: function() {
+        if (!__appLockBridge) return {success: false, events: []};
+        return JSON.parse(__appLockBridge('consumeEvents', '{}'));
+    }
+};
+
+// appUsage 桥接对象 - 使用统计能力（需要 manifest 声明 device_apps 权限）
+var appUsage = {
+    today: function(limit) {
+        if (!__appUsageBridge) return {success: false, apps: []};
+        return JSON.parse(__appUsageBridge('today', JSON.stringify({limit: limit || 10})));
+    },
+    installed: function() {
+        if (!__appUsageBridge) return {success: false, apps: []};
+        return JSON.parse(__appUsageBridge('installed', '{}'));
+    },
+    foreground: function() {
+        if (!__appUsageBridge) return {success: false, 'package': null};
+        return JSON.parse(__appUsageBridge('foreground', '{}'));
+    },
+    openSettings: function() {
+        if (!__appUsageBridge) return {success: false};
+        return JSON.parse(__appUsageBridge('openSettings', '{}'));
+    }
+};
  
 // musicPlayer 桥接对象 - 插件可直接调用
 var __musicPlayerBridge = null;
@@ -310,6 +364,38 @@ function fetch(url, options) {
                     nativeDataStoreBridge(action, paramsJson)
                 } catch (e: Exception) {
                     Log.d(TAG, "Plugin operation; payload omitted")
+                    """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
+                }
+            })
+
+            // 注入应用锁桥接（需要 manifest 声明 device_apps 权限）
+            getGlobalObject().setProperty("__appLockBridge", JSCallFunction { args ->
+                val action = args[0] as? String ?: ""
+                val paramsJson = args[1] as? String ?: "{}"
+                try {
+                    if ("device_apps" !in declaredPermissions) {
+                        """{"success":false,"error":"permission denied: declare 'device_apps' in manifest.permissions to use appLock"}"""
+                    } else {
+                        me.rerere.rikkahub.plugin.capability.AppLockBridge.handle(context, action, paramsJson)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "AppLock bridge error: action=$action")
+                    """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
+                }
+            })
+
+            // 注入使用统计桥接（需要 manifest 声明 device_apps 权限）
+            getGlobalObject().setProperty("__appUsageBridge", JSCallFunction { args ->
+                val action = args[0] as? String ?: ""
+                val paramsJson = args[1] as? String ?: "{}"
+                try {
+                    if ("device_apps" !in declaredPermissions) {
+                        """{"success":false,"error":"permission denied: declare 'device_apps' in manifest.permissions to use appUsage"}"""
+                    } else {
+                        me.rerere.rikkahub.plugin.capability.AppUsageBridge.handle(context, action, paramsJson)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "AppUsage bridge error: action=$action")
                     """{"success":false,"error":${escapeJson(e.message ?: "Unknown error")}}"""
                 }
             })

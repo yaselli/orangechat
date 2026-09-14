@@ -16,6 +16,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Lock
 import me.rerere.rikkahub.data.service.AppLockGuard
@@ -91,10 +93,38 @@ class AppLockUnlockActivity : ComponentActivity() {
                         }
                         finish()
                     },
+                    onForceUnlock = {
+                        // 强制解锁：安全出口。完全解除锁定并记录事件，
+                        // 插件（及 AI）可通过 appLock.consumeEvents() 知晓此事。
+                        val label = loadAppLabel(this, targetPackage)
+                        me.rerere.rikkahub.data.service.AppLockEventLog.record(
+                            this,
+                            me.rerere.rikkahub.data.service.AppLockEventLog.TYPE_FORCED_UNLOCK,
+                            targetPackage,
+                            label,
+                        )
+                        AppLockStore.unlockApp(this, targetPackage)
+                        AppLockGuard.grantGraceUnlock(targetPackage)
+                        AppLockGuard.refresh()
+                        val launchIntent = packageManager.getLaunchIntentForPackage(targetPackage)
+                        if (launchIntent != null) {
+                            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(launchIntent)
+                        }
+                        finish()
+                    },
                     onCancel = { AppLockGuard.goHome(); finish() }
                 )
             }
         }
+    }
+
+    override fun onDestroy() {
+        // 锁屏页退出时收掉止血悬浮窗（唯一由界面生命周期驱动的隐藏路径）
+        runCatching {
+            me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.hideLockOverlay()
+        }
+        super.onDestroy()
     }
 
 
@@ -119,6 +149,7 @@ private fun loadAppIcon(context: android.content.Context, packageName: String): 
 private fun AppLockUnlockScreen(
     targetPackage: String,
     onUnlocked: () -> Unit,
+    onForceUnlock: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -126,47 +157,136 @@ private fun AppLockUnlockScreen(
     val appIcon = remember(targetPackage) { loadAppIcon(context, targetPackage) }
     val requirePin = remember(targetPackage) { AppLockStore.getRequirePin(context, targetPackage) }
     val lockMessage = remember(targetPackage) { AppLockStore.getLockMessage(context, targetPackage) }
+    val haptic = androidx.compose.ui.hapticfeedback.LocalHapticFeedback.current
 
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        if (!requirePin) {
-            // B模式: 极简 UI, 只有图标(带锁徽章) + 留言, 无任何可点击的解锁操作
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                AppIconWithBadge(appIcon = appIcon, contentDescription = appLabel)
-                Spacer(Modifier.height(20.dp))
-                if (!lockMessage.isNullOrBlank()) {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    ) {
-                        Text(
-                            text = lockMessage,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                            textAlign = TextAlign.Center,
-                        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (!requirePin) {
+                // B模式: 极简 UI, 只有图标(带锁徽章) + 留言, 无任何可点击的解锁操作
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    AppIconWithBadge(appIcon = appIcon, contentDescription = appLabel)
+                    Spacer(Modifier.height(20.dp))
+                    if (!lockMessage.isNullOrBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                        ) {
+                            Text(
+                                text = lockMessage,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
                 }
+            } else {
+                // A模式: 完整 UI (图标+徽章 + 名称 + 留言 + PIN圆点 + 数字键盘 + 取消)
+                PinUnlockContent(
+                    appLabel = appLabel,
+                    appIcon = appIcon,
+                    lockMessage = lockMessage,
+                    onUnlocked = onUnlocked,
+                    onCancel = onCancel,
+                )
             }
-        } else {
-            // A模式: 完整 UI (图标+徽章 + 名称 + 留言 + PIN圆点 + 数字键盘 + 取消)
-            PinUnlockContent(
-                appLabel = appLabel,
-                appIcon = appIcon,
-                lockMessage = lockMessage,
-                onUnlocked = onUnlocked,
-                onCancel = onCancel,
+
+            // 强制解锁（安全出口，两种模式都有）：长按 3 秒生效，会留下记录
+            ForceUnlockButton(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 36.dp),
+                onForceUnlock = {
+                    haptic.performHapticFeedback(
+                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
+                    )
+                    onForceUnlock()
+                },
             )
+        }
+    }
+}
+
+/**
+ * 长按强制解锁按钮：按住 3 秒才触发，防止误触。
+ * 按住期间显示进度提示文案。
+ */
+@Composable
+private fun ForceUnlockButton(
+    modifier: Modifier = Modifier,
+    onForceUnlock: () -> Unit,
+) {
+    var pressing by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0f) }
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+    ) {
+        Text(
+            text = if (pressing) "继续按住… ${(progress * 3).toInt() + 1}s" else "长按 3 秒强行打开（TA 会知道）",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .pointerInputHold(
+                    onPressStart = {
+                        pressing = true
+                        progress = 0f
+                    },
+                    onHoldTick = { p ->
+                        progress = p
+                        if (p >= 1f) {
+                            pressing = false
+                            onForceUnlock()
+                        }
+                    },
+                    onPressEnd = { pressing = false },
+                ),
+        )
+    }
+}
+
+/**
+ * 极简"按住 3 秒"手势：避免引入 combinedClickable 的实验性长按语义差异，
+ * 用 pointerInput 自己计时。
+ */
+private fun Modifier.pointerInputHold(
+    onPressStart: () -> Unit,
+    onHoldTick: (Float) -> Unit,
+    onPressEnd: () -> Unit,
+): Modifier = androidx.compose.ui.input.pointer.pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            awaitFirstDown()
+            onPressStart()
+            val start = System.currentTimeMillis()
+            var completed = false
+            while (true) {
+                val event = withTimeoutOrNull(50) { awaitPointerEvent() }
+                val elapsed = (System.currentTimeMillis() - start) / 3000f
+                if (event == null) {
+                    // 50ms 计时 tick
+                    if (elapsed >= 1f) { onHoldTick(1f); completed = true; break }
+                    onHoldTick(elapsed)
+                } else {
+                    val anyPressed = event.changes.any { it.pressed }
+                    if (!anyPressed) break // 抬起，未完成
+                }
+            }
+            if (!completed) onPressEnd()
         }
     }
 }

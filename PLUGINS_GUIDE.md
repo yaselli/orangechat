@@ -79,7 +79,7 @@ exports.say_hello = say_hello;
 | `entry` | string | ✅ | 入口文件路径，相对于插件根目录，如 `main.js` |
 | `tools` | array | ❌ | 向 AI 注册的工具列表 |
 | `config` | array | ❌ | 用户配置项，安装后在插件详情页显示设置表单 |
-| `permissions` | array | ❌ | 插件权限声明，目前支持 `ai_chat`、`disable_native_selection` |
+| `permissions` | array | ❌ | 插件权限声明，目前支持 `ai_chat`、`disable_native_selection`、`device_apps`（应用锁/使用统计/前台事件） |
 | `allowedHosts` | array | ❌ | 网络域名白名单。空数组 = 禁止所有网络请求。`*` = 允许所有（不推荐） |
 | `hooks` | array | ❌ | 事件钩子，如监听消息发送/接收、每日定时 |
 | `promptTemplate` | string | ❌ | 注入到 AI 系统提示词的模板，让 AI 知道如何使用该插件 |
@@ -156,6 +156,7 @@ exports.say_hello = say_hello;
 | `message_sent` | 用户发送消息、已落库、AI 尚未回复前 | `{ assistant_id, conversation_id, message, role: "user", timestamp }` |
 | `message_received` | AI 回复生成完成、已落库后 | `{ assistant_id, conversation_id, message, role: "assistant", timestamp }` |
 | `daily_cron` | 每天凌晨定时触发（默认 03:00） | `{ timestamp, date, hour, minute }` |
+| `app_foreground` | 前台应用切换时触发（需无障碍服务已开启，并声明 `device_apps` 权限） | `{ package, timestamp }` |
 
 > ⚠️ 所有 hook 都在单线程上串行执行，超时 16.5 秒会被跳过。
 
@@ -293,7 +294,28 @@ musicPlayer.stop();
 var status = musicPlayer.getStatus();   // { state, title, artist }
 ```
 
-### 4.6 控制台
+### 4.6 设备应用能力 appLock / appUsage（需要权限）
+
+> 需在 `manifest.permissions` 中声明 `"device_apps"`。
+
+```javascript
+// 应用锁：锁定后用户打开该应用会被拦截到锁屏页
+appLock.lock("com.tencent.mobileqq", "被我抓到了吧", false); // 第三参数: 是否允许 PIN 解锁，false = 只有 AI 能解
+appLock.unlock("com.tencent.mobileqq");
+var locked = appLock.list();          // { success, locked: [{package, app_name, message, require_pin}] }
+var st = appLock.isLocked("com.tencent.mobileqq");
+var events = appLock.consumeEvents(); // 取出并清空锁事件日志（如用户在锁屏页长按强制解锁）
+
+// 使用统计：需要用户已授予系统"使用情况访问"权限
+var usage = appUsage.today(10);       // { success, apps: [{package, app_name, usage_minutes, last_used}] }
+                                      // 未授权时返回 { success:false, error:"no_usage_access", needs_permission:"usage_access" }
+var apps = appUsage.installed();      // 可启动应用列表 { success, apps: [{package, app_name, is_system}] }
+var fg = appUsage.foreground();       // { success, package } 当前前台应用（可能为 null）
+```
+
+安全护栏：宿主应用自身与系统应用永远不可被插件锁定；用户在锁屏页可随时长按强制解锁（会记录事件，插件可感知）。
+
+### 4.7 控制台
 
 ```javascript
 console.log("普通日志");
@@ -304,7 +326,7 @@ console.error("错误");
 
 输出到 Android Logcat，Tag 为 `PluginSandbox`。
 
-### 4.7 编码工具
+### 4.8 编码工具
 
 ```javascript
 var encoded = btoa("hello");           // Base64 编码

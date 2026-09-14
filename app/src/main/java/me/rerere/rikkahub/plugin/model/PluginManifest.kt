@@ -92,7 +92,7 @@ data class PluginManifest(
     /**
      * 插件事件钩子声明
      * 插件通过此字段声明需要监听的事件和对应的处理函数
-     * 支持的事件: message_sent, message_received, daily_cron
+     * 支持的事件: message_sent, message_received, daily_cron, app_foreground
      */
     val hooks: List<PluginHook> = emptyList(),
 
@@ -100,6 +100,7 @@ data class PluginManifest(
      * 插件权限声明
      * 支持的权限:
      * - "ai_chat": 允许插件调用 AI 生成文本（Bridge.callAI）
+     * - "device_apps": 允许插件使用设备应用能力（appLock 应用锁 / appUsage 使用统计 / app_foreground 前台事件）
      * - "disable_native_selection": 禁用 WebView 原生长按选择菜单，由 JS 自行处理选区
      */
     val permissions: List<String> = emptyList(),
@@ -249,7 +250,7 @@ data class ConfigOption(
 data class PluginHook(
     /**
      * 事件名称
-     * 支持: "message_sent", "message_received", "daily_cron"
+     * 支持: "message_sent", "message_received", "daily_cron", "app_foreground"
      */
     val event: String,
 
