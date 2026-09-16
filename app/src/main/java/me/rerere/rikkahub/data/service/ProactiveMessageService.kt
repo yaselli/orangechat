@@ -39,7 +39,6 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
@@ -1346,44 +1345,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     "removed=${conversation.messageNodes.size - updated.messageNodes.size}",
             )
             trace.conversation("${label}_after", updated)
-        }
-    }
-
-    /**
-     * 过滤历史消息中"悬空"的工具调用：
-     * 若某条消息存在未执行(isExecuted=false)且不可恢复(approvalState.canResumeToolExecution()==false)的工具调用，
-     * 说明这条消息的工具调用链没有走完（如上次生成被中断、或需要审批但用户一直没确认），
-     * 直接把整条消息从历史里剔除，避免把结构不完整的 tool_use 发给 API 触发 400。
-     *
-     * 判断逻辑与 ChatService.checkInvalidMessages 保持一致：
-     * 只要该消息里存在"至少一个可恢复的待处理工具"，就保留整条消息不做删除；
-     * 只有当所有待处理工具都不可恢复时，才整条移除。
-     */
-    private fun filterInvalidToolMessages(messages: List<UIMessage>): List<UIMessage> {
-        return messages.filterNot { message ->
-            val tools = message.getTools()
-            val hasPendingTools = tools.any { !it.isExecuted }
-            if (!hasPendingTools) return@filterNot false
-            val hasResumableTool = tools.any { !it.isExecuted && it.approvalState.canResumeToolExecution() }
-            !hasResumableTool
-        }
-    }
-
-    /**
-     * 合并相邻同角色消息（ASSISTANT-ASSISTANT / USER-USER 都要合并），
-     * 避免相邻同角色消息触发 Anthropic 等 API 的 400 错误
-     * （"roles must alternate between user and assistant"）。
-     * SYSTEM 角色在本文件的消息列表里只会出现一次（列表最前面），不会与自身相邻，无需特殊处理。
-     */
-    private fun mergeAdjacentSameRoleMessages(messages: List<UIMessage>): List<UIMessage> {
-        if (messages.size < 2) return messages
-        return messages.fold(emptyList()) { acc, msg ->
-            val prev = acc.lastOrNull()
-            if (prev != null && prev.role == msg.role) {
-                acc.dropLast(1) + prev.copy(parts = prev.parts + msg.parts)
-            } else {
-                acc + msg
-            }
         }
     }
 
