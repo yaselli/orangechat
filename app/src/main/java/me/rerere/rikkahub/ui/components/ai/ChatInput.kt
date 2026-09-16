@@ -77,6 +77,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalScrollCaptureInProgress
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -502,6 +503,7 @@ fun ChatInput(
     }
 
     val inputMaterialStyle = settings.displaySetting.inputMaterialStyle
+    val scrollCaptureInProgress = LocalScrollCaptureInProgress.current
 
     Surface(
         color = Color.Transparent,
@@ -529,17 +531,24 @@ fun ChatInput(
                     )
                     .clip(MaterialTheme.shapes.largeIncreased)
                     .then(
-                        if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS) {
+                        if (
+                            !scrollCaptureInProgress &&
+                            inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS
+                        ) {
                             Modifier.hazeEffect(
                                 state = hazeState,
                                 style = HazeMaterials.ultraThin(
                                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f),
                                 ),
                             )
-                        } else if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
-                            state = hazeState,
-                            style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
-                        )
+                        } else if (
+                            !scrollCaptureInProgress && settings.displaySetting.enableBlurEffect
+                        ) {
+                            Modifier.hazeEffect(
+                                state = hazeState,
+                                style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
+                            )
+                        }
                         else Modifier
                     )
                     .then(
@@ -559,11 +568,21 @@ fun ChatInput(
                 tonalElevation = 0.dp,
                 // When background image is set, make surface transparent so image is visible
                 color = if (inputBgFile != null) Color.Transparent
-                    else if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS) Color.Transparent
+                    else if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS) {
+                        if (scrollCaptureInProgress) {
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.62f)
+                        } else {
+                            Color.Transparent
+                        }
+                    }
                     else if (inputMaterialStyle == UiMaterialStyle.FROSTED) {
                         MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.74f)
                     }
-                    else if (settings.displaySetting.enableBlurEffect) Color.Transparent
+                    else if (
+                        settings.displaySetting.enableBlurEffect && !scrollCaptureInProgress
+                    ) {
+                        Color.Transparent
+                    }
                     else settings.displaySetting.inputFieldColor?.let { it.toComposeColor() } ?: hazeTintColor,
             ) {
                 // Use Box so background image can match parent size
@@ -797,15 +816,21 @@ fun ChatInput(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(20.dp))
                             .then(
-                                if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
+                                if (!scrollCaptureInProgress && settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
                                     state = hazeState,
                                     style = HazeMaterials.ultraThin()
                                 )
                                 else Modifier
-                            ),
+                        ),
                         shape = RoundedCornerShape(20.dp),
                         tonalElevation = 0.dp,
-                        color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
+                        color = if (
+                            settings.displaySetting.enableBlurEffect && !scrollCaptureInProgress
+                        ) {
+                            Color.Transparent
+                        } else {
+                            hazeTintColor
+                        },
                     ) {
                         FilesPicker(
                             conversation = conversation,
