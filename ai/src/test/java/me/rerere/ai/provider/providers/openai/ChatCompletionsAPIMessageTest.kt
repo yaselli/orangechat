@@ -13,6 +13,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.provider.Model
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
@@ -253,6 +254,56 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("tool", nextMsg["role"]?.jsonPrimitive?.content)
         assertEquals("call_abc", nextMsg["tool_call_id"]?.jsonPrimitive?.content)
         assertEquals("my_tool", nextMsg["name"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `mixed tool outcomes keep one matching result for every call id`() {
+        val assistantMessage = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                createExecutedTool("call_success", "read_screen", "{}", "screen text"),
+                createExecutedTool(
+                    "call_failed",
+                    "accessibility",
+                    "{}",
+                    "{\"error\":\"Accessibility failed\"}",
+                ),
+                UIMessagePart.Tool(
+                    toolCallId = "call_denied",
+                    toolName = "write_file",
+                    input = "{}",
+                    output = listOf(UIMessagePart.Text("{\"error\":\"Denied by user\"}")),
+                    approvalState = ToolApprovalState.Denied("not now"),
+                ),
+            ),
+        )
+
+        val result = invokeBuildMessages(listOf(UIMessage.user("Do it"), assistantMessage))
+        val assistantToolCalls = result
+            .first { it.jsonObject["role"]?.jsonPrimitive?.content == "assistant" }
+            .jsonObject["tool_calls"]
+            ?.jsonArray
+            .orEmpty()
+        val callIds = assistantToolCalls.map {
+            it.jsonObject["id"]?.jsonPrimitive?.content
+        }
+        val toolResults = result.filter {
+            it.jsonObject["role"]?.jsonPrimitive?.content == "tool"
+        }
+        val resultIds = toolResults.map {
+            it.jsonObject["tool_call_id"]?.jsonPrimitive?.content
+        }
+
+        assertEquals(listOf("call_success", "call_failed", "call_denied"), callIds)
+        assertEquals(callIds, resultIds)
+        assertTrue(
+            toolResults[1].jsonObject["content"]?.jsonPrimitive?.content
+                ?.contains("Accessibility failed") == true,
+        )
+        assertTrue(
+            toolResults[2].jsonObject["content"]?.jsonPrimitive?.content
+                ?.contains("Denied by user") == true,
+        )
     }
 
     @Test
