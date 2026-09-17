@@ -531,23 +531,22 @@ fun ChatInput(
                     )
                     .clip(MaterialTheme.shapes.largeIncreased)
                     .then(
-                        if (
-                            !scrollCaptureInProgress &&
-                            inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS
-                        ) {
+                        if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS) {
                             Modifier.hazeEffect(
                                 state = hazeState,
                                 style = HazeMaterials.ultraThin(
                                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f),
                                 ),
-                            )
-                        } else if (
-                            !scrollCaptureInProgress && settings.displaySetting.enableBlurEffect
-                        ) {
+                            ) {
+                                blurEnabled = !scrollCaptureInProgress
+                            }
+                        } else if (settings.displaySetting.enableBlurEffect) {
                             Modifier.hazeEffect(
                                 state = hazeState,
                                 style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
-                            )
+                            ) {
+                                blurEnabled = !scrollCaptureInProgress
+                            }
                         }
                         else Modifier
                     )
@@ -816,10 +815,12 @@ fun ChatInput(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(20.dp))
                             .then(
-                                if (!scrollCaptureInProgress && settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
+                                if (settings.displaySetting.enableBlurEffect) Modifier.hazeEffect(
                                     state = hazeState,
-                                    style = HazeMaterials.ultraThin()
-                                )
+                                    style = HazeMaterials.ultraThin(),
+                                ) {
+                                    blurEnabled = !scrollCaptureInProgress
+                                }
                                 else Modifier
                         ),
                         shape = RoundedCornerShape(20.dp),

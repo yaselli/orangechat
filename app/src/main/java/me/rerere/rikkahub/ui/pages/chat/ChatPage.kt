@@ -116,7 +116,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val hazeState = rememberHazeState()
-    val scrollCaptureInProgress = LocalScrollCaptureInProgress.current
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
 
     // Handle back press when drawer is open
@@ -250,7 +249,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
                     modifier = Modifier
                         .fillMaxSize()
                         .then(
-                            if (drawerProgress > 0.001f && !scrollCaptureInProgress) {
+                            if (drawerProgress > 0.001f) {
                                 Modifier.graphicsLayer {
                                     // Create the off-screen layer only while the
                                     // drawer transition is visibly running. A
@@ -480,7 +479,7 @@ private fun ChatPageContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .then(
-                        if (needsLiveHaze && !scrollCaptureInProgress) {
+                        if (needsLiveHaze) {
                             Modifier.hazeSource(state = hazeState)
                         } else {
                             Modifier
