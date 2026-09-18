@@ -383,10 +383,7 @@ class GenerationHandler(
                 }
  
                 // 记忆
-                if (assistant.enableMemory) {
-                    appendLine()
-                    append(buildMemoryPrompt(memories = memories))
-                }
+                append(buildGenerationMemoryPrompt(assistant.enableMemory, memories, GenerationScene.CHAT))
  
                 if (assistant.enableRecentChatsReference) {
                     appendLine()

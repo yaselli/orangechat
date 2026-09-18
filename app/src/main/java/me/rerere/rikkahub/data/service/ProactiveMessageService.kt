@@ -39,6 +39,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.rikkahub.data.ai.buildGenerationRequestParameters
 import me.rerere.rikkahub.data.ai.GenerationScene
+import me.rerere.rikkahub.data.ai.buildGenerationMemoryPrompt
 import me.rerere.rikkahub.data.ai.selectGenerationHistory
 import me.rerere.rikkahub.data.ai.selectGenerationSystemPrompt
 import me.rerere.ai.ui.UIMessage
@@ -1030,14 +1031,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 } else {
                     memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
                 }
-                if (memories.isNotEmpty()) {
-                    appendLine()
-                    appendLine()
-                    appendLine("## 记忆")
-                    memories.forEach { memory ->
-                        appendLine("- ${memory.content}")
-                    }
-                }
+                append(buildGenerationMemoryPrompt(true, memories, GenerationScene.PROACTIVE))
             }
 
             if (proactiveInjections.isNotEmpty()) {

@@ -34,6 +34,31 @@ internal fun buildMemoryPrompt(memories: List<AssistantMemory>) =
         appendLine()
     }
 
+/** Preserve each scene's existing wording, blank lines, and empty-memory behavior. */
+internal fun buildGenerationMemoryPrompt(
+    enabled: Boolean,
+    memories: List<AssistantMemory>,
+    scene: GenerationScene,
+): String {
+    if (!enabled) return ""
+    return when (scene) {
+        GenerationScene.CHAT -> buildString {
+            appendLine()
+            append(buildMemoryPrompt(memories))
+        }
+        GenerationScene.PROACTIVE -> buildString {
+            if (memories.isNotEmpty()) {
+                appendLine()
+                appendLine()
+                appendLine("## 记忆")
+                memories.forEach { memory ->
+                    appendLine("- ${memory.content}")
+                }
+            }
+        }
+    }
+}
+
 internal suspend fun buildRecentChatsPrompt(
     assistant: Assistant,
     conversationRepo: ConversationRepository
