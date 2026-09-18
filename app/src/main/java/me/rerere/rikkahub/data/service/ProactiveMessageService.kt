@@ -38,6 +38,9 @@ import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.rikkahub.data.ai.buildGenerationRequestParameters
+import me.rerere.rikkahub.data.ai.GenerationScene
+import me.rerere.rikkahub.data.ai.selectGenerationHistory
+import me.rerere.rikkahub.data.ai.selectGenerationSystemPrompt
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.handleMessageChunk
@@ -319,7 +322,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     companion object {
         private const val TAG = "ProactiveMessageTrigger"
         private const val MAX_TOOL_STEPS = 5 // 主动消息最大工具调用步数
-        private const val MAX_PROACTIVE_CONTEXT_MESSAGES = 20
         private const val GENERATION_WAKE_LOCK_TIMEOUT_MS = 10 * 60 * 1000L
         // 外部触发（网关轮询）时跳过内部 minInterval 去重
         const val EXTRA_FORCE_TRIGGER = "force_trigger"
@@ -536,12 +538,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     "idleIncluded=true currentTimeIncluded=${settings.systemToolsSetting.timeContextInjectionEnabled}",
                 )
 
-                val rawHistoryMessages = conversation?.currentMessages?.let {
-                    val configuredSize = assistant.contextMessageSize
-                        .takeIf { size -> size > 0 }
-                        ?: MAX_PROACTIVE_CONTEXT_MESSAGES
-                    it.takeLast(configuredSize.coerceAtMost(MAX_PROACTIVE_CONTEXT_MESSAGES))
-                } ?: emptyList()
+                val rawHistoryMessages = selectGenerationHistory(
+                    conversation?.currentMessages.orEmpty(),
+                    assistant.contextMessageSize,
+                    GenerationScene.PROACTIVE,
+                )
                 val latestUserText = latestUserMessage.visibleTextForProactiveContext()
                 val latestRegularAssistantText = rawHistoryMessages.lastOrNull { message ->
                     message.role == MessageRole.ASSISTANT &&
@@ -1017,7 +1018,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         latestAssistantText: String,
     ): String {
         return buildString {
-            val effectiveSystemPrompt = assistant.systemPrompt
+            val effectiveSystemPrompt = selectGenerationSystemPrompt(assistant, GenerationScene.PROACTIVE)
             if (effectiveSystemPrompt.isNotBlank()) {
                 append(effectiveSystemPrompt)
             }
