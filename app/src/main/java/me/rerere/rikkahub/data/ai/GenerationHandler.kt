@@ -461,22 +461,7 @@ class GenerationHandler(
         )
  
         var messages: List<UIMessage> = messages
-        val params = TextGenerationParams(
-            model = model,
-            temperature = assistant.temperature,
-            topP = assistant.topP,
-            maxTokens = assistant.maxTokens,
-            tools = tools,
-            reasoningLevel = assistant.reasoningLevel,
-            customHeaders = buildList {
-                addAll(assistant.customHeaders)
-                addAll(model.customHeaders)
-            },
-            customBody = buildList {
-                addAll(assistant.customBodies)
-                addAll(model.customBodies)
-            }
-        )
+        val params = buildGenerationRequestParameters(assistant, model, tools)
         if (stream) {
             aiLoggingManager.addLog(
                 AILogging.Generation(

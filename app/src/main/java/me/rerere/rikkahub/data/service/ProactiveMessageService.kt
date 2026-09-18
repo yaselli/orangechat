@@ -37,6 +37,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.rikkahub.data.ai.buildGenerationRequestParameters
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.handleMessageChunk
@@ -652,22 +653,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // 主动消息场景：支持工具调用，但限制最大步数
                 // temperature 不强制默认 0.8f，保持与 GenerationHandler 一致（assistant.temperature 为 null 时不传），
                 // 否则对智谱 GLM 等 thinking 模型会同时下发 temperature + thinking，触发 "Invalid request body" 400。
-                val params = TextGenerationParams(
-                    model = model,
-                    temperature = assistant.temperature,
-                    topP = assistant.topP,
-                    maxTokens = assistant.maxTokens,
-                    tools = tools,
-                    reasoningLevel = assistant.reasoningLevel,
-                    customHeaders = buildList {
-                        addAll(assistant.customHeaders)
-                        addAll(model.customHeaders)
-                    },
-                    customBody = buildList {
-                        addAll(assistant.customBodies)
-                        addAll(model.customBodies)
-                    }
-                )
+                val params = buildGenerationRequestParameters(assistant, model, tools)
 
                 Log.d(TAG, "Calling AI API for proactive message with ${historyMessages.size} history messages, ${tools.size} tools (reasoning=${assistant.reasoningLevel}, model=${model.modelId}, provider=${providerSetting::class.simpleName})...")
                 // 诊断: 列出工具及其 parameters 是否为 null, 便于定位 "Invalid request body"
