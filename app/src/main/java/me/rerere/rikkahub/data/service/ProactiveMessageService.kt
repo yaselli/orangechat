@@ -449,6 +449,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val conversation = recentConversationId?.let { conversationRepository.getConversationById(it) }
                 trace.conversation("database_load_end", conversation)
 
+                if (conversation != null && chatService.isChatBlocked(conversation.id)) {
+                    outcome = "blocked_chat"
+                    return@launch
+                }
+
                 val latestUserMessage = conversation?.currentMessages
                     ?.lastOrNull { it.role == MessageRole.USER }
                 if (latestUserMessage == null) {
@@ -481,12 +486,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // 放在 claim 之前：即使 claim 失败提前返回，引用也能在 finally 里被正确释放，保持计数平衡。
                 // 同时把数据库里的完整对话同步到 session，防止流式更新时 conv 是空状态导致覆盖历史。
                 chatService.addConversationReference(conversationId)
-                trace.conversation("session_before_sync", chatService.getConversationFlow(conversationId).value)
-                if (conversation != null) {
-                    chatService.updateConversationState(conversationId) { _ -> conversation }
-                }
-                trace.conversation("session_after_sync", chatService.getConversationFlow(conversationId).value)
-
                 // 抢占生成权：尝试把当前协程的 Job 注册进 ConversationSession。
                 // 这一步对所有触发源（含 isForceTrigger / 激进模式设备事件）一视同仁，是并发安全的核心。
                 // 如果当前已有生成在跑（正常聊天或另一路主动消息），直接放弃本次触发，不排队等待、不重试。
@@ -505,6 +504,16 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     return@launch
                 }
                 trace.event("generation_claim", "success=true")
+                // Blocking can start during the database read. Claim before any session write.
+                if (chatService.isChatBlocked(conversationId)) {
+                    outcome = "blocked_chat"
+                    return@launch
+                }
+                trace.conversation("session_before_sync", chatService.getConversationFlow(conversationId).value)
+                if (conversation != null) {
+                    chatService.updateConversationState(conversationId) { _ -> conversation }
+                }
+                trace.conversation("session_after_sync", chatService.getConversationFlow(conversationId).value)
 
                 // 构建上下文
                 val idleMinutes = latestUserMessage.createdAt

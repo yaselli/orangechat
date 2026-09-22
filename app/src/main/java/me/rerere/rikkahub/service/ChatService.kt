@@ -21,6 +21,11 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -70,6 +75,7 @@ import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
+import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.ToolNaming
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
@@ -391,9 +397,12 @@ class ChatService(
     suspend fun initializeConversation(conversationId: Uuid) {
         getOrCreateSession(conversationId) // 确保 session 存在
         // 总是从数据库重新加载最新数据，确保能显示主动消息等新内容
-        val conversation = conversationRepo.getConversationById(conversationId)
+        val storedConversation = conversationRepo.getConversationById(conversationId)
+        // Returning to an active blocked chat must not replace its in-flight reply with an older DB snapshot.
+        val blockedGenerationRunning = blockedChatState(conversationId).value.running
+        val conversation = if (blockedGenerationRunning) getConversationFlow(conversationId).value else storedConversation
         if (conversation != null) {
-            updateConversation(conversationId, conversation)
+            if (!blockedGenerationRunning) updateConversation(conversationId, conversation)
             // 只有当前选中助手与该对话的助手不一致时才写 DataStore，
             // 避免每次打开/切换对话都无条件写入 SELECT_ASSISTANT 触发 settingsFlow 全量重组
             val currentSettings = settingsStore.settingsFlow.value
@@ -413,10 +422,95 @@ class ChatService(
         }
     }
 
+    private val blockedChatStore = BlockedChatStore(context)
+    private val blockedChatControl = Mutex()
+
+    fun blockedChatState(id: Uuid): StateFlow<BlockedChatState> = blockedChatStore.state(id)
+    fun isChatBlocked(id: Uuid): Boolean = blockedChatState(id).value.blocked
+
+    suspend fun setChatBlocked(id: Uuid, blocked: Boolean, limit: Int = 5) = blockedChatControl.withLock {
+        if (blocked) {
+            if (isChatBlocked(id)) return@withLock
+            check(VoiceCallService.activeConversationId.value != id.toString()) { "请先结束当前通话，再拉黑对方" }
+            blockedChatStore.update(id) { BlockedChatState(blocked = true, limit = limit.coerceIn(1, 20)) }
+            stopGeneration(id)
+            initializeConversation(id)
+            if (!conversationRepo.existsConversationById(id)) {
+                conversationRepo.insertConversation(getConversationFlow(id).value)
+            }
+            startBlockedReplies(id)
+        } else {
+            // Join the old batch before allowing new user sends.
+            stopGeneration(id)
+            blockedChatStore.update(id) { BlockedChatState() }
+        }
+    }
+
+    suspend fun continueBlockedReplies(id: Uuid) = blockedChatControl.withLock {
+        val state = blockedChatState(id).value
+        if (!state.blocked || state.running) return@withLock
+        stopGeneration(id)
+        if (state.reachedLimit) blockedChatStore.update(id) { it.copy(replies = 0) }
+        startBlockedReplies(id)
+    }
+
+    suspend fun pauseBlockedReplies(id: Uuid) = blockedChatControl.withLock {
+        stopGeneration(id)
+    }
+
+    private suspend fun startBlockedReplies(id: Uuid) {
+        val session = getOrCreateSession(id)
+        check(session.state.value.currentMessages.lastOrNull()?.getTools().orEmpty().all { it.isExecuted }) {
+            "有未完成的工具，请先解除拉黑并处理工具确认，再继续。"
+        }
+        val job = appScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                runBlockedReplyBatch(
+                    state = { blockedChatState(id).value },
+                    generateReply = { handleMessageComplete(id, applicationReceipt = blockedChatReceipt()) },
+                    recordReply = {
+                        blockedChatStore.update(id) { it.afterReply() }
+                        _generationDoneFlow.emit(id)
+                    },
+                    betweenReplies = { delay(1_000) },
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                addError(e, id, title = "拉黑续聊已暂停")
+            } finally {
+                withContext(NonCancellable) {
+                    try {
+                        session.saveMutex.withLock {
+                            saveConversation(id, session.state.value)
+                        }
+                    } catch (e: Exception) {
+                        addError(e, id, title = "保存拉黑续聊失败")
+                    } finally {
+                        blockedChatStore.update(id) { it.copy(running = false) }
+                    }
+                }
+            }
+        }
+        if (!session.tryClaimGeneration(job)) {
+            job.cancel()
+            return
+        }
+        session.acquire()
+        job.invokeOnCompletion { session.release() }
+        try {
+            blockedChatStore.update(id) { it.copy(running = true) }
+            if (!job.start()) blockedChatStore.update(id) { it.copy(running = false) }
+        } catch (e: Exception) {
+            job.cancel()
+            throw e
+        }
+    }
+
     // ---- 发送消息 ----
 
     fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
-        if (content.isEmptyInputMessage()) return
+        if (isChatBlocked(conversationId) || content.isEmptyInputMessage()) return
 
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
@@ -434,6 +528,7 @@ class ChatService(
                 // 读取最新状态 -> 追加用户消息 -> 落库，整体加锁。
                 // 防止跟同一时刻可能在跑的标题生成/建议生成/语音通话挂断反馈互相覆盖对方刚写入的消息。
                 val (assistant, processedContent) = session.saveMutex.withLock {
+                    check(!isChatBlocked(conversationId)) { "已拉黑，解除后才可发送消息" }
                     val latestConversation = session.state.value
                     val assistant = settings.getAssistantById(latestConversation.assistantId)
                         ?: settings.getCurrentAssistant()
@@ -498,6 +593,7 @@ class ChatService(
     // ---- 添加主动消息 ----
 
     fun addProactiveMessage(conversationId: Uuid, aiMessage: UIMessage) {
+        if (isChatBlocked(conversationId)) return
         launchWithConversationReference(conversationId) {
             try {
                 appendProactiveAiMessageUnderLock(conversationId, aiMessage)
@@ -531,6 +627,7 @@ class ChatService(
         }
 
         session.saveMutex.withLock {
+            if (isChatBlocked(conversationId)) return@withLock
             // 优先从数据库读取完整对话，避免 session 被 idle 清除后用空对话覆盖数据库已有数据
             val currentConversation = conversationRepo.getConversationById(conversationId)
                 ?: session.state.value
@@ -552,6 +649,7 @@ class ChatService(
      * 参考 generateTitle / generateSuggestion 的轻量调用方式.
      */
     fun notifyVoiceCallDeclined(conversationId: Uuid) {
+        if (isChatBlocked(conversationId)) return
         appScope.launch(Dispatchers.IO) {
             try {
                 val session = getOrCreateSession(conversationId)
@@ -770,6 +868,7 @@ class ChatService(
         message: UIMessage,
         regenerateAssistantMsg: Boolean = true
     ) {
+        if (isChatBlocked(conversationId)) return
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
 
@@ -819,6 +918,10 @@ class ChatService(
         reason: String = "",
         answer: String? = null,
     ) {
+        if (isChatBlocked(conversationId)) {
+            addError(IllegalStateException("请先解除拉黑，再处理工具确认"), conversationId)
+            return
+        }
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
 
@@ -880,13 +983,19 @@ class ChatService(
 
     private suspend fun handleMessageComplete(
         conversationId: Uuid,
-        messageRange: ClosedRange<Int>? = null
-    ) {
+        messageRange: ClosedRange<Int>? = null,
+        applicationReceipt: UIMessage? = null,
+    ): Boolean {
+        if (isChatBlocked(conversationId) != (applicationReceipt != null)) return false
+        if (applicationReceipt != null && !conversationRepo.existsConversationById(conversationId)) return false
         val settings = settingsStore.settingsFlow.first()
         val initialConversation = getConversationFlow(conversationId).value
         val assistant = settings.getAssistantById(initialConversation.assistantId)
             ?: settings.getCurrentAssistant()
-        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return
+        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: run {
+            if (applicationReceipt != null) error("请先选择聊天模型")
+            return false
+        }
 
         val senderName = if (assistant.useAssistantAvatar) {
             assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
@@ -897,7 +1006,7 @@ class ChatService(
         // session 需要在 runCatching 外声明，以便 .onSuccess 中也能访问 saveMutex
         val session = getOrCreateSession(conversationId)
 
-        runCatching {
+        val generationResult = runCatching {
 
             // reset suggestions
             updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
@@ -925,7 +1034,7 @@ class ChatService(
             }
             val latestUserMessage = requestMessages.lastOrNull { it.role == MessageRole.USER }
             var transientExtraInfo: String? = null
-            if (latestUserMessage != null &&
+            if (applicationReceipt == null && latestUserMessage != null &&
                 latestUserMessage.parts.none { it.isExtraInfoInjectionPart() }
             ) {
                 val collected = collectExtraInfoForRequest(
@@ -959,7 +1068,7 @@ class ChatService(
                     } else {
                         it
                     }
-                },
+                } + listOfNotNull(applicationReceipt),
                 assistant = assistant,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 workspaceCwd = conversation.workspaceCwd,
@@ -972,6 +1081,14 @@ class ChatService(
                     addAll(inputTransformers)
                     add(templateTransformer)
                     add(workspaceReminderTransformer)
+                }.let { transformers ->
+                    if (applicationReceipt == null) transformers else listOf(
+                        BlockedChatReceiptTransformer(
+                            applicationReceipt,
+                            conversation.currentMessages.mapTo(hashSetOf()) { it.id },
+                            transformers,
+                        )
+                    )
                 },
                 outputTransformers = outputTransformers,
                 tools = buildAvailableTools(
@@ -985,6 +1102,10 @@ class ChatService(
                     addAll(pluginToolProvider.getPluginPromptInjections())
                     settings.displaySetting.buildAnniversaryPrompt()?.let(::add)
                     transientExtraInfo?.let(::add)
+                    if (applicationReceipt != null) add(
+                        "本轮最后一条 application_block_receipt 是应用自动回执，不是用户发言。" +
+                            "用户在拉黑期间不能发送消息；不要虚构收到用户的新话。"
+                    )
                 },
                 conversationId = conversationId.toString(),
             ).onCompletion {
@@ -1001,19 +1122,36 @@ class ChatService(
                 updateConversation(conversationId, updatedConversation)
 
                 // Show notification if app is not in foreground
-                if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration) {
+                val notifyCompletion = applicationReceipt == null || isCompletedBlockedReply(
+                    updatedConversation.currentMessages.lastOrNull(), initialConversation.currentMessages.lastOrNull()?.id
+                )
+                if (notifyCompletion && !isForeground.value &&
+                    settings.displaySetting.enableNotificationOnMessageGeneration
+                ) {
                     sendGenerationDoneNotification(conversationId, senderName)
                 }
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
-                        val updatedConversation = getConversationFlow(conversationId).value
-                            .updateCurrentMessages(chunk.messages)
+                        val current = getConversationFlow(conversationId).value
+                        val updatedConversation = if (applicationReceipt == null) {
+                            current.updateCurrentMessages(chunk.messages)
+                        } else {
+                            applyBlockedChatChunk(current, chunk.messages, applicationReceipt.id)
+                        }
                         updateConversation(conversationId, updatedConversation)
 
                         // 如果应用不在前台，发送 Live Update 通知
-                        if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
-                            sendLiveUpdateNotification(conversationId, chunk.messages, senderName)
+                        val hasNewReply = applicationReceipt == null ||
+                            updatedConversation.currentMessages.lastOrNull()?.id !=
+                            initialConversation.currentMessages.lastOrNull()?.id
+                        if (hasNewReply && !isForeground.value &&
+                            settings.displaySetting.enableNotificationOnMessageGeneration &&
+                            settings.displaySetting.enableLiveUpdateNotification
+                        ) {
+                            sendLiveUpdateNotification(
+                                conversationId, chunk.messages.filterNot { it.id == applicationReceipt?.id }, senderName
+                            )
                         }
                     }
                 }
@@ -1032,6 +1170,10 @@ class ChatService(
                 saveConversation(conversationId, latest)
                 latest
             }
+            if (applicationReceipt != null && !isCompletedBlockedReply(
+                    finalConversation.currentMessages.lastOrNull(), initialConversation.currentMessages.lastOrNull()?.id
+                )
+            ) return@onSuccess
 
             // 自动唤起网易云音乐：扫描刚完成的 assistant 文本中的 orpheus:// scheme
             try {
@@ -1114,14 +1256,20 @@ class ChatService(
                 Log.w(TAG, "Failed to trigger message_received event: ${e.javaClass.simpleName}")
             }
 
-            launchWithConversationReference(conversationId) {
-                generateTitle(conversationId, finalConversation)
-            }
-            launchWithConversationReference(conversationId) {
-                generateSuggestion(conversationId, finalConversation)
+            if (applicationReceipt == null) {
+                launchWithConversationReference(conversationId) {
+                    generateTitle(conversationId, finalConversation)
+                }
+                launchWithConversationReference(conversationId) {
+                    generateSuggestion(conversationId, finalConversation)
+                }
             }
 
         }
+        val reply = session.state.value.currentMessages.lastOrNull()
+        return generationResult.isSuccess && isCompletedBlockedReply(
+            reply, initialConversation.currentMessages.lastOrNull()?.id
+        )
     }
 
     /**
@@ -1141,7 +1289,9 @@ class ChatService(
         }
         addAll(
             localTools.getTools(
-                assistant.localTools,
+                assistant.localTools.filterNot {
+                    isChatBlocked(conversationId) && it == LocalToolOption.RequestVoiceCall
+                },
                 me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
                     callerAssistantId = assistant.id.toString(),
                     callerConversationId = conversationId.toString(),
@@ -1642,6 +1792,8 @@ class ChatService(
 
     suspend fun saveConversation(conversationId: Uuid, conversation: Conversation) {
         val exists = conversationRepo.existsConversationById(conversation.id)
+        // A reply finishing after deletion must not recreate a blocked conversation.
+        if (!exists && isChatBlocked(conversationId)) return
         if (!exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()) {
             return // 新会话且为空时不保存
         }
@@ -1728,7 +1880,7 @@ class ChatService(
         messageId: Uuid,
         parts: List<UIMessagePart>
     ) {
-        if (parts.isEmptyInputMessage()) return
+        if (isChatBlocked(conversationId) || parts.isEmptyInputMessage()) return
 
         val currentConversation = getConversationFlow(conversationId).value
         val settings = settingsStore.settingsFlow.first()
@@ -1800,6 +1952,7 @@ class ChatService(
         nodeId: Uuid,
         selectIndex: Int
     ) {
+        if (rejectBlockedHistoryChange(conversationId)) return
         val currentConversation = getConversationFlow(conversationId).value
         val targetNode = currentConversation.messageNodes.firstOrNull { it.id == nodeId }
             ?: throw NotFoundException("Message node not found")
@@ -1828,6 +1981,7 @@ class ChatService(
         messageId: Uuid,
         failIfMissing: Boolean = true,
     ) {
+        if (rejectBlockedHistoryChange(conversationId)) return
         val currentConversation = getConversationFlow(conversationId).value
         val updatedConversation = buildConversationAfterMessageDelete(currentConversation, messageId)
 
@@ -1839,6 +1993,12 @@ class ChatService(
         }
 
         saveConversation(conversationId, updatedConversation)
+    }
+
+    private fun rejectBlockedHistoryChange(conversationId: Uuid): Boolean {
+        if (!isChatBlocked(conversationId)) return false
+        addError(IllegalStateException("请先解除拉黑，再修改聊天记录"), conversationId)
+        return true
     }
 
     suspend fun deleteMessage(

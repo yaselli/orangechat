@@ -178,6 +178,12 @@ class VoiceCallService : Service(), KoinComponent {
             return START_NOT_STICKY
         }
 
+        if (chatService.isChatBlocked(conversationId)) {
+            _uiState.update { it.copy(errorMessage = "请先解除拉黑，再发起通话") }
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         _activeConversationId.value = convIdStr
 
         // 关键修复: 必须先同步调用 startForeground, 用一个初始状态的通知占位.

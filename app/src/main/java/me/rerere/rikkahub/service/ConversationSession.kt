@@ -40,7 +40,7 @@ class ConversationSession(
     // 生成任务（内聚在 session 中）
     private val _generationJob = MutableStateFlow<Job?>(null)
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
-    val isGenerating: Boolean get() = _generationJob.value?.isActive == true
+    val isGenerating: Boolean get() = _generationJob.value?.isCompleted == false
     val isInUse: Boolean get() = refCount.get() > 0 || isGenerating
 
     /**
@@ -89,15 +89,22 @@ class ConversationSession(
         }
     }
 
-    fun setJob(job: Job?) {
+    fun setJob(job: Job?) = synchronized(claimLock) {
         _generationJob.value?.cancel()
         _generationJob.value = job
         job?.invokeOnCompletion {
-            _generationJob.value = null
-            if (refCount.get() <= 0) {
+            // Completion of a replaced task must not clear the replacement's ownership.
+            val cleared = synchronized(claimLock) {
+                if (_generationJob.value === job) {
+                    _generationJob.value = null
+                    true
+                } else false
+            }
+            if (cleared && refCount.get() <= 0) {
                 scheduleIdleCheck()
             }
         }
+        Unit
     }
 
     fun getJob(): Job? = _generationJob.value

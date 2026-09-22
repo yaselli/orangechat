@@ -80,6 +80,7 @@ import me.rerere.rikkahub.data.ai.transformers.isExtraInfoInjectionPart
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.service.ChatError
+import me.rerere.rikkahub.service.BlockedChatState
 import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -116,6 +117,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val hazeState = rememberHazeState()
+    val scrollCaptureInProgress = LocalScrollCaptureInProgress.current
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
 
     // Handle back press when drawer is open
@@ -249,7 +251,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
                     modifier = Modifier
                         .fillMaxSize()
                         .then(
-                            if (drawerProgress > 0.001f) {
+                            if (drawerProgress > 0.001f && !scrollCaptureInProgress) {
                                 Modifier.graphicsLayer {
                                     // Create the off-screen layer only while the
                                     // drawer transition is visibly running. A
@@ -327,6 +329,11 @@ private fun ChatPageContent(
     val needsLiveHaze = displaySetting.inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS ||
         displaySetting.enableBlurEffect || displaySetting.enableGlassDrawer
     var previewMode by rememberSaveable { mutableStateOf(false) }
+    val blockedChatState by vm.blockedChatState.collectAsStateWithLifecycle()
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(blockedChatState.blocked) {
+        if (blockedChatState.blocked) keyboard?.hide()
+    }
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
     Surface(
@@ -342,6 +349,8 @@ private fun ChatPageContent(
                     bigScreen = bigScreen,
                     drawerState = drawerState,
                     previewMode = previewMode,
+                    blockedChatState = blockedChatState,
+                    onSetBlocked = { blocked, limit -> vm.setChatBlocked(blocked, limit) },
                     onNewChat = {
                         navigateToChatPage(navController)
                     },
@@ -368,7 +377,14 @@ private fun ChatPageContent(
                 )
             },
             bottomBar = {
-                ChatInput(
+                if (blockedChatState.blocked) {
+                    BlockedChatBar(
+                        state = blockedChatState,
+                        onUnblock = { vm.setChatBlocked(false) },
+                        onContinue = vm::continueBlockedReplies,
+                        onPause = vm::pauseBlockedReplies,
+                    )
+                } else ChatInput(
                     state = inputState,
                     loading = loadingJob != null,
                     settings = setting,
@@ -479,7 +495,7 @@ private fun ChatPageContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .then(
-                        if (needsLiveHaze) {
+                        if (needsLiveHaze && !scrollCaptureInProgress) {
                             Modifier.hazeSource(state = hazeState)
                         } else {
                             Modifier
@@ -575,6 +591,8 @@ private fun TopBar(
     drawerState: DrawerState,
     bigScreen: Boolean,
     previewMode: Boolean,
+    blockedChatState: BlockedChatState,
+    onSetBlocked: (Boolean, Int) -> Unit,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit,
@@ -637,6 +655,7 @@ private fun TopBar(
         },
         actions = {
             IconButton(
+                enabled = !blockedChatState.blocked,
                 onClick = {
                     onVoiceCall()
                 }
@@ -659,6 +678,7 @@ private fun TopBar(
             ) {
                 Icon(HugeIcons.MessageAdd01, "New Message")
             }
+            BlockedChatMenu(blockedChatState, onSetBlocked)
         },
     )
     titleState.EditStateContent { title, onUpdate ->

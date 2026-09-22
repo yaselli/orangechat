@@ -18,6 +18,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -63,6 +64,31 @@ class ChatVM(
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
+    val blockedChatState = chatService.blockedChatState(_conversationId)
+
+    fun setChatBlocked(blocked: Boolean, limit: Int = 5) = runBlockAction {
+        chatService.setChatBlocked(_conversationId, blocked, limit)
+    }
+
+    fun continueBlockedReplies() = runBlockAction {
+        chatService.continueBlockedReplies(_conversationId)
+    }
+
+    fun pauseBlockedReplies() = runBlockAction {
+        chatService.pauseBlockedReplies(_conversationId)
+    }
+
+    private fun runBlockAction(action: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                action()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                chatService.addError(e, _conversationId, title = "拉黑设置")
+            }
+        }
+    }
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
 
     // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
@@ -265,6 +291,7 @@ class ChatVM(
 
     fun deleteConversation(conversation: Conversation) {
         viewModelScope.launch {
+            if (chatService.isChatBlocked(conversation.id)) chatService.setChatBlocked(conversation.id, false)
             conversationRepo.deleteConversation(conversation)
         }
     }
@@ -314,6 +341,10 @@ class ChatVM(
     }
 
     fun updateConversation(newConversation: Conversation) {
+        if (blockedChatState.value.blocked) {
+            chatService.addError(IllegalStateException("请先解除拉黑，再修改聊天记录"), _conversationId)
+            return
+        }
         chatService.updateConversationState(_conversationId) {
             newConversation
         }
