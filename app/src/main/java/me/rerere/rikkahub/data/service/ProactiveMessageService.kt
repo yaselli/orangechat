@@ -637,7 +637,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // 构建系统提示词（包含记忆 + 上下文，都放在最后面避免被网关淹没）
                 val systemPrompt = buildSystemPrompt(
                     assistant = assistant,
-                    context = contextStr,
+                    context = listOfNotNull(contextStr, chatService.unblockedChatStatusPrompt(conversationId))
+                        .joinToString("\n\n"),
                     state = proactiveState,
                     maxFollowUps = maxFollowUps,
                     allowAppUsage = appUsageToolAllowed && tools.any { it.name == "get_app_usage" },

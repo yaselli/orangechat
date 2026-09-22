@@ -22,6 +22,22 @@ class BlockedChatReceiptTest {
     private val finished = LocalDateTime(2026, 9, 21, 12, 0)
 
     @Test
+    fun `receipt includes supplied device time without inventing elapsed time`() {
+        val text = blockedChatReceipt("2026-09-22T11:16:00+08:00").toText()
+        assertTrue(text.contains("2026-09-22T11:16:00+08:00"))
+        assertTrue(text.contains("不表示时间推进"))
+        assertFalse(text.contains("十二点半"))
+    }
+
+    @Test
+    fun `disabled time injection provides no clock and forbids deriving time from turns`() {
+        val text = blockedChatReceipt().toText()
+        assertTrue(text.contains("不提供当前时间"))
+        assertTrue(text.contains("不要根据回复轮数"))
+        assertFalse(text.contains("设备本地时间（含时区偏移）"))
+    }
+
+    @Test
     fun `streamed reply gets a new id and receipt never enters stored history`() {
         val user = UIMessage.user("我先不说话了")
         val previous = UIMessage.assistant("好").copy(finishedAt = finished)

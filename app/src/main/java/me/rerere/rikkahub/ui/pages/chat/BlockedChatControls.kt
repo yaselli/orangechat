@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -30,10 +32,12 @@ import me.rerere.rikkahub.service.BlockedChatState
 import kotlin.math.roundToInt
 
 @Composable
-internal fun BlockedChatMenu(state: BlockedChatState, onSetBlocked: (Boolean, Int) -> Unit) {
+internal fun BlockedChatMenu(state: BlockedChatState, onSetBlocked: (Boolean, Int, Int, Int) -> Unit) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     var confirming by rememberSaveable { mutableStateOf(false) }
-    var limit by rememberSaveable { mutableStateOf(5) }
+    var limit by rememberSaveable { mutableStateOf(state.limit) }
+    var minimum by rememberSaveable { mutableStateOf(state.minIntervalMinutes) }
+    var maximum by rememberSaveable { mutableStateOf(state.maxIntervalMinutes) }
     Box {
         IconButton(
             onClick = { expanded = true },
@@ -44,7 +48,14 @@ internal fun BlockedChatMenu(state: BlockedChatState, onSetBlocked: (Boolean, In
                 text = { Text(if (state.blocked) "解除拉黑" else "拉黑对方") },
                 onClick = {
                     expanded = false
-                    if (state.blocked) onSetBlocked(false, state.limit) else confirming = true
+                    if (state.blocked) {
+                        onSetBlocked(false, state.limit, state.minIntervalMinutes, state.maxIntervalMinutes)
+                    } else {
+                        limit = state.limit
+                        minimum = state.minIntervalMinutes
+                        maximum = state.maxIntervalMinutes
+                        confirming = true
+                    }
                 },
             )
         }
@@ -54,7 +65,7 @@ internal fun BlockedChatMenu(state: BlockedChatState, onSetBlocked: (Boolean, In
             onDismissRequest = { confirming = false },
             title = { Text("拉黑当前聊天的对方？") },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text("你将暂时不能发送消息，但仍能看到对方的回复。应用会告知对方已被拉黑，并自动续接回复。")
                     Text("每收到 $limit 次完整回复就暂停，提醒你选择是否解除拉黑。续聊会使用模型额度。")
                     Slider(
@@ -64,12 +75,35 @@ internal fun BlockedChatMenu(state: BlockedChatState, onSetBlocked: (Boolean, In
                         steps = 18,
                         modifier = Modifier.semantics { contentDescription = "每批回复次数" },
                     )
+                    Text("第一条立即回复，后续每次随机等待 $minimum～$maximum 分钟。")
+                    Text("最短间隔：$minimum 分钟")
+                    Slider(
+                        value = minimum.toFloat(),
+                        onValueChange = {
+                            minimum = it.roundToInt()
+                            maximum = maximum.coerceAtLeast(minimum)
+                        },
+                        valueRange = 1f..30f,
+                        steps = 28,
+                        modifier = Modifier.semantics { contentDescription = "最短回复间隔" },
+                    )
+                    Text("最长间隔：$maximum 分钟")
+                    Slider(
+                        value = maximum.toFloat(),
+                        onValueChange = {
+                            maximum = it.roundToInt()
+                            minimum = minimum.coerceAtMost(maximum)
+                        },
+                        valueRange = 1f..30f,
+                        steps = 28,
+                        modifier = Modifier.semantics { contentDescription = "最长回复间隔" },
+                    )
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirming = false
-                    onSetBlocked(true, limit)
+                    onSetBlocked(true, limit, minimum, maximum)
                 }) { Text("拉黑并开始") }
             },
             dismissButton = { TextButton(onClick = { confirming = false }) { Text("取消") } },
@@ -92,7 +126,11 @@ internal fun BlockedChatBar(
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text("已拉黑 · 本批回复 ${state.replies}/${state.limit}", style = MaterialTheme.typography.titleSmall)
             Text(
-                if (state.running) "你仍能看回复，暂时不能发送消息。" else "自动回复已暂停，你可以解除拉黑或继续。",
+                when {
+                    state.running && state.waiting -> "等待下一次回复，可以随时暂停或解除拉黑。"
+                    state.running -> "正在回复，你暂时不能发送消息。"
+                    else -> "自动回复已暂停，你可以解除拉黑或继续。"
+                },
                 style = MaterialTheme.typography.bodySmall,
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

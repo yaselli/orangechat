@@ -350,7 +350,9 @@ private fun ChatPageContent(
                     drawerState = drawerState,
                     previewMode = previewMode,
                     blockedChatState = blockedChatState,
-                    onSetBlocked = { blocked, limit -> vm.setChatBlocked(blocked, limit) },
+                    onSetBlocked = { blocked, limit, minimum, maximum ->
+                        vm.setChatBlocked(blocked, limit, minimum, maximum)
+                    },
                     onNewChat = {
                         navigateToChatPage(navController)
                     },
@@ -506,8 +508,8 @@ private fun ChatPageContent(
                     innerPadding = innerPadding,
                     conversation = conversation,
                     state = chatListState,
-                    loading = loadingJob != null,
-                    processingStatus = processingStatus,
+                    loading = loadingJob != null && !blockedChatState.waiting,
+                    processingStatus = if (blockedChatState.waiting) null else processingStatus,
                     previewMode = previewMode,
                     settings = setting,
                     errors = errors,
@@ -592,7 +594,7 @@ private fun TopBar(
     bigScreen: Boolean,
     previewMode: Boolean,
     blockedChatState: BlockedChatState,
-    onSetBlocked: (Boolean, Int) -> Unit,
+    onSetBlocked: (Boolean, Int, Int, Int) -> Unit,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit,

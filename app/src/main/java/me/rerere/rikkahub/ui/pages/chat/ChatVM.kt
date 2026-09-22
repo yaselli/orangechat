@@ -66,8 +66,13 @@ class ChatVM(
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
     val blockedChatState = chatService.blockedChatState(_conversationId)
 
-    fun setChatBlocked(blocked: Boolean, limit: Int = 5) = runBlockAction {
-        chatService.setChatBlocked(_conversationId, blocked, limit)
+    fun setChatBlocked(
+        blocked: Boolean,
+        limit: Int = 5,
+        minIntervalMinutes: Int = 2,
+        maxIntervalMinutes: Int = 5,
+    ) = runBlockAction {
+        chatService.setChatBlocked(_conversationId, blocked, limit, minIntervalMinutes, maxIntervalMinutes)
     }
 
     fun continueBlockedReplies() = runBlockAction {

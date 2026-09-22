@@ -9,11 +9,18 @@ import me.rerere.rikkahub.data.model.Conversation
 import kotlin.uuid.Uuid
 
 /** Request-only application turn. It must never be saved or emit a user-send event. */
-internal fun blockedChatReceipt(): UIMessage = UIMessage.user(
+internal fun blockedChatReceipt(currentTime: String? = null): UIMessage = UIMessage.user(
     "<application_block_receipt>这是应用自动回执，不是对方发送的消息，也不代表对方的新想法。" +
         "对方已将你拉黑，目前不能发送消息，但仍能看到你的回复。只有对方可以解除拉黑。" +
         "你可以自行决定如何回应，不必承诺或假装已经解除拉黑。" +
         "请勿将旧的用户消息理解为对方刚刚又说了一遍。" +
+        "连续收到此回执仅表示拉黑状态未变，不表示时间推进，也不表示已经等待了很久。" +
+        (if (currentTime != null) {
+            "本次回执生成时的设备本地时间（含时区偏移）：$currentTime。" +
+                "判断当前时刻应以此为准，不要沿用旧消息里的时间。"
+        } else {
+            "本次回执不提供当前时间。不要根据回复轮数、旧消息或叙事情节猜测几点、上午下午或等待时长。"
+        }) +
         "</application_block_receipt>"
 )
 

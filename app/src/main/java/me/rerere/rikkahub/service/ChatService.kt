@@ -122,6 +122,8 @@ import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
 import java.time.Instant
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import okhttp3.OkHttpClient
@@ -427,12 +429,25 @@ class ChatService(
 
     fun blockedChatState(id: Uuid): StateFlow<BlockedChatState> = blockedChatStore.state(id)
     fun isChatBlocked(id: Uuid): Boolean = blockedChatState(id).value.blocked
+    internal fun unblockedChatStatusPrompt(id: Uuid): String? = blockedChatState(id).value.unblockedStatusPrompt()
 
-    suspend fun setChatBlocked(id: Uuid, blocked: Boolean, limit: Int = 5) = blockedChatControl.withLock {
+    suspend fun setChatBlocked(
+        id: Uuid,
+        blocked: Boolean,
+        limit: Int = 5,
+        minIntervalMinutes: Int = 2,
+        maxIntervalMinutes: Int = 5,
+    ) = blockedChatControl.withLock {
         if (blocked) {
             if (isChatBlocked(id)) return@withLock
             check(VoiceCallService.activeConversationId.value != id.toString()) { "请先结束当前通话，再拉黑对方" }
-            blockedChatStore.update(id) { BlockedChatState(blocked = true, limit = limit.coerceIn(1, 20)) }
+            val minimum = minIntervalMinutes.coerceIn(1, 30)
+            blockedChatStore.update(id) {
+                BlockedChatState(
+                    blocked = true, limit = limit.coerceIn(1, 20),
+                    minIntervalMinutes = minimum, maxIntervalMinutes = maxIntervalMinutes.coerceIn(minimum, 30),
+                )
+            }
             stopGeneration(id)
             initializeConversation(id)
             if (!conversationRepo.existsConversationById(id)) {
@@ -442,7 +457,7 @@ class ChatService(
         } else {
             // Join the old batch before allowing new user sends.
             stopGeneration(id)
-            blockedChatStore.update(id) { BlockedChatState() }
+            blockedChatStore.update(id) { it.afterUnblock() }
         }
     }
 
@@ -467,12 +482,23 @@ class ChatService(
             try {
                 runBlockedReplyBatch(
                     state = { blockedChatState(id).value },
-                    generateReply = { handleMessageComplete(id, applicationReceipt = blockedChatReceipt()) },
+                    generateReply = {
+                        val injection = settingsStore.settingsFlow.value.systemToolsSetting
+                        val currentTime = if (injection.extraInfoInjectionEnabled && injection.timeContextInjectionEnabled) {
+                            ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                        } else null
+                        handleMessageComplete(id, applicationReceipt = blockedChatReceipt(currentTime))
+                    },
                     recordReply = {
                         blockedChatStore.update(id) { it.afterReply() }
                         _generationDoneFlow.emit(id)
                     },
-                    betweenReplies = { delay(1_000) },
+                    betweenReplies = {
+                        val waitMillis = blockedChatState(id).value.nextReplyDelayMillis()
+                        blockedChatStore.update(id) { it.copy(waiting = true) }
+                        delay(waitMillis)
+                        blockedChatStore.update(id) { it.copy(waiting = false) }
+                    },
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -487,7 +513,7 @@ class ChatService(
                     } catch (e: Exception) {
                         addError(e, id, title = "保存拉黑续聊失败")
                     } finally {
-                        blockedChatStore.update(id) { it.copy(running = false) }
+                        blockedChatStore.update(id) { it.copy(running = false, waiting = false) }
                     }
                 }
             }
@@ -1102,6 +1128,7 @@ class ChatService(
                     addAll(pluginToolProvider.getPluginPromptInjections())
                     settings.displaySetting.buildAnniversaryPrompt()?.let(::add)
                     transientExtraInfo?.let(::add)
+                    unblockedChatStatusPrompt(conversationId)?.let(::add)
                     if (applicationReceipt != null) add(
                         "本轮最后一条 application_block_receipt 是应用自动回执，不是用户发言。" +
                             "用户在拉黑期间不能发送消息；不要虚构收到用户的新话。"
