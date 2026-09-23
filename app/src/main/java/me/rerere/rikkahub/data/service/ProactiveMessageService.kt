@@ -12,6 +12,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import me.rerere.rikkahub.data.ai.executeGenerationTool
 import me.rerere.rikkahub.data.ai.transformers.forProactiveExtraInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.SupervisorJob
@@ -53,7 +54,6 @@ import me.rerere.rikkahub.data.ai.transformers.collectInjections
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
@@ -1469,43 +1469,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     "step=$step name=${toolCall.toolName} id=${ProactiveMessageTrace.safeId(toolCall.toolCallId)} " +
                         "definitionFound=${toolDef != null}",
                 )
-                if (toolDef == null) {
-                    Log.w(TAG, "Tool ${toolCall.toolName} not found")
-                    executedTools.add(toolCall.copy(
-                        output = listOf(UIMessagePart.Text("""{"error":"Tool not found"}"""))
-                    ))
-                    continue
-                }
-
-                // 主动器复用助手已经启用的工具权限，不再额外把普通工具一律拒绝。
-                // AppUsage 在组装工具列表时已经由“允许主动查岗”单独把关；未授权时
-                // get_app_usage 根本不会出现在 tools 中，因此不可能走到这里执行。
-                try {
-                    val args = try {
-                        json.parseToJsonElement(toolCall.input.ifBlank { "{}" })
-                    } catch (e: Exception) {
-                        // toolCall.input 可能因为流式截断而是不完整的 JSON, 回退为空对象
-                        Log.w(
-                            TAG,
-                            "Tool ${toolCall.toolName} input JSON is incomplete; " +
-                                "falling back to empty object (length=${toolCall.input.length})",
-                        )
-                        JsonObject(emptyMap())
-                    }
-                    Log.d(TAG, "Executing tool ${toolDef.name}, inputLength=${toolCall.input.length}")
-                    val result = toolDef.execute(args)
-                    executedTools.add(toolCall.copy(output = result))
-                    trace.event("tool_result", "name=${toolDef.name} success=true outputParts=${result.size}")
-                } catch (e: Exception) {
-                    Log.e(
-                        TAG,
-                        "Tool execution failed: ${toolCall.toolName}, inputLength=${toolCall.input.length}",
-                        e,
-                    )
-                    executedTools.add(toolCall.copy(
-                        output = listOf(UIMessagePart.Text("""{"error":"${e.message}"}"""))
-                    ))
-                }
+                val executed = executeGenerationTool(toolCall, toolDef, json)
+                executedTools.add(executed)
+                trace.event(
+                    "tool_result",
+                    "name=${toolCall.toolName} completed=${executed.isExecuted} outputParts=${executed.output.size}",
+                )
             }
 
             // 更新消息中的工具状态
