@@ -35,6 +35,9 @@ _projB_*.txt
 .projB_*.txt
 gen_*.py
 _gen.py
+compile_errors.txt
+test_write.txt
+tmp_filter*.py
 
 # 签名密钥（绝不可提交）
 *.jks
