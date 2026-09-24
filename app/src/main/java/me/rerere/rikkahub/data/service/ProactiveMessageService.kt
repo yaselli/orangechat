@@ -322,7 +322,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
     companion object {
         private const val TAG = "ProactiveMessageTrigger"
-        private const val MAX_TOOL_STEPS = 5 // 主动消息最大工具调用步数
+        private const val MAX_TOOL_STEPS = 12 // 最多 12 轮工具调用，之后仍留一轮给模型回答
         private const val GENERATION_WAKE_LOCK_TIMEOUT_MS = 10 * 60 * 1000L
         // 外部触发（网关轮询）时跳过内部 minInterval 去重
         const val EXTRA_FORCE_TRIGGER = "force_trigger"
@@ -710,23 +710,22 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                                 "或者真正想说的一句话；不要再次解释过程。"
                         )),
                     )
-                    var finalized = mergeAdjacentSameRoleMessages(finalMessages + finalizePrompt)
-                    providerImpl.streamText(
+                    val (finalized, finalizerUsedTools, finalizerJumpFlag) = generateWithTools(
+                        conversationId = conversationId,
+                        providerImpl = providerImpl,
                         providerSetting = providerSetting,
-                        messages = finalized,
-                        params = params.copy(tools = emptyList(), reasoningLevel = ReasoningLevel.OFF),
-                    ).collect { chunk ->
-                        finalized = finalized.handleMessageChunk(chunk = chunk, model = model)
-                        finalized.lastOrNull { it.role == MessageRole.ASSISTANT }?.let { message ->
-                            updateOrAppendAiMessage(
-                                conversationId,
-                                message,
-                                trace,
-                                runAssistantMessageIds,
-                                protectedMessageIds,
-                            )
-                        }
-                    }
+                        initialMessages = finalMessages + finalizePrompt,
+                        params = params.copy(reasoningLevel = ReasoningLevel.OFF),
+                        tools = tools,
+                        model = model,
+                        assistant = assistant,
+                        settings = settings,
+                        trace = trace,
+                        runAssistantMessageIds = runAssistantMessageIds,
+                        protectedMessageIds = protectedMessageIds,
+                    )
+                    hasToolCalls = hasToolCalls || finalizerUsedTools
+                    hasJumpFlag = hasJumpFlag || finalizerJumpFlag
                     finalized.lastOrNull { it.role == MessageRole.ASSISTANT }?.let { message ->
                         val now = kotlin.time.Clock.System.now()
                         // Keep the complete visible thinking chain. The old finalizer retained only
@@ -1361,9 +1360,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         var hasToolCalls = false
         var hasJumpFlag = false // AI 原始输出是否含 [JUMP] 标记（在输出转换器处理前检测）
 
-        for (step in 0 until MAX_TOOL_STEPS) {
+        // Allow a final model turn after the last permitted tool round. Keep the same tools
+        // available; never silently finish on a tool result without asking the model again.
+        for (step in 0..MAX_TOOL_STEPS) {
+            val finalTurn = step == MAX_TOOL_STEPS
             Log.d(TAG, "generateWithTools: step $step/${MAX_TOOL_STEPS}")
-            trace.event("generation_step", "step=$step")
+            trace.event("generation_step", "step=$step finalTurn=$finalTurn")
 
             // 流式调用 AI（替代非流式 generateText，兼容 thinking 模型）
             // The provider-only copy may merge adjacent roles for API compatibility. Never merge
@@ -1454,6 +1456,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     protectedMessageIds,
                 )
                 break
+            }
+
+            // Exhausting the tool budget must fail this run rather than save an unfinished
+            // tool call as a completed proactive reply. The existing cleanup removes it.
+            if (finalTurn) {
+                throw IllegalStateException("Proactive tool limit reached before a final reply")
             }
 
             // 有工具调用
