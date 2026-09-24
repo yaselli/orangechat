@@ -681,7 +681,7 @@ private fun ChainOfThoughtScope.ExportedReasoningStep(
         onExpandedChange = {},
         icon = {
             Icon(
-                painter = painterResource(R.drawable.deepthink),
+                painter = painterResource(R.drawable.ic_watermelon_thinking),
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
                 tint = MaterialTheme.colorScheme.secondary
