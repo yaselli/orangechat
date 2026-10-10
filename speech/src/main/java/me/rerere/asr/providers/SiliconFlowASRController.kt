@@ -109,11 +109,8 @@ class SiliconFlowASRController(
     }
 
     override fun dispose() {
-        vadJob?.cancel()
-        recorderJob?.cancel()
-        audioBuffer = null
+        stop()
         scope.cancel()
-        releaseRecorder()
     }
 
     @SuppressLint("MissingPermission")
@@ -176,7 +173,6 @@ class SiliconFlowASRController(
         val durationMs = System.currentTimeMillis() - recordingStartTime
 
         withContext(Dispatchers.IO) {
-            var pendingAudioFile: File? = null
             try {
                 // Convert PCM to WAV
                 val wavData = pcmToWav(pcmData, provider.sampleRate)
@@ -185,7 +181,6 @@ class SiliconFlowASRController(
                 val voiceDir = File(context.filesDir, "voice_messages")
                 voiceDir.mkdirs()
                 val audioFile = File(voiceDir, "voice_${System.currentTimeMillis()}.wav")
-                pendingAudioFile = audioFile
                 FileOutputStream(audioFile).use { it.write(wavData) }
 
                 // Build multipart request
@@ -210,7 +205,8 @@ class SiliconFlowASRController(
                     .post(requestBody)
                     .build()
 
-                val (responseCode, responseBody) = httpClient.newCall(request).readAsrResponse()
+                val response = httpClient.newCall(request).execute()
+                val responseBody = response.body?.string()
 
                 if (responseBody == null) {
                     audioFile.delete()
@@ -218,7 +214,7 @@ class SiliconFlowASRController(
                     return@withContext
                 }
 
-                Log.d(TAG, "Speech HTTP status=${responseCode}; payload omitted")
+                Log.d(TAG, "Speech HTTP status=${response.code}; payload omitted")
                 val json = JSONObject(responseBody)
 
                 // SiliconFlow response: { code, message, data }
@@ -258,9 +254,6 @@ class SiliconFlowASRController(
                         )
                     }
                 }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                pendingAudioFile?.delete()
-                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Transcription failed")
                 setError(e.message ?: "Transcription failed")
