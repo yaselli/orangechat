@@ -193,8 +193,13 @@ class OpenAIRealtimeASRController(
     }
 
     override fun dispose() {
-        stop()
+        isStopping = true
+        reconnectJob?.cancel()
+        recorderJob?.cancel()
+        webSocket?.cancel()
+        webSocket = null
         scope.cancel()
+        releaseRecorder()
     }
 
     @SuppressLint("MissingPermission")

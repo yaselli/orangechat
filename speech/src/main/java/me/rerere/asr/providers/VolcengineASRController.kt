@@ -208,8 +208,13 @@ class VolcengineASRController(
     }
 
     override fun dispose() {
-        stop()
+        isStopping = true
+        reconnectJob?.cancel()
+        recorderJob?.cancel()
+        webSocket?.cancel()
+        webSocket = null
         scope.cancel()
+        releaseRecorder()
     }
 
     private fun buildFullClientRequestPayload(): ByteArray {
