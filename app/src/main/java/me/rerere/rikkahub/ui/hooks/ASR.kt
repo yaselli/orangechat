@@ -103,6 +103,7 @@ interface CustomAsrState {
     val state: StateFlow<ASRState>
     fun start(onTranscriptChange: (String) -> Unit)
     fun stop()
+    fun cancel()
     fun cleanup()
 }
  
@@ -111,6 +112,8 @@ internal class CustomAsrStateImpl(
     private val httpClient: OkHttpClient
 ) : CustomAsrState {
     private var controller: ASRController? = null
+    private var selectedProvider: ASRProviderSetting? = null
+    private var transcriptGeneration = 0L
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutableState = MutableStateFlow(ASRState())
     private var controllerStateJob: Job? = null
@@ -133,6 +136,8 @@ internal class CustomAsrStateImpl(
     override val state: StateFlow<ASRState> = mutableState.asStateFlow()
 
     fun updateProvider(provider: ASRProviderSetting?) {
+        transcriptGeneration++
+        selectedProvider = provider
         controllerStateJob?.cancel()
         controllerStateJob = null
         try {
@@ -149,13 +154,14 @@ internal class CustomAsrStateImpl(
             mutableState.value = newController.state.value
             controllerStateJob = scope.launch {
                 newController.state.collect { controllerState ->
-                    mutableState.value = controllerState
+                    if (controller === newController) mutableState.value = controllerState
                 }
             }
         }
     }
  
     override fun start(onTranscriptChange: (String) -> Unit) {
+        if (state.value.isRecording) return
         if (controller == null) {
             Log.e(ASR_TAG, "start: controller 为 null, 无法启动录音, 请检查 ASR provider 是否已正确配置")
             throw IllegalStateException("ASR provider 未配置或 API Key 为空，无法启动语音识别")
@@ -163,7 +169,12 @@ internal class CustomAsrStateImpl(
         try {
             val result = audioManager.requestAudioFocus(audioFocusRequest)
             if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-                controller?.start(onTranscriptChange)
+                val generation = ++transcriptGeneration
+                controller?.start { transcript ->
+                    scope.launch {
+                        if (generation == transcriptGeneration) onTranscriptChange(transcript)
+                    }
+                }
             } else {
                 Log.w(ASR_TAG, "start: requestAudioFocus 未获得焦点, result=$result, 无法启动录音")
                 throw IllegalStateException("无法获取麦克风焦点 (result=$result)")
@@ -189,7 +200,14 @@ internal class CustomAsrStateImpl(
         }
     }
  
+    override fun cancel() {
+        // Discard this session instead of finalizing it through stop().
+        updateProvider(selectedProvider)
+        audioManager.abandonAudioFocusRequest(audioFocusRequest)
+    }
+
     override fun cleanup() {
+        transcriptGeneration++
         controllerStateJob?.cancel()
         controllerStateJob = null
         try {
