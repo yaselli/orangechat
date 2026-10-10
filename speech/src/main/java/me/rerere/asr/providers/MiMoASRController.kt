@@ -258,21 +258,20 @@ class MiMoASRController(
             .build()
 
         val text = withContext(Dispatchers.IO) {
-            httpClient.newCall(request).execute().use { resp ->
-                val respBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) {
-                    throw IOException("MiMo ASR HTTP ${resp.code}: $respBody")
-                }
-                val json = runCatching { JSONObject(respBody) }.getOrElse {
-                    throw IOException("MiMo ASR response is not valid JSON: $respBody")
-                }
-                json.optJSONArray("choices")
-                    ?.optJSONObject(0)
-                    ?.optJSONObject("message")
-                    ?.optString("content", "")
-                    ?.trim()
-                    ?: ""
+            val (responseCode, responseBody) = httpClient.newCall(request).readAsrResponse()
+            val respBody = responseBody.orEmpty()
+            if (responseCode !in 200..299) {
+                throw IOException("MiMo ASR HTTP $responseCode: $respBody")
             }
+            val json = runCatching { JSONObject(respBody) }.getOrElse {
+                throw IOException("MiMo ASR response is not valid JSON: $respBody")
+            }
+            json.optJSONArray("choices")
+                ?.optJSONObject(0)
+                ?.optJSONObject("message")
+                ?.optString("content", "")
+                ?.trim()
+                ?: ""
         }
 
         if (text.isNotEmpty()) {
