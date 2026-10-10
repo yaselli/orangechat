@@ -43,3 +43,6 @@ tmp_filter*.py
 *.jks
 *.keystore
 keystore.properties
+
+# AI 工具本地配置（不应提交）
+.claude/settings.local.json
