@@ -67,7 +67,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -144,13 +143,6 @@ enum class ExpandState {
     Collapsed, Files,
 }
 
-private data class PendingVoiceMessage(
-    val path: String,
-    val duration: Long,
-    val transcript: String,
-    val conversationId: Uuid,
-)
-
 @Composable
 fun ChatInput(
     state: ChatInputState,
@@ -226,9 +218,6 @@ fun ChatInput(
     PermissionManager(permissionState = asrPermission)
     var asrBaseText by remember { mutableStateOf("") }
     var voiceMessageMode by remember { mutableStateOf(false) }
-    var voiceRecordingStarted by remember { mutableStateOf(false) }
-    var pendingVoice by remember { mutableStateOf<PendingVoiceMessage?>(null) }
-    var voiceSendCountdown by remember { mutableStateOf(5) }
 
     // Auto-start voice recording when entering from voice call notification
     LaunchedEffect(autoStartVoice) {
@@ -245,7 +234,6 @@ fun ChatInput(
     LaunchedEffect(asrState.status) {
         when (asrState.status) {
             ASRStatus.Listening -> {
-                if (voiceMessageMode) voiceRecordingStarted = true
                 hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
                 soundEffectPlayer.play(R.raw.asr_start)
             }
@@ -266,28 +254,15 @@ fun ChatInput(
     }
 
     // Handle voice message completion
-    LaunchedEffect(asrState.audioFilePath, voiceMessageMode, voiceRecordingStarted, asrState.status) {
-        if (voiceMessageMode && voiceRecordingStarted && asrState.audioFilePath != null && asrState.status == ASRStatus.Idle) {
-            pendingVoice = PendingVoiceMessage(
-                asrState.audioFilePath!!, asrState.durationMs, asrState.transcript, conversation.id
+    LaunchedEffect(asrState.audioFilePath, voiceMessageMode) {
+        if (voiceMessageMode && asrState.audioFilePath != null && asrState.status == ASRStatus.Idle) {
+            onVoiceMessage?.invoke(
+                asrState.audioFilePath!!,
+                asrState.durationMs,
+                asrState.transcript
             )
             voiceMessageMode = false
-            voiceRecordingStarted = false
         }
-    }
-    LaunchedEffect(pendingVoice, conversation.id) {
-        val message = pendingVoice ?: return@LaunchedEffect
-        if (message.conversationId != conversation.id) {
-            File(message.path).delete()
-            pendingVoice = null
-            return@LaunchedEffect
-        }
-        for (secondsLeft in 5 downTo 1) {
-            voiceSendCountdown = secondsLeft
-            delay(1_000)
-        }
-        pendingVoice = null
-        onVoiceMessage?.invoke(message.path, message.duration, message.transcript)
     }
 
     // Camera launcher
@@ -540,27 +515,6 @@ fun ChatInput(
                 .padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (pendingVoice != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("语音 ${voiceSendCountdown} 秒后发送", modifier = Modifier.weight(1f))
-                    TextButton(onClick = {
-                        pendingVoice?.let { File(it.path).delete() }
-                        pendingVoice = null
-                    }) { Text("取消发送") }
-                }
-            } else if (voiceMessageMode && asrState.isRecording) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        if (asrState.status == ASRStatus.Stopping) "正在转写语音…" else "正在录音，点语音按钮结束",
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = {
-                        voiceMessageMode = false
-                        voiceRecordingStarted = false
-                        asr.cancel()
-                    }) { Text("取消") }
-                }
-            }
             // Input area with optional background image
             Surface(
                 modifier = Modifier
@@ -755,22 +709,16 @@ fun ChatInput(
                                                     asr.stop()
                                                 }
                                                 ASRStatus.Idle, ASRStatus.Error -> {
-                                                    if (pendingVoice != null) return@ActionIconButton
                                                     if (!asrPermission.allRequiredPermissionsGranted) {
                                                         asrPermission.requestPermissions()
                                                     } else {
-                                                        voiceRecordingStarted = false
                                                         voiceMessageMode = true
                                                         asr.start { transcript ->
                                                             // Ignore transcript in voice message mode
                                                         }
                                                     }
                                                 }
-                                                ASRStatus.Connecting, ASRStatus.Stopping -> {
-                                                    voiceMessageMode = false
-                                                    voiceRecordingStarted = false
-                                                    asr.cancel()
-                                                }
+                                                ASRStatus.Connecting, ASRStatus.Stopping -> {}
                                             }
                                         }
                                     ) {
