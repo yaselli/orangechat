@@ -25,7 +25,6 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
-import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
@@ -427,60 +426,25 @@ class GenerationHandler(
             workspaceCwd = workspaceCwd,
         )
  
-        var messages: List<UIMessage> = messages
         val params = buildGenerationRequestParameters(assistant, model, tools)
-        if (stream) {
-            aiLoggingManager.addLog(
-                AILogging.Generation(
-                    messageCount = messages.size,
-                    toolCount = params.tools.size,
-                    stream = true
-                )
+        aiLoggingManager.addLog(
+            AILogging.Generation(
+                messageCount = messages.size,
+                toolCount = params.tools.size,
+                stream = stream,
             )
-            providerImpl.streamText(
-                providerSetting = provider,
-                messages = internalMessages,
-                params = params
-            ).collect {
-                messages = messages.handleMessageChunk(chunk = it, model = model)
-                it.usage?.let { usage ->
-                    messages = messages.mapIndexed { index, message ->
-                        if (index == messages.lastIndex) {
-                            message.copy(usage = message.usage.merge(usage))
-                        } else {
-                            message
-                        }
-                    }
-                }
-                onUpdateMessages(messages)
-            }
-        } else {
-            aiLoggingManager.addLog(
-                AILogging.Generation(
-                    messageCount = messages.size,
-                    toolCount = params.tools.size,
-                    stream = false
-                )
-            )
-            val chunk = providerImpl.generateText(
-                providerSetting = provider,
-                messages = internalMessages,
-                params = params,
-            )
-            messages = messages.handleMessageChunk(chunk = chunk, model = model)
-            chunk.usage?.let { usage ->
-                messages = messages.mapIndexed { index, message ->
-                    if (index == messages.lastIndex) {
-                        message.copy(
-                            usage = message.usage.merge(usage)
-                        )
-                    } else {
-                        message
-                    }
-                }
-            }
-            onUpdateMessages(messages)
-        }
+        )
+        generateModelTurn(
+            providerImpl = providerImpl,
+            providerSetting = provider,
+            requestMessages = internalMessages,
+            initialMessages = messages,
+            params = params,
+            model = model,
+            stream = stream,
+            mergeUsage = true,
+            onUpdateMessages = onUpdateMessages,
+        )
     }
  
     fun translateText(
