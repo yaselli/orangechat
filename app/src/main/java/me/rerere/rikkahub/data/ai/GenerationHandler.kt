@@ -34,7 +34,6 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
@@ -100,53 +99,49 @@ class GenerationHandler(
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
  
-        var messages: List<UIMessage> = messages
- 
-        for (stepIndex in 0 until maxSteps) {
-            Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
- 
-            val toolsInternal = buildList {
-                Log.i(TAG, "generateInternal: build tools($assistant)")
-                if (assistant?.enableMemory == true) {
-                    val memoryAssistantId = if (assistant.useGlobalMemory) {
-                        MemoryRepository.GLOBAL_MEMORY_ID
-                    } else {
-                        assistant.id.toString()
-                    }
-                    buildMemoryTools(
-                        json = json,
-                        onCreation = { content ->
-                            memoryRepo.addMemory(memoryAssistantId, content)
-                        },
-                        onUpdate = { id, content ->
-                            memoryRepo.updateContent(id, content)
-                        },
-                        onDelete = { id ->
-                            memoryRepo.deleteMemory(id)
+        runGenerationToolLoop(
+            initialMessages = messages,
+            maxSteps = maxSteps,
+            resumeApprovedTools = true,
+            onStep = { stepIndex, _ ->
+                Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
+            },
+            toolsForStep = {
+                buildList {
+                    Log.i(TAG, "generateInternal: build tools($assistant)")
+                    if (assistant?.enableMemory == true) {
+                        val memoryAssistantId = if (assistant.useGlobalMemory) {
+                            MemoryRepository.GLOBAL_MEMORY_ID
+                        } else {
+                            assistant.id.toString()
                         }
-                    ).let(this::addAll)
+                        buildMemoryTools(
+                            json = json,
+                            onCreation = { content ->
+                                memoryRepo.addMemory(memoryAssistantId, content)
+                            },
+                            onUpdate = { id, content ->
+                                memoryRepo.updateContent(id, content)
+                            },
+                            onDelete = { id ->
+                                memoryRepo.deleteMemory(id)
+                            }
+                        ).let(this::addAll)
+                    }
+                    // 文件写入工具 - AI可直接将文件内容写入设备或打包ZIP
+                    add(buildWriteFilesTool(conversationId))
+                    addAll(tools)
                 }
-                // 文件写入工具 - AI可直接将文件内容写入设备或打包ZIP
-                add(buildWriteFilesTool(conversationId))
-                addAll(tools)
-            }
- 
-            // Check if we have tool calls ready to continue after user interaction.
-            val pendingTools = messages.lastOrNull()?.getTools()?.filter {
-                it.canResumeExecution
-            } ?: emptyList()
- 
-            val toolsToProcess: List<UIMessagePart.Tool>
- 
-            // Skip generation if we have approved/denied tool calls to handle
-            if (pendingTools.isEmpty()) {
+            },
+            generateTurn = { currentMessages, toolsInternal, _ ->
+                var turnMessages = currentMessages
                 generateInternal(
                     assistant = assistant,
                     settings = settings,
-                    messages = messages,
+                    messages = turnMessages,
                     pluginPromptInjections = pluginPromptInjections,
                     onUpdateMessages = {
-                        messages = it.transforms(
+                        turnMessages = it.transforms(
                             transformers = outputTransformers,
                             context = context,
                             model = model,
@@ -155,7 +150,7 @@ class GenerationHandler(
                         )
                         emit(
                             GenerationChunk.Messages(
-                                messages.visualTransforms(
+                                turnMessages.visualTransforms(
                                     transformers = outputTransformers,
                                     context = context,
                                     model = model,
@@ -176,155 +171,49 @@ class GenerationHandler(
                     conversationSystemPrompt = conversationSystemPrompt,
                     workspaceCwd = workspaceCwd,
                 )
-                messages = messages.visualTransforms(
+                turnMessages = turnMessages.visualTransforms(
                     transformers = outputTransformers,
                     context = context,
                     model = model,
                     assistant = assistant,
                     settings = settings
                 )
-                messages = messages.onGenerationFinish(
+                turnMessages = turnMessages.onGenerationFinish(
                     transformers = outputTransformers,
                     context = context,
                     model = model,
                     assistant = assistant,
                     settings = settings
                 )
-                messages = messages.slice(0 until messages.lastIndex) + messages.last().copy(
+                turnMessages = turnMessages.slice(0 until turnMessages.lastIndex) + turnMessages.last().copy(
                     finishedAt = Clock.System.now()
                         .toLocalDateTime(TimeZone.currentSystemDefault())
                 )
-                emit(GenerationChunk.Messages(messages))
- 
-                val tools = messages.last().getTools().filter { !it.isExecuted }
-                if (tools.isEmpty()) {
-                    // no tool calls, break
-                    break
-                }
- 
-                // Check for tools that need approval
-                var hasPendingApproval = false
-                val updatedTools = tools.map { tool ->
-                    val toolDef = toolsInternal.find { it.name == tool.toolName }
-                    when {
-                        // Auto-approve everything (lazy mode) -> skip approval
-                        settings.autoApproveAllTools -> tool
-
-                        // Tool needs approval (or global force confirm) and state is Auto -> set to Pending
-                        (settings.forceConfirmToolCalls || toolDef?.needsApproval == true) && tool.approvalState is ToolApprovalState.Auto -> {
-                            hasPendingApproval = true
-                            tool.copy(approvalState = ToolApprovalState.Pending)
-                        }
-                        // State is Pending -> keep waiting
-                        tool.approvalState is ToolApprovalState.Pending -> {
-                            hasPendingApproval = true
-                            tool
-                        }
-
-                        else -> tool
-                    }
-                }
- 
-                // If any tools were updated to Pending, update the message and break
-                if (updatedTools != tools) {
-                    val lastMessage = messages.last()
-                    val updatedParts = lastMessage.parts.map { part ->
-                        if (part is UIMessagePart.Tool) {
-                            updatedTools.find { it.toolCallId == part.toolCallId } ?: part
-                        } else {
-                            part
-                        }
-                    }
-                    messages = messages.dropLast(1) + lastMessage.copy(parts = updatedParts)
-                    emit(GenerationChunk.Messages(messages))
-                }
- 
-                // If there are pending approvals, break and wait for user
-                if (hasPendingApproval) {
-                    Log.i(TAG, "generateText: waiting for tool approval")
-                    break
-                }
- 
-                toolsToProcess = updatedTools
-            } else {
-                // Resuming after user interaction - use the resumable tools directly.
-                Log.i(TAG, "generateText: resuming with ${pendingTools.size} resumable tools")
-                toolsToProcess = messages.last().getTools().filter { it.canResumeExecution }
-            }
- 
-            // Handle tools (execute approved tools, handle denied tools)
-            val executedTools = arrayListOf<UIMessagePart.Tool>()
-            toolsToProcess.forEach { tool ->
-                when (tool.approvalState) {
-                    is ToolApprovalState.Denied -> {
-                        // Tool was denied by user
-                        val reason = (tool.approvalState as ToolApprovalState.Denied).reason
-                        executedTools += tool.copy(
-                            output = listOf(
-                                UIMessagePart.Text(
-                                    json.encodeToString(
-                                        buildJsonObject {
-                                            put(
-                                                "error",
-                                                JsonPrimitive("Tool execution denied by user. Reason: ${reason.ifBlank { "No reason provided" }}")
-                                            )
-                                        }
-                                    )
-                                )
-                            )
-                        )
-                    }
- 
-                    is ToolApprovalState.Answered -> {
-                        // Tool was answered by user (e.g., ask_user tool)
-                        val answer = (tool.approvalState as ToolApprovalState.Answered).answer
-                        executedTools += tool.copy(
-                            output = listOf(
-                                UIMessagePart.Text(answer)
-                            )
-                        )
-                    }
- 
-                    is ToolApprovalState.Pending -> {
-                        // Should not reach here, but just in case
-                    }
- 
-                    else -> {
-                        // Auto or Approved - execute the tool
-                        executedTools += executeGenerationTool(
-                            call = tool,
-                            definition = toolsInternal.find { it.name == tool.toolName },
-                            json = json,
-                        )
-                    }
-                }
-            }
- 
-            if (executedTools.isEmpty()) {
-                // No results to add (all tools were pending)
-                break
-            }
- 
-            // Update last message with executed tools (NOT create TOOL message)
-            val lastMessage = messages.last()
-            val updatedParts = lastMessage.parts.map { part ->
-                if (part is UIMessagePart.Tool) {
-                    executedTools.find { it.toolCallId == part.toolCallId } ?: part
-                } else part
-            }
-            messages = messages.dropLast(1) + lastMessage.copy(parts = updatedParts)
-            emit(
-                GenerationChunk.Messages(
-                    messages.transforms(
+                emit(GenerationChunk.Messages(turnMessages))
+                turnMessages
+            },
+            prepareTools = { calls, definitions ->
+                prepareChatGenerationTools(
+                    calls, definitions, settings.autoApproveAllTools, settings.forceConfirmToolCalls,
+                )
+            },
+            executeTool = { tool, definition, _ ->
+                executeChatGenerationTool(tool, definition, json)
+            },
+            onToolsUpdated = { updatedMessages, update ->
+                if (update == GenerationToolUpdate.APPROVAL) {
+                    emit(GenerationChunk.Messages(updatedMessages))
+                } else {
+                    emit(GenerationChunk.Messages(updatedMessages.transforms(
                         transformers = outputTransformers,
                         context = context,
                         model = model,
                         assistant = assistant,
-                        settings = settings
-                    )
-                )
-            )
-        }
+                        settings = settings,
+                    )))
+                }
+            },
+        )
  
     }.throttleLatest(STREAM_UI_THROTTLE_MS)
         .flowOn(Dispatchers.IO)

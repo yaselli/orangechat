@@ -14,6 +14,7 @@ import android.content.Intent
 import android.util.Log
 import me.rerere.rikkahub.data.ai.executeGenerationTool
 import me.rerere.rikkahub.data.ai.generateModelTurn
+import me.rerere.rikkahub.data.ai.runGenerationToolLoop
 import me.rerere.rikkahub.data.ai.transformers.forProactiveExtraInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.SupervisorJob
@@ -1356,158 +1357,140 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         runAssistantMessageIds: MutableSet<Uuid>,
         protectedMessageIds: Set<Uuid>,
     ): Triple<List<UIMessage>, Boolean, Boolean> {
-        var messages = initialMessages.toMutableList()
         var hasToolCalls = false
-        var hasJumpFlag = false // AI 原始输出是否含 [JUMP] 标记（在输出转换器处理前检测）
+        var hasJumpFlag = false
+        val messages = runGenerationToolLoop(
+            initialMessages = initialMessages,
+            maxSteps = MAX_TOOL_STEPS,
+            reserveFinalModelTurn = true,
+            toolLimitError = "Proactive tool limit reached before a final reply",
+            toolsForStep = { tools },
+            onStep = { step, finalTurn ->
+                Log.d(TAG, "generateWithTools: step $step/${MAX_TOOL_STEPS}")
+                trace.event("generation_step", "step=$step finalTurn=$finalTurn")
+            },
+            generateTurn = generateTurn@{ currentMessages, _, step ->
+                // 流式调用 AI（替代非流式 generateText，兼容 thinking 模型）
+                // The provider-only copy may merge adjacent roles for API compatibility. Never merge
+                // the local streaming list: doing so can fold this run's assistant into the previous
+                // persisted assistant and transfer ownership back to the old message id.
+                val requestMessages = mergeAdjacentSameRoleMessages(currentMessages)
+                // A proactive request may legitimately end with an existing ASSISTANT message. Seed a
+                // fresh assistant placeholder locally so handleMessageChunk cannot append the new
+                // stream to that old message and reuse its id. Do not send the placeholder upstream.
+                val initialStreamMessages = beginProactiveAssistantTurn(currentMessages, model.id)
+                val turnMessageId = initialStreamMessages.last().id
+                trace.event(
+                    "assistant_turn",
+                    "step=$step message=${ProactiveMessageTrace.safeId(turnMessageId)} fresh=true",
+                )
+                val streamMessages = generateModelTurn(
+                    providerImpl = providerImpl,
+                    providerSetting = providerSetting,
+                    requestMessages = requestMessages,
+                    initialMessages = initialStreamMessages,
+                    params = params,
+                    model = model,
+                    stream = true,
+                    mergeUsage = false,
+                ) { updatedMessages ->
+                    // 实时更新 session 状态，让打开的聊天界面能看到消息生成
+                    val currentAiMessage = updatedMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                    if (currentAiMessage != null) {
+                        // 用 id 匹配就地更新（保留 node id，避免思考链闪烁 / 覆盖上一条 assistant）
+                        updateOrAppendAiMessage(
+                            conversationId,
+                            currentAiMessage,
+                            trace,
+                            runAssistantMessageIds,
+                            protectedMessageIds,
+                        )
+                    }
+                }
 
-        // Allow a final model turn after the last permitted tool round. Keep the same tools
-        // available; never silently finish on a tool result without asking the model again.
-        for (step in 0..MAX_TOOL_STEPS) {
-            val finalTurn = step == MAX_TOOL_STEPS
-            Log.d(TAG, "generateWithTools: step $step/${MAX_TOOL_STEPS}")
-            trace.event("generation_step", "step=$step finalTurn=$finalTurn")
+                // 流式结束，更新 messages
+                val turnMessages = streamMessages.toMutableList()
+                val aiMessage = streamMessages.lastOrNull() ?: run {
+                    Log.w(TAG, "No message in AI response")
+                    return@generateTurn streamMessages
+                }
 
-            // 流式调用 AI（替代非流式 generateText，兼容 thinking 模型）
-            // The provider-only copy may merge adjacent roles for API compatibility. Never merge
-            // the local streaming list: doing so can fold this run's assistant into the previous
-            // persisted assistant and transfer ownership back to the old message id.
-            val requestMessages = mergeAdjacentSameRoleMessages(messages)
-            // A proactive request may legitimately end with an existing ASSISTANT message. Seed a
-            // fresh assistant placeholder locally so handleMessageChunk cannot append the new
-            // stream to that old message and reuse its id. Do not send the placeholder upstream.
-            val initialStreamMessages = beginProactiveAssistantTurn(messages.toList(), model.id)
-            val turnMessageId = initialStreamMessages.last().id
-            trace.event(
-                "assistant_turn",
-                "step=$step message=${ProactiveMessageTrace.safeId(turnMessageId)} fresh=true",
-            )
-            val streamMessages = generateModelTurn(
-                providerImpl = providerImpl,
-                providerSetting = providerSetting,
-                requestMessages = requestMessages,
-                initialMessages = initialStreamMessages,
-                params = params,
-                model = model,
-                stream = true,
-                mergeUsage = false,
-            ) { updatedMessages ->
-                // 实时更新 session 状态，让打开的聊天界面能看到消息生成
-                val currentAiMessage = updatedMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
-                if (currentAiMessage != null) {
-                    // 用 id 匹配就地更新（保留 node id，避免思考链闪烁 / 覆盖上一条 assistant）
+
+                // 在输出转换器处理前，检测 AI 原始输出是否含 [JUMP] 标记
+                val rawAiText = aiMessage.parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+                if (rawAiText.contains("[JUMP]")) {
+                    hasJumpFlag = true
+                    Log.d(TAG, "[JUMP] flag detected in raw AI output")
+                }
+                // 应用输出转换器
+                val processedMessage = listOf(aiMessage).transforms(
+                    transformers = outputTransformers,
+                    context = this@ProactiveMessageTriggerService,
+                    model = model,
+                    assistant = assistant,
+                    settings = settings
+                ).first()
+                turnMessages[turnMessages.lastIndex] = processedMessage
+
+                // 检查是否有工具调用
+                val toolCalls = processedMessage.getTools().filter { !it.isExecuted }
+                trace.event(
+                    "model_result",
+                    "step=$step shape=${ProactiveMessageTrace.messageShape(processedMessage)} pendingTools=${toolCalls.size}",
+                )
+
+                if (toolCalls.isEmpty()) {
+                    // 没有工具调用，生成完成
+                    // 设置 Reasoning 的 finishedAt，否则UI会一直显示"思考中"
+                    val now = kotlin.time.Clock.System.now()
+                    val finalMessage = processedMessage.copy(
+                        parts = processedMessage.parts.map { part ->
+                            if (part is UIMessagePart.Reasoning && part.finishedAt == null) {
+                                part.copy(finishedAt = now)
+                            } else {
+                                part
+                            }
+                        }
+                    )
+                    turnMessages[turnMessages.lastIndex] = finalMessage
+                    // 最终更新 session 状态（用 id 匹配就地更新）
                     updateOrAppendAiMessage(
                         conversationId,
-                        currentAiMessage,
+                        finalMessage,
                         trace,
                         runAssistantMessageIds,
                         protectedMessageIds,
                     )
                 }
-            }
-
-            // 流式结束，更新 messages
-            messages = streamMessages.toMutableList()
-            val aiMessage = streamMessages.lastOrNull() ?: run {
-                Log.w(TAG, "No message in AI response")
-                break
-            }
-
-
-            // 在输出转换器处理前，检测 AI 原始输出是否含 [JUMP] 标记
-            val rawAiText = aiMessage.parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
-            if (rawAiText.contains("[JUMP]")) {
-                hasJumpFlag = true
-                Log.d(TAG, "[JUMP] flag detected in raw AI output")
-            }
-            // 应用输出转换器
-            val processedMessage = listOf(aiMessage).transforms(
-                transformers = outputTransformers,
-                context = this@ProactiveMessageTriggerService,
-                model = model,
-                assistant = assistant,
-                settings = settings
-            ).first()
-            messages[messages.lastIndex] = processedMessage
-
-            // 检查是否有工具调用
-            val toolCalls = processedMessage.getTools().filter { !it.isExecuted }
-            trace.event(
-                "model_result",
-                "step=$step shape=${ProactiveMessageTrace.messageShape(processedMessage)} pendingTools=${toolCalls.size}",
-            )
-
-            if (toolCalls.isEmpty()) {
-                // 没有工具调用，生成完成
-                // 设置 Reasoning 的 finishedAt，否则UI会一直显示"思考中"
-                val now = kotlin.time.Clock.System.now()
-                val finalMessage = processedMessage.copy(
-                    parts = processedMessage.parts.map { part ->
-                        if (part is UIMessagePart.Reasoning && part.finishedAt == null) {
-                            part.copy(finishedAt = now)
-                        } else {
-                            part
-                        }
-                    }
-                )
-                messages[messages.lastIndex] = finalMessage
-                // 最终更新 session 状态（用 id 匹配就地更新）
-                updateOrAppendAiMessage(
-                    conversationId,
-                    finalMessage,
-                    trace,
-                    runAssistantMessageIds,
-                    protectedMessageIds,
-                )
-                break
-            }
-
-            // Exhausting the tool budget must fail this run rather than save an unfinished
-            // tool call as a completed proactive reply. The existing cleanup removes it.
-            if (finalTurn) {
-                throw IllegalStateException("Proactive tool limit reached before a final reply")
-            }
-
-            // 有工具调用
-            hasToolCalls = true
-            Log.d(TAG, "Tool calls detected: ${toolCalls.size}")
-
-            // 执行工具（后台模式下自动执行，不需要用户审批）
-            val executedTools = mutableListOf<UIMessagePart.Tool>()
-            for (toolCall in toolCalls) {
-                val toolDef = tools.find { it.name == toolCall.toolName }
+                if (toolCalls.isNotEmpty() && step < MAX_TOOL_STEPS) {
+                    hasToolCalls = true
+                    Log.d(TAG, "Tool calls detected: ${toolCalls.size}")
+                }
+                turnMessages
+            },
+            executeTool = { toolCall, toolDef, step ->
                 trace.event(
                     "tool_call",
                     "step=$step name=${toolCall.toolName} id=${ProactiveMessageTrace.safeId(toolCall.toolCallId)} " +
                         "definitionFound=${toolDef != null}",
                 )
                 val executed = executeGenerationTool(toolCall, toolDef, json)
-                executedTools.add(executed)
                 trace.event(
                     "tool_result",
                     "name=${toolCall.toolName} completed=${executed.isExecuted} outputParts=${executed.output.size}",
                 )
-            }
-
-            // 更新消息中的工具状态
-            val updatedParts = processedMessage.parts.map { part ->
-                if (part is UIMessagePart.Tool) {
-                    executedTools.find { it.toolCallId == part.toolCallId } ?: part
-                } else {
-                    part
-                }
-            }
-            val updatedMessage = processedMessage.copy(parts = updatedParts)
-            messages[messages.lastIndex] = updatedMessage
-            // 更新 session 状态（带工具结果的消息，用 id 匹配就地更新）
-            updateOrAppendAiMessage(
-                conversationId,
-                updatedMessage,
-                trace,
-                runAssistantMessageIds,
-                protectedMessageIds,
-            )
-        }
-
+                executed
+            },
+            onToolsUpdated = { updatedMessages, _ ->
+                updateOrAppendAiMessage(
+                    conversationId,
+                    updatedMessages.last(),
+                    trace,
+                    runAssistantMessageIds,
+                    protectedMessageIds,
+                )
+            },
+        )
         return Triple(messages, hasToolCalls, hasJumpFlag)
     }
 
