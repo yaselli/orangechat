@@ -8,6 +8,7 @@ on:
       - feature/liquid-glass-ui
       - refactor/shared-generation-turn
       - refactor/shared-tool-loop
+      - refactor/generation-message-updates
 
 jobs:
   build:

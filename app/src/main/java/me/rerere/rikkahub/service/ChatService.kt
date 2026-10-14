@@ -109,6 +109,8 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.GenerationMessageTarget
+import me.rerere.rikkahub.data.model.updateGenerationMessages
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.replaceRegexes
@@ -1083,6 +1085,13 @@ class ChatService(
                 }
             }
 
+            // Regeneration targets a node identity, not its position in a later streaming snapshot.
+            val regenerationNodeId = messageRange?.let {
+                conversation.messageNodes.getOrNull(it.endInclusive + 1)?.id
+            }
+            val existingMessageIds = conversation.messageNodes.flatMap { it.messages }.mapTo(hashSetOf()) { it.id }
+            var regenerationReplyId: Uuid? = null
+
             // start generating
             generationHandler.generateText(
                 settings = settings,
@@ -1160,13 +1169,24 @@ class ChatService(
             }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
-                        val current = getConversationFlow(conversationId).value
-                        val updatedConversation = if (applicationReceipt == null) {
-                            current.updateCurrentMessages(chunk.messages)
-                        } else {
-                            applyBlockedChatChunk(current, chunk.messages, applicationReceipt.id)
+                        val updatedConversation = session.saveMutex.withLock {
+                            val current = getConversationFlow(conversationId).value
+                            val updated = if (applicationReceipt == null) {
+                                if (regenerationNodeId != null && regenerationReplyId == null) {
+                                    regenerationReplyId = chunk.messages.firstOrNull {
+                                        it.role == MessageRole.ASSISTANT && it.id !in existingMessageIds
+                                    }?.id
+                                }
+                                val target = regenerationReplyId?.let { replyId ->
+                                    regenerationNodeId?.let { GenerationMessageTarget(replyId, it) }
+                                }
+                                current.updateGenerationMessages(chunk.messages, target)
+                            } else {
+                                applyBlockedChatChunk(current, chunk.messages, applicationReceipt.id)
+                            }
+                            updateConversation(conversationId, updated)
+                            updated
                         }
-                        updateConversation(conversationId, updatedConversation)
 
                         // 如果应用不在前台，发送 Live Update 通知
                         val hasNewReply = applicationReceipt == null ||
