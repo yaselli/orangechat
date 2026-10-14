@@ -15,6 +15,7 @@ import android.util.Log
 import me.rerere.rikkahub.data.ai.executeGenerationTool
 import me.rerere.rikkahub.data.ai.generateModelTurn
 import me.rerere.rikkahub.data.ai.runGenerationToolLoop
+import me.rerere.rikkahub.data.model.updateGenerationMessages
 import me.rerere.rikkahub.data.ai.transformers.forProactiveExtraInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.SupervisorJob
@@ -66,7 +67,6 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.utils.sendNotification
@@ -1251,6 +1251,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         runAssistantMessageIds: MutableSet<Uuid>,
         protectedMessageIds: Set<Uuid>,
     ) {
+        val previouslySeenMessageIds = if (aiMessage.id in runAssistantMessageIds) setOf(aiMessage.id) else emptySet()
         if (!registerProactiveRunMessageId(
                 messageId = aiMessage.id,
                 protectedMessageIds = protectedMessageIds,
@@ -1277,23 +1278,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         "executed=${aiMessage.getTools().count { it.isExecuted }} existingNode=${existingNodeIndex >= 0}",
                 )
             }
-            val updated = if (existingNodeIndex >= 0) {
-                // 已存在该 id 的 node：保留 node id，只更新其 messages
-                val oldNode = conv.messageNodes[existingNodeIndex]
-                val updatedNode = oldNode.copy(
-                    messages = oldNode.messages.map {
-                        if (it.id == aiMessage.id) aiMessage else it
-                    }
-                )
-                conv.copy(
-                    messageNodes = conv.messageNodes.toMutableList().apply {
-                        this[existingNodeIndex] = updatedNode
-                    }
-                )
-            } else {
-                // 本次生成的 node 还没有：追加（首次调用时才创建新 node）
-                conv.copy(messageNodes = conv.messageNodes + aiMessage.toMessageNode())
-            }
+            val updated = conv.updateGenerationMessages(
+                messages = listOf(aiMessage),
+                previouslySeenMessageIds = previouslySeenMessageIds,
+            )
             chatService.updateConversation(conversationId, updated)
             chatService.saveConversation(conversationId, updated)
         }
