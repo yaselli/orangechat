@@ -97,14 +97,13 @@ class GenerationMessageUpdatesTest {
     }
 
     @Test
-    fun `missing regeneration target appends without touching unrelated nodes`() {
+    fun `missing regeneration target does not redirect reply into another node`() {
         val node = MessageNode.of(UIMessage.user("keep"))
         val reply = UIMessage.assistant("new")
         val updated = conversation(node).updateGenerationMessages(
             listOf(reply), GenerationMessageTarget(reply.id, Uuid.random()),
         )
-        assertEquals(node, updated.messageNodes.first())
-        assertEquals(reply, updated.currentMessages.last())
+        assertEquals(listOf(node), updated.messageNodes)
     }
 
     @Test
@@ -145,6 +144,98 @@ class GenerationMessageUpdatesTest {
         assertEquals(old, updated.currentMessages.first())
         assertEquals(fresh, updated.currentMessages.last())
         assertEquals(setOf(fresh.id), owned)
+    }
+
+    @Test
+    fun `deleted history is not restored by a stale generation snapshot`() {
+        val deleted = UIMessage.user("deleted")
+        val kept = UIMessage.user("keep")
+        val newUser = UIMessage.user("new concurrent message")
+        val fresh = UIMessage.assistant("reply")
+        val current = conversation(MessageNode.of(kept), MessageNode.of(newUser))
+        val updated = current.updateGenerationMessages(
+            messages = listOf(deleted, kept, fresh),
+            previouslySeenMessageIds = setOf(deleted.id, kept.id),
+        )
+        assertEquals(listOf(kept, newUser, fresh), updated.currentMessages)
+        assertEquals(current.messageNodes, updated.messageNodes.take(2))
+    }
+
+    @Test
+    fun `deleted streaming reply is not reappended by later frames`() {
+        val user = UIMessage.user("question")
+        val reply = UIMessage.assistant("partial")
+        val initial = conversation(MessageNode.of(user))
+        val published = initial.updateGenerationMessages(listOf(user, reply), previouslySeenMessageIds = setOf(user.id))
+        val afterDelete = published.copy(messageNodes = published.messageNodes.dropLast(1))
+        val complete = reply.copy(parts = listOf(UIMessagePart.Text("final")))
+        val updated = afterDelete.updateGenerationMessages(
+            listOf(user, complete), previouslySeenMessageIds = setOf(user.id, reply.id),
+        )
+        assertEquals(afterDelete, updated)
+    }
+
+    @Test
+    fun `deleted alternative stays deleted while another selected reply survives`() {
+        val deleted = UIMessage.assistant("old alternative")
+        val selected = UIMessage.assistant("selected")
+        val node = MessageNode(messages = listOf(selected), isFavorite = true)
+        val current = conversation(node)
+        val updated = current.updateGenerationMessages(
+            listOf(deleted), previouslySeenMessageIds = setOf(deleted.id, selected.id),
+        )
+        assertEquals(current, updated)
+        assertTrue(updated.messageNodes.single().isFavorite)
+    }
+
+    @Test
+    fun `deleting regeneration node after the first frame prevents later reply resurrection`() {
+        val original = MessageNode.of(UIMessage.assistant("old"))
+        val following = MessageNode.of(UIMessage.user("following"))
+        val reply = UIMessage.assistant("new")
+        val target = GenerationMessageTarget(reply.id, original.id)
+        val first = conversation(original, following).updateGenerationMessages(listOf(reply), target)
+        val afterDelete = first.copy(messageNodes = first.messageNodes.filterNot { it.id == original.id })
+        val later = reply.copy(parts = listOf(UIMessagePart.Text("new final")))
+        val updated = afterDelete.updateGenerationMessages(
+            listOf(later), target, previouslySeenMessageIds = setOf(reply.id),
+        )
+        assertEquals(afterDelete, updated)
+        assertEquals(following, updated.messageNodes.single())
+    }
+
+    @Test
+    fun `seen replies still update normally when their node exists`() {
+        val reply = UIMessage.assistant("partial")
+        val current = conversation(MessageNode.of(reply))
+        val later = reply.copy(parts = listOf(UIMessagePart.Text("final")))
+        val updated = current.updateGenerationMessages(listOf(later), previouslySeenMessageIds = setOf(reply.id))
+        assertEquals(current.messageNodes.single().id, updated.messageNodes.single().id)
+        assertEquals(later, updated.currentMessages.single())
+        assertEquals(1, updated.messageNodes.size)
+    }
+
+    @Test
+    fun `proactive registration permits first publication but not resurrection after deletion`() {
+        val old = UIMessage.assistant("old")
+        val fresh = UIMessage.assistant("partial proactive reply")
+        val protected = setOf(old.id)
+        val owned = mutableSetOf<Uuid>()
+        val beforeFirst = owned.toSet()
+        assertTrue(registerProactiveRunMessageId(fresh.id, protected, owned))
+        val first = conversation(MessageNode.of(old)).updateGenerationMessages(
+            listOf(fresh), previouslySeenMessageIds = beforeFirst,
+        )
+        assertEquals(listOf(old, fresh), first.currentMessages)
+        val afterDelete = first.copy(messageNodes = first.messageNodes.dropLast(1))
+        val beforeLater = owned.toSet()
+        assertTrue(registerProactiveRunMessageId(fresh.id, protected, owned))
+        val updated = afterDelete.updateGenerationMessages(
+            listOf(fresh.copy(parts = listOf(UIMessagePart.Text("final")))),
+            previouslySeenMessageIds = beforeLater,
+        )
+        assertEquals(afterDelete, updated)
+        assertFalse(registerProactiveRunMessageId(old.id, protected, owned))
     }
 
     private fun conversation(vararg nodes: MessageNode) = Conversation(

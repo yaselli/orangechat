@@ -1090,6 +1090,7 @@ class ChatService(
                 conversation.messageNodes.getOrNull(it.endInclusive + 1)?.id
             }
             val existingMessageIds = conversation.messageNodes.flatMap { it.messages }.mapTo(hashSetOf()) { it.id }
+            val seenGenerationMessageIds = existingMessageIds.toMutableSet()
             var regenerationReplyId: Uuid? = null
 
             // start generating
@@ -1180,7 +1181,13 @@ class ChatService(
                                 val target = regenerationReplyId?.let { replyId ->
                                     regenerationNodeId?.let { GenerationMessageTarget(replyId, it) }
                                 }
-                                current.updateGenerationMessages(chunk.messages, target)
+                                current.updateGenerationMessages(
+                                    messages = chunk.messages,
+                                    regenerationTarget = target,
+                                    previouslySeenMessageIds = seenGenerationMessageIds,
+                                ).also {
+                                    chunk.messages.forEach { message -> seenGenerationMessageIds.add(message.id) }
+                                }
                             } else {
                                 applyBlockedChatChunk(current, chunk.messages, applicationReceipt.id)
                             }

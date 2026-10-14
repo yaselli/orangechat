@@ -10,11 +10,14 @@ internal data class GenerationMessageTarget(val messageId: Uuid, val nodeId: Uui
  * Merge generation updates by message identity, never by a stale position in the request history.
  * Preserve node ids, alternatives, selection and conversation metadata. A new ordinary/proactive
  * reply appends a node; regeneration alone may add an alternative to its original target node.
+ * Missing previously seen messages are deletions, not new replies. A deleted regeneration
+ * target must not redirect its reply to the end of the conversation.
  * Callers must hold the session mutex while reading current state and publishing the result.
  */
 internal fun Conversation.updateGenerationMessages(
     messages: List<UIMessage>,
     regenerationTarget: GenerationMessageTarget? = null,
+    previouslySeenMessageIds: Set<Uuid> = emptySet(),
 ): Conversation {
     val nodes = messageNodes.toMutableList()
     val messageIndices = mutableMapOf<Uuid, Int>()
@@ -33,10 +36,10 @@ internal fun Conversation.updateGenerationMessages(
                 if (it.id == message.id) message else it
             })
         } else {
-            val targetIndex = regenerationTarget?.takeIf { it.messageId == message.id }?.let { target ->
-                nodeIndices[target.nodeId]
-            }
-            if (targetIndex != null) {
+            if (message.id in previouslySeenMessageIds) continue
+            val target = regenerationTarget?.takeIf { it.messageId == message.id }
+            if (target != null) {
+                val targetIndex = nodeIndices[target.nodeId] ?: continue
                 val node = nodes[targetIndex]
                 nodes[targetIndex] = node.copy(
                     messages = node.messages + message,

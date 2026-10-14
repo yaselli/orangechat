@@ -1251,6 +1251,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         runAssistantMessageIds: MutableSet<Uuid>,
         protectedMessageIds: Set<Uuid>,
     ) {
+        val previouslySeenMessageIds = if (aiMessage.id in runAssistantMessageIds) setOf(aiMessage.id) else emptySet()
         if (!registerProactiveRunMessageId(
                 messageId = aiMessage.id,
                 protectedMessageIds = protectedMessageIds,
@@ -1277,7 +1278,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         "executed=${aiMessage.getTools().count { it.isExecuted }} existingNode=${existingNodeIndex >= 0}",
                 )
             }
-            val updated = conv.updateGenerationMessages(listOf(aiMessage))
+            val updated = conv.updateGenerationMessages(
+                messages = listOf(aiMessage),
+                previouslySeenMessageIds = previouslySeenMessageIds,
+            )
             chatService.updateConversation(conversationId, updated)
             chatService.saveConversation(conversationId, updated)
         }
