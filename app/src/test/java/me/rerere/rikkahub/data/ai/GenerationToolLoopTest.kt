@@ -66,11 +66,86 @@ class GenerationToolLoopTest {
 
     @Test
     fun `pending resumed input with no approval remains unexecuted`() = runBlocking {
-        val f = Fixture(listOf(reply(call("pending").copy(approvalState = ToolApprovalState.Pending))))
-        val result = f.run(chatPolicy = true, autoApprove = false, resume = true)
+        val initial = reply(call("pending").copy(approvalState = ToolApprovalState.Pending))
+        val f = Fixture(emptyList())
+        val result = f.run(initial = f.history + initial, chatPolicy = true, autoApprove = false, resume = true)
         assertTrue(f.executed.isEmpty())
         assertEquals(ToolApprovalState.Pending, result.last().getTools().single().approvalState)
-        assertEquals(1, f.requests.size)
+        assertTrue(f.requests.isEmpty())
+    }
+
+    @Test
+    fun `mixed batch resumes automatic calls with each user decision before next model request`() = runBlocking {
+        for (decision in listOf(
+            ToolApprovalState.Approved,
+            ToolApprovalState.Denied("no"),
+            ToolApprovalState.Answered("yes"),
+        )) {
+            val completed = call("completed").copy(output = listOf(UIMessagePart.Text("already done")))
+            val initial = reply(call("auto"), call("sensitive", "sensitive"), completed)
+            val paused = Fixture(listOf(initial))
+            val waiting = paused.run(chatPolicy = true, autoApprove = false)
+            assertTrue(paused.executed.isEmpty())
+            val approved = waiting.dropLast(1) + waiting.last().copy(parts = waiting.last().parts.map { part ->
+                if (part is UIMessagePart.Tool && part.toolCallId == "sensitive") {
+                    part.copy(approvalState = decision)
+                } else part
+            })
+            val resumed = Fixture(listOf(UIMessage.assistant("done")))
+            val result = resumed.run(initial = approved, chatPolicy = true, autoApprove = false, resume = true)
+            assertEquals(
+                if (decision == ToolApprovalState.Approved) listOf("auto", "sensitive") else listOf("auto"),
+                resumed.executed,
+            )
+            val sent = resumed.requests.single().last()
+            assertEquals(initial.id, sent.id)
+            assertTrue(sent.getTools().all { it.isExecuted })
+            assertEquals(completed, sent.getTools().last())
+            assertEquals(decision, sent.getTools()[1].approvalState)
+            when (decision) {
+                is ToolApprovalState.Denied -> assertTrue(sent.getTools()[1].output.single().let {
+                    (it as UIMessagePart.Text).text.contains("denied by user")
+                })
+                is ToolApprovalState.Answered -> assertEquals("yes", (sent.getTools()[1].output.single()
+                    as UIMessagePart.Text).text)
+                else -> Unit
+            }
+            assertEquals("done", result.last().toText())
+        }
+    }
+
+    @Test
+    fun `partly approved batch still waits without executing automatic or approved calls`() = runBlocking {
+        val initial = reply(
+            call("auto"),
+            call("approved", "sensitive").copy(approvalState = ToolApprovalState.Approved),
+            call("pending", "sensitive").copy(approvalState = ToolApprovalState.Pending),
+        )
+        val f = Fixture(emptyList())
+        val history = f.history + initial
+        assertEquals(history, f.run(initial = history, chatPolicy = true, autoApprove = false, resume = true))
+        assertTrue(f.requests.isEmpty())
+        assertTrue(f.executed.isEmpty())
+        assertTrue(f.updates.isEmpty())
+    }
+
+    @Test
+    fun `resumed automatic sensitive call still requires approval`() = runBlocking {
+        val initial = reply(call("auto"), call("sensitive", "sensitive"))
+        val f = Fixture(emptyList())
+        val result = f.run(initial = f.history + initial, chatPolicy = true, autoApprove = false, resume = true)
+        assertEquals(ToolApprovalState.Pending, result.last().getTools()[1].approvalState)
+        assertTrue(f.requests.isEmpty())
+        assertTrue(f.executed.isEmpty())
+        assertEquals(GenerationToolUpdate.APPROVAL, f.updates.single().second)
+    }
+
+    @Test
+    fun `unfinished automatic batch resumes without an extra model request first`() = runBlocking {
+        val f = Fixture(listOf(UIMessage.assistant("done")))
+        f.run(initial = f.history + reply(call("auto")), chatPolicy = true, autoApprove = false, resume = true)
+        assertEquals(listOf("auto"), f.executed)
+        assertTrue(f.requests.single().last().getTools().single().isExecuted)
     }
 
     @Test
