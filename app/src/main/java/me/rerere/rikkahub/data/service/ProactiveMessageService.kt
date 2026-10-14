@@ -13,6 +13,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import me.rerere.rikkahub.data.ai.executeGenerationTool
+import me.rerere.rikkahub.data.ai.generateModelTurn
 import me.rerere.rikkahub.data.ai.transformers.forProactiveExtraInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.SupervisorJob
@@ -45,7 +46,6 @@ import me.rerere.rikkahub.data.ai.selectGenerationHistory
 import me.rerere.rikkahub.data.ai.selectGenerationSystemPrompt
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
@@ -1375,21 +1375,24 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             // A proactive request may legitimately end with an existing ASSISTANT message. Seed a
             // fresh assistant placeholder locally so handleMessageChunk cannot append the new
             // stream to that old message and reuse its id. Do not send the placeholder upstream.
-            var streamMessages = beginProactiveAssistantTurn(messages.toList(), model.id)
-            val turnMessageId = streamMessages.last().id
+            val initialStreamMessages = beginProactiveAssistantTurn(messages.toList(), model.id)
+            val turnMessageId = initialStreamMessages.last().id
             trace.event(
                 "assistant_turn",
                 "step=$step message=${ProactiveMessageTrace.safeId(turnMessageId)} fresh=true",
             )
-            providerImpl.streamText(
+            val streamMessages = generateModelTurn(
+                providerImpl = providerImpl,
                 providerSetting = providerSetting,
-                messages = requestMessages,
-                params = params
-            ).collect { chunk ->
-                streamMessages = streamMessages.handleMessageChunk(chunk = chunk, model = model)
-
+                requestMessages = requestMessages,
+                initialMessages = initialStreamMessages,
+                params = params,
+                model = model,
+                stream = true,
+                mergeUsage = false,
+            ) { updatedMessages ->
                 // 实时更新 session 状态，让打开的聊天界面能看到消息生成
-                val currentAiMessage = streamMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                val currentAiMessage = updatedMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
                 if (currentAiMessage != null) {
                     // 用 id 匹配就地更新（保留 node id，避免思考链闪烁 / 覆盖上一条 assistant）
                     updateOrAppendAiMessage(

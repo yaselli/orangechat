@@ -6,6 +6,7 @@ on:
     branches:
       - master
       - feature/liquid-glass-ui
+      - refactor/shared-generation-turn
 
 jobs:
   build:
