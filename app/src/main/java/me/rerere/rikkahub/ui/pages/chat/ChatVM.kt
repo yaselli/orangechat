@@ -33,6 +33,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.withAssistantEdit
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
@@ -161,11 +162,17 @@ class ChatVM(
 
     // 更新设置
     fun updateSettings(newSettings: Settings) {
+        val previous = settings.value
         viewModelScope.launch {
-            val oldSettings = settings.value
-            // 检查用户头像是否有变化，如果有则删除旧头像
-            checkUserAvatarDelete(oldSettings, newSettings)
-            settingsStore.update(newSettings)
+            settingsStore.updateFrom(previous, newSettings)
+            // Delete replaced assets only after the settings write succeeds.
+            checkUserAvatarDelete(previous, newSettings)
+        }
+    }
+
+    fun updateAssistant(previous: Assistant, desired: Assistant) {
+        viewModelScope.launch {
+            settingsStore.update { it.withAssistantEdit(previous, desired) }
         }
     }
 

@@ -35,8 +35,9 @@ class DebugVM(
         .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
 
     fun updateSettings(settings: Settings) {
+        val previous = this.settings.value
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.updateFrom(previous, settings)
         }
     }
 
