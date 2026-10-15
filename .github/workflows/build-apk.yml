@@ -9,6 +9,7 @@ on:
       - refactor/shared-generation-turn
       - refactor/shared-tool-loop
       - refactor/generation-message-updates
+      - fix/mixed-tool-approval
 
 jobs:
   build:

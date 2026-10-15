@@ -246,6 +246,15 @@ class ConversationRepository(
         return conversationDAO.existsById(uuid.toString())
     }
 
+    // Auxiliary generation must not rewrite message nodes or recreate a deleted conversation.
+    suspend fun updateGeneratedTitle(id: Uuid, title: String): Boolean {
+        return conversationDAO.updateTitle(id.toString(), title) > 0
+    }
+
+    suspend fun updateGeneratedSuggestions(id: Uuid, suggestions: List<String>): Boolean {
+        return conversationDAO.updateSuggestions(id.toString(), JsonInstant.encodeToString(suggestions)) > 0
+    }
+
     suspend fun insertConversation(conversation: Conversation) {
         try {
             database.withTransaction {

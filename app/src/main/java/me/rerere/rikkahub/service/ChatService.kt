@@ -1507,15 +1507,12 @@ class ChatService(
                 ),
             )
 
-            val session = getOrCreateSession(conversationId)
-            session.saveMutex.withLock {
-                // 生成完，conversation可能不是最新了，因此需要重新获取
-                conversationRepo.getConversationById(conversation.id)?.let {
-                    saveConversation(
-                        conversationId,
-                        it.copy(title = result.choices[0].message?.toText()?.trim() ?: "")
-                    )
-                }
+            val title = result.choices[0].message?.toText()?.trim() ?: ""
+            val session = sessions[conversationId]
+            if (session != null) {
+                session.saveGeneratedTitle(title) { conversationRepo.updateGeneratedTitle(conversationId, title) }
+            } else {
+                conversationRepo.updateGeneratedTitle(conversationId, title)
             }
         }.onFailure {
             it.printStackTrace()
@@ -1537,12 +1534,10 @@ class ChatService(
             val model = settings.findModelById(settings.suggestionModelId) ?: return
             val provider = model.findProvider(settings.providers) ?: return
 
-            val session = getOrCreateSession(conversationId)
-            session.saveMutex.withLock {
-                updateConversation(
-                    conversationId,
-                    session.state.value.copy(chatSuggestions = emptyList())
-                )
+            sessions[conversationId]?.let { session ->
+                session.saveMutex.withLock {
+                    session.state.value = session.state.value.copy(chatSuggestions = emptyList())
+                }
             }
 
             val providerHandler = providerManager.getProviderByType(provider)
@@ -1565,15 +1560,14 @@ class ChatService(
                 result.choices[0].message?.toText()?.split("\n")?.map { it.trim() }
                     ?.filter { it.isNotBlank() } ?: emptyList()
 
-            session.saveMutex.withLock {
-                val latestConversation = conversationRepo.getConversationById(conversationId)
-                    ?: session.state.value
-                saveConversation(
-                    conversationId,
-                    latestConversation.copy(
-                        chatSuggestions = suggestions.take(10)
-                    )
-                )
+            val limitedSuggestions = suggestions.take(10)
+            val session = sessions[conversationId]
+            if (session != null) {
+                session.saveGeneratedSuggestions(limitedSuggestions) {
+                    conversationRepo.updateGeneratedSuggestions(conversationId, limitedSuggestions)
+                }
+            } else {
+                conversationRepo.updateGeneratedSuggestions(conversationId, limitedSuggestions)
             }
         }.onFailure {
             it.printStackTrace()

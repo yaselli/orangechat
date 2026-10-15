@@ -43,28 +43,29 @@ internal suspend fun runGenerationToolLoop(
         val finalTurn = reserveFinalModelTurn && step == maxSteps
         onStep(step, finalTurn)
         val definitions = toolsForStep(step)
-        val resumable = if (resumeApprovedTools) {
-            messages.lastOrNull()?.getTools()?.filter { it.canResumeExecution }.orEmpty()
+        // Approval pauses the whole batch, including Auto calls. Resume every unfinished
+        // call through the approval policy before requesting another model turn.
+        val unfinished = if (resumeApprovedTools) {
+            messages.lastOrNull()?.getTools()?.filter { !it.isExecuted }.orEmpty()
         } else {
             emptyList()
         }
 
-        val calls = if (resumable.isEmpty()) {
+        val generated = if (unfinished.isEmpty()) {
             messages = generateTurn(messages, definitions, step)
-            val generated = messages.lastOrNull()?.getTools()?.filter { !it.isExecuted }.orEmpty()
-            if (generated.isEmpty()) return messages
-            if (finalTurn) error(toolLimitError)
-            val approval = prepareTools(generated, definitions)
-            if (approval.calls != generated) {
-                messages = replaceGenerationTools(messages, approval.calls)
-                onToolsUpdated(messages, GenerationToolUpdate.APPROVAL)
-            }
-            if (approval.waitingForApproval) return messages
-            approval.calls
+            messages.lastOrNull()?.getTools()?.filter { !it.isExecuted }.orEmpty()
         } else {
-            if (finalTurn) error(toolLimitError)
-            resumable
+            unfinished
         }
+        if (generated.isEmpty()) return messages
+        if (finalTurn) error(toolLimitError)
+        val approval = prepareTools(generated, definitions)
+        if (approval.calls != generated) {
+            messages = replaceGenerationTools(messages, approval.calls)
+            onToolsUpdated(messages, GenerationToolUpdate.APPROVAL)
+        }
+        if (approval.waitingForApproval) return messages
+        val calls = approval.calls
 
         val results = mutableListOf<UIMessagePart.Tool>()
         for (call in calls) {

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.rerere.rikkahub.data.model.Conversation
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
@@ -26,6 +27,10 @@ class ConversationSession(
     val id: Uuid,
     initial: Conversation,
     private val scope: CoroutineScope,
+    private val debugLog: (String) -> Unit = { message ->
+        Log.d(TAG, message)
+        Unit
+    },
     private val onIdle: (Uuid) -> Unit,
 ) {
     // 会话状态
@@ -56,16 +61,34 @@ class ConversationSession(
      */
     val saveMutex = Mutex()
 
+    /** Persist only the title, then patch the live state without replacing in-flight messages. */
+    internal suspend fun saveGeneratedTitle(title: String, persist: suspend () -> Boolean) {
+        withRefSuspend {
+            saveMutex.withLock {
+                if (persist()) state.value = state.value.copy(title = title)
+            }
+        }
+    }
+
+    /** Persist only suggestions; a deleted conversation must remain deleted. */
+    internal suspend fun saveGeneratedSuggestions(suggestions: List<String>, persist: suspend () -> Boolean) {
+        withRefSuspend {
+            saveMutex.withLock {
+                if (persist()) state.value = state.value.copy(chatSuggestions = suggestions)
+            }
+        }
+    }
+
     // 空闲检查任务
     private var idleCheckJob: Job? = null
 
     fun acquire(): Int = refCount.incrementAndGet().also {
         cancelIdleCheck()
-        Log.d(TAG, "acquire $id (refs=$it)")
+        debugLog("acquire $id (refs=$it)")
     }
 
     fun release(): Int = refCount.decrementAndGet().also {
-        Log.d(TAG, "release $id (refs=$it)")
+        debugLog("release $id (refs=$it)")
         if (it <= 0) scheduleIdleCheck()
     }
 
