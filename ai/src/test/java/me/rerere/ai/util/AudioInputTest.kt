@@ -109,6 +109,22 @@ class AudioInputTest {
     }
 
     @Test
+    fun `audio-only user message is retained in the actual request`() {
+        val bytes = wavBytes()
+        val file = temporary.newFile("audio-only.wav").apply { writeBytes(bytes) }
+        val message = UIMessage.user("").copy(parts = listOf(UIMessagePart.Audio(file.toURI().toString())))
+        val api = ChatCompletionsAPI(OkHttpClient(), KeyRoulette.default())
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "buildMessages", List::class.java, Model::class.java
+        )
+        method.isAccessible = true
+        val messages = method.invoke(api, listOf(message), Model()) as JsonArray
+        val content = messages.single().jsonObject["content"]!!.jsonArray
+        val audio = content.single().jsonObject["input_audio"]!!.jsonObject
+        assertArrayEquals(bytes, Base64.getDecoder().decode(audio["data"]!!.jsonPrimitive.content))
+    }
+
+    @Test
     fun `responses rejects audio explicitly rather than quietly dropping it`() {
         val message = UIMessage.user("").copy(parts = listOf(UIMessagePart.Audio("file:///recording.wav")))
         try {
