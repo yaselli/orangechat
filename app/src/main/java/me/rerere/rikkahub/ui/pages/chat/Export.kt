@@ -493,13 +493,13 @@ private fun ExportedChatImage(
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                             )
                             Text(
-                                text = "${LocalDateTime.now().toLocalString()}  orangechat",
+                                text = "${LocalDateTime.now().toLocalString()}  ${stringResource(R.string.app_name)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         // Use painterResource for the logo
-                        val painter = painterResource(id = R.mipmap.ic_launcher_foreground)
+                        val painter = painterResource(id = R.drawable.ic_watermelon_launcher_foreground)
                         Image(
                             painter = painter,
                             contentDescription = "Logo",
