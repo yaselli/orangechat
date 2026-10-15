@@ -80,6 +80,7 @@ import me.rerere.rikkahub.plugin.repository.PluginRepository
 import org.json.JSONArray
 import org.json.JSONObject
 import org.koin.compose.koinInject
+import me.rerere.rikkahub.plugin.files.resolvePluginFile
 import java.io.File
 
 private const val TAG = "PluginWebViewPage"
@@ -312,7 +313,7 @@ fun PluginWebViewPage(
                 val seenInBatch = mutableSetOf<String>()
 
                 // Create music/ subdirectory once
-                val musicDir = File(dataStore.getDataDir(), "music")
+                val musicDir = dataStore.resolveFile("music")
                 if (!musicDir.exists()) {
                     musicDir.mkdirs()
                 }
@@ -342,7 +343,7 @@ fun PluginWebViewPage(
                         }
 
                         // Duplicate detection: existing in music/ OR already seen in this batch
-                        val targetFile = File(musicDir, fileName)
+                        val targetFile = dataStore.resolveFile("music/$fileName")
                         if (targetFile.exists() || seenInBatch.contains(fileName)) {
                             val escapedDup = fileName.replace("\\", "\\\\").replace("'", "\\'")
                             if (duplicates.isNotEmpty()) duplicates.append(",")
@@ -763,8 +764,10 @@ fun PluginWebViewPage(
                             // 禁用原生长按选择菜单 - 通过CSS/JS控制，不再用原生拦截
                             // （原生setOnLongClickListener会阻止批注模式的文字选择）
 
-                            val htmlFile = File(pluginInfo.directory, htmlEntryPath)
-                            if (htmlFile.exists()) {
+                            val htmlFile = runCatching {
+                                resolvePluginFile(pluginInfo.directory, htmlEntryPath)
+                            }.getOrNull()
+                            if (htmlFile != null && htmlFile.isFile) {
                                 loadUrl("file://${htmlFile.absolutePath}")
                             } else {
                                 loadData(
@@ -964,8 +967,7 @@ private class PluginWebViewClient(
                 val fileName = params["fileName"] ?: ""
                 val base64Data = params["data"] ?: ""
                 try {
-                    val dir = dataStore.getDataDir()
-                    val file = File(dir, fileName)
+                    val file = dataStore.resolveFile(fileName)
                     val bytes = Base64.decode(base64Data, Base64.DEFAULT)
                     file.writeBytes(bytes)
                     webView.post {
@@ -985,8 +987,7 @@ private class PluginWebViewClient(
             "readFile" -> {
                 val fileName = params["fileName"] ?: ""
                 try {
-                    val dir = dataStore.getDataDir()
-                    val file = File(dir, fileName)
+                    val file = dataStore.resolveFile(fileName)
                     if (file.exists()) {
                         val bytes = file.readBytes()
                         val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
@@ -1013,11 +1014,10 @@ private class PluginWebViewClient(
 
             "listFiles" -> {
                 val dirPath = params["dir"] ?: ""
-                val baseDir = if (dirPath.isEmpty()) dataStore.getDataDir()
-                              else File(dataStore.getDataDir(), dirPath)
-                val files = if (baseDir.exists() && baseDir.isDirectory) {
-                    baseDir.listFiles()?.map { it.name } ?: emptyList()
-                } else emptyList()
+                val files = runCatching {
+                    val baseDir = dataStore.resolveFile(dirPath, allowRoot = true)
+                    if (baseDir.isDirectory) baseDir.listFiles()?.map { it.name }.orEmpty() else emptyList()
+                }.getOrDefault(emptyList())
                 val jsonArray = JSONArray(files)
                 webView.post {
                     webView.evaluateJavascript(
@@ -1028,9 +1028,7 @@ private class PluginWebViewClient(
 
             "deleteFile" -> {
                 val fileName = params["fileName"] ?: ""
-                val dir = dataStore.getDataDir()
-                val file = File(dir, fileName)
-                val result = file.delete()
+                val result = runCatching { dataStore.resolveFile(fileName).delete() }.getOrDefault(false)
                 webView.post {
                     webView.evaluateJavascript(
                         "window.__bridgeResult('${params["callbackId"]}', $result);", null

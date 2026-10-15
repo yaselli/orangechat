@@ -8,6 +8,7 @@ package me.rerere.rikkahub.plugin.model
 
 import kotlinx.serialization.json.JsonElement
 import java.io.File
+import me.rerere.rikkahub.plugin.files.resolvePluginFile
 
 /**
  * 插件运行时信息
@@ -55,5 +56,5 @@ data class PluginInfo(
     /**
      * 获取入口文件的完整路径
      */
-    fun getEntryFile(): File = File(directory, manifest.entry)
+    fun getEntryFile(): File = resolvePluginFile(directory, manifest.entry)
 }

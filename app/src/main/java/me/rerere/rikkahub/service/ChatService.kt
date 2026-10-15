@@ -49,7 +49,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -74,14 +73,10 @@ import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
-import me.rerere.rikkahub.data.ai.tools.LocalTools
-import me.rerere.rikkahub.data.ai.tools.LocalToolOption
-import me.rerere.rikkahub.data.ai.tools.SystemTools
+import me.rerere.rikkahub.data.ai.tools.ToolSurfaceBuilder
+import me.rerere.rikkahub.data.ai.tools.ToolSurfacePolicy
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.data.ai.tools.ToolNaming
-import me.rerere.rikkahub.data.ai.tools.createSearchTools
-import me.rerere.rikkahub.data.ai.tools.createSkillTools
-import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
-import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.loader.PluginLoader
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
@@ -99,7 +94,6 @@ import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
 import me.rerere.rikkahub.data.ai.transformers.extraInfoMessagePart
 import me.rerere.rikkahub.data.ai.transformers.isExtraInfoInjectionPart
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
-import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.buildAnniversaryPrompt
 import me.rerere.rikkahub.data.datastore.findModelById
@@ -174,10 +168,9 @@ class ChatService(
     private val generationHandler: GenerationHandler,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
-    private val localTools: LocalTools,
+    private val toolSurfaceBuilder: ToolSurfaceBuilder,
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
-    private val skillManager: SkillManager,
     private val pluginToolProvider: PluginToolProvider,
     private val pluginLoader: PluginLoader,
     private val workspaceRepository: WorkspaceRepository,
@@ -1337,72 +1330,20 @@ class ChatService(
         conversationId: Uuid,
         conversation: Conversation,
         allowAppUsage: Boolean,
-    ): List<Tool> = buildList {
-        if (settings.enableWebSearch) {
-            addAll(createSearchTools(settings))
-        }
-        addAll(
-            localTools.getTools(
-                assistant.localTools.filterNot {
-                    isChatBlocked(conversationId) && it == LocalToolOption.RequestVoiceCall
-                },
-                me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
-                    callerAssistantId = assistant.id.toString(),
-                    callerConversationId = conversationId.toString(),
-                ),
-            )
-        )
-
-        val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions().toMutableSet()
-        if (!allowAppUsage) {
-            systemToolsOptions.remove(me.rerere.rikkahub.data.ai.tools.SystemToolOption.AppUsage)
-        }
-        if (systemToolsOptions.isNotEmpty()) {
-            addAll(
-                SystemTools(context, settings).getTools(
-                    systemToolsOptions,
-                    conversation.currentMessages,
-                    filesManager,
-                )
-            )
-        }
-
-        addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
-        if (assistant.enabledSkills.isNotEmpty()) {
-            addAll(
-                createSkillTools(
-                    enabledSkills = assistant.enabledSkills,
-                    allSkills = skillManager.listSkills(),
-                    skillManager = skillManager,
-                )
-            )
-        }
-        mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
-            add(
-                Tool(
-                    name = ToolNaming.buildMcpToolName(serverId, tool.name),
-                    description = tool.description ?: "",
-                    parameters = { tool.inputSchema },
-                    needsApproval = tool.needsApproval,
-                    execute = { mcpManager.callTool(serverId, tool.name, it.jsonObject) },
-                )
-            )
-        }
-        addAll(pluginToolProvider.getTools())
-    }
-
-    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
-        if (workspaceId.isNullOrBlank()) return emptyList()
-        val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
-        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
-            Log.d(
-                TAG,
-                "createWorkspaceToolsIfReady: skip workspace tools, workspace=$workspaceId, status=${workspace.shellStatus}"
-            )
-            return emptyList()
-        }
-        return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
-    }
+    ): List<Tool> = toolSurfaceBuilder.build(
+        assistant = assistant,
+        settings = settings,
+        invocationContext = ToolInvocationContext(
+            callerAssistantId = assistant.id.toString(),
+            callerConversationId = conversationId.toString(),
+        ),
+        recentMessages = conversation.currentMessages,
+        workspaceCwd = conversation.workspaceCwd,
+        policy = ToolSurfacePolicy.forChat(
+            allowAppUsage = allowAppUsage,
+            chatBlocked = isChatBlocked(conversationId),
+        ),
+    )
 
     // ---- 检查无效消息 ----
 

@@ -9,6 +9,10 @@ package me.rerere.rikkahub.plugin.data
 import android.content.Context
 import android.content.SharedPreferences
 import org.json.JSONArray
+import me.rerere.rikkahub.plugin.files.pluginDirectory
+import me.rerere.rikkahub.plugin.files.requirePluginId
+import me.rerere.rikkahub.plugin.files.resolvePluginFile
+import java.io.File
 
 /**
  * 插件数据存储，每个插件独立命名空间
@@ -18,6 +22,10 @@ class PluginDataStore(
     private val context: Context,
     private val pluginId: String
 ) {
+    init {
+        requirePluginId(pluginId)
+    }
+
     private val prefs: SharedPreferences by lazy {
         context.getSharedPreferences("plugin_data_$pluginId", Context.MODE_PRIVATE)
     }
@@ -61,10 +69,14 @@ class PluginDataStore(
      * 获取插件数据目录（用于存储图片等文件）
      */
     fun getDataDir(): java.io.File {
-        val dir = java.io.File(context.filesDir, "plugin_data/$pluginId")
+        val dir = pluginDirectory(File(context.filesDir, "plugin_data"), pluginId)
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
+
+    /** Accept returned absolute paths only when they still belong to this plugin. */
+    fun resolveFile(path: String, allowRoot: Boolean = false): File =
+        resolvePluginFile(getDataDir(), path, allowRoot = allowRoot, allowAbsolute = true)
 
     /**
      * 获取所有数据作为 JSON 对象

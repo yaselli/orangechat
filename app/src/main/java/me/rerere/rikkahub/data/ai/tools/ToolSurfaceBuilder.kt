@@ -27,8 +27,8 @@ import me.rerere.rikkahub.plugin.provider.PluginToolProvider
  * local-tool subset. Without this, workflow_create would reject system/MCP/plugin tool names as
  * "unknown_tool" and the engine couldn't execute them at fire time.
  *
- * Headless callers (workflow fire) pass an empty [recentMessages] list and a null/assistant-default
- * [workspaceCwd]; the read-only context tools that consult recent messages simply see no history.
+ * Workflow fire passes empty history and a headless invocation context. Chat passes its current
+ * history, working directory and exposure policy, including proactive AppUsage consent.
  */
 class ToolSurfaceBuilder(
     private val context: Context,
@@ -47,9 +47,10 @@ class ToolSurfaceBuilder(
         invocationContext: ToolInvocationContext,
         recentMessages: List<UIMessage> = emptyList(),
         workspaceCwd: String? = null,
+        policy: ToolSurfacePolicy = ToolSurfacePolicy(),
     ): List<Tool> = buildList {
         // Memory tools - mirror GenerationHandler: only when the assistant has memory enabled.
-        if (assistant.enableMemory) {
+        if (policy.includeMemoryTools && assistant.enableMemory) {
             val memoryAssistantId = if (assistant.useGlobalMemory) {
                 MemoryRepository.GLOBAL_MEMORY_ID
             } else {
@@ -65,12 +66,18 @@ class ToolSurfaceBuilder(
         if (settings.enableWebSearch) {
             addAll(createSearchTools(settings))
         }
-        addAll(localTools.getTools(assistant.localTools, invocationContext))
-        val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions()
+        addAll(localTools.getTools(policy.localOptions(assistant.localTools), invocationContext))
+        val systemToolsOptions = policy.systemOptions(settings.systemToolsSetting.getEnabledOptions())
         if (systemToolsOptions.isNotEmpty()) {
             addAll(SystemTools(context, settings).getTools(systemToolsOptions, recentMessages, filesManager))
         }
-        addAll(createWorkspaceTools(assistant.workspaceId?.toString(), workspaceRepository, workspaceCwd))
+        val workspaceId = assistant.workspaceId?.toString()
+        val shellStatus = if (policy.requireReadyWorkspace && workspaceId != null) {
+            workspaceRepository.getById(workspaceId)?.shellStatus
+        } else null
+        if (policy.workspaceAllowed(workspaceId, shellStatus)) {
+            addAll(createWorkspaceTools(workspaceId, workspaceRepository, workspaceCwd))
+        }
         if (assistant.enabledSkills.isNotEmpty()) {
             addAll(createSkillTools(assistant.enabledSkills, skillManager.listSkills(), skillManager))
         }
