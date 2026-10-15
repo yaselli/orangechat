@@ -11,6 +11,7 @@ on:
       - refactor/generation-message-updates
       - fix/mixed-tool-approval
       - fix/assistant-settings-writes
+      - fix/plugin-file-boundaries
 
 jobs:
   build:

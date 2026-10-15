@@ -15,7 +15,11 @@ import me.rerere.rikkahub.plugin.model.PluginInfo
 import me.rerere.rikkahub.plugin.model.PluginManifest
 import java.io.File
 import java.io.FileOutputStream
-import java.util.zip.ZipInputStream
+import me.rerere.rikkahub.plugin.files.extractPluginZip
+import me.rerere.rikkahub.plugin.files.pluginDirectory
+import me.rerere.rikkahub.plugin.files.requirePluginId
+import me.rerere.rikkahub.plugin.files.resolvePluginFile
+import java.nio.file.Files
 
 /**
  * 插件扫描器
@@ -71,11 +75,13 @@ class PluginScanner(
         }
 
         return try {
-            val content = manifestFile.readText()
+            resolvePluginFile(pluginsDir, pluginDir.name)
+            val content = resolvePluginFile(pluginDir, MANIFEST_FILE).readText()
             val manifest = json.decodeFromString(PluginManifest.serializer(), content)
+            validateManifestPaths(manifest, pluginDir)
 
             // 完整性校验：若存在 .integrity 文件则验证，失败则禁用并标记错误
-            val integrityFile = File(pluginDir, ".integrity")
+            val integrityFile = resolvePluginFile(pluginDir, ".integrity")
             if (integrityFile.exists()) {
                 val stored = integrityFile.readText().trim()
                 val current = computePluginChecksum(pluginDir)
@@ -116,35 +122,34 @@ class PluginScanner(
     }
 
     /**
-     * 从ZIP文件预览插件（不解压到插件目录，仅解析 manifest）
+     * 从ZIP文件预览插件（解压到独立缓存目录后解析 manifest，不安装或执行）
      * 返回 manifest 和临时目录，供调用方展示权限确认对话框。
      * 调用方确认后应调用 [completeImport] 完成导入；取消时应清理临时目录。
      */
     suspend fun previewFromZip(uri: Uri): Result<Pair<PluginManifest, File>> {
+        var tempFile: File? = null
+        var tempDir: File? = null
+        var keepDirectory = false
         return try {
-            val tempFile = File(context.cacheDir, "plugin_preview_${System.currentTimeMillis()}.zip")
+            val archive = File.createTempFile("plugin_preview_", ".zip", context.cacheDir)
+            tempFile = archive
             context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    input.copyTo(output)
-                }
-            } ?: return Result.failure(IllegalStateException("无法读取文件"))
+                FileOutputStream(archive).use { output -> input.copyTo(output) }
+            } ?: error("无法读取文件")
 
-            val tempDir = File(context.cacheDir, "plugin_preview_${System.currentTimeMillis()}")
-            unzip(tempFile, tempDir)
-
-            val manifestFile = findManifest(tempDir)
-                ?: run {
-                    tempFile.delete()
-                    tempDir.deleteRecursively()
-                    return Result.failure(IllegalArgumentException("找不到 manifest.json"))
-                }
-
+            val directory = Files.createTempDirectory(context.cacheDir.toPath(), "plugin_preview_").toFile()
+            tempDir = directory
+            extractPluginZip(archive, directory)
+            val manifestFile = findManifest(directory) ?: error("找不到 manifest.json")
             val manifest = json.decodeFromString(PluginManifest.serializer(), manifestFile.readText())
-
-            // 预览阶段保留 tempFile 和 tempDir，供后续 completeImport 使用
-            Result.success(manifest to tempDir)
+            validateManifestPaths(manifest, requireNotNull(manifestFile.parentFile))
+            keepDirectory = true
+            Result.success(manifest to directory)
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            tempFile?.delete()
+            if (!keepDirectory) tempDir?.deleteRecursively()
         }
     }
 
@@ -167,17 +172,17 @@ class PluginScanner(
                     return Result.failure(IllegalArgumentException("找不到 manifest.json"))
                 }
 
-            val entryFile = File(manifestFile.parentFile, manifest.entry)
-            if (!entryFile.exists()) {
+            val sourceDir = requireNotNull(manifestFile.parentFile)
+            validateManifestPaths(manifest, sourceDir)
+            val entryFile = resolvePluginFile(sourceDir, manifest.entry)
+            if (!entryFile.isFile) {
                 tempDir.deleteRecursively()
                 return Result.failure(IllegalArgumentException("找不到入口文件: ${manifest.entry}"))
             }
 
-            val pluginDir = File(pluginsDir, manifest.id)
-            if (pluginDir.exists()) {
-                pluginDir.deleteRecursively()
-            }
-            manifestFile.parentFile?.copyRecursively(pluginDir, overwrite = true)
+            val pluginDir = pluginDirectory(pluginsDir, manifest.id)
+            require(!pluginDir.exists()) { "插件目录 ${manifest.id} 已存在" }
+            sourceDir.copyRecursively(pluginDir, overwrite = true)
             tempDir.deleteRecursively()
 
             // 写入完整性校验和
@@ -206,103 +211,32 @@ class PluginScanner(
      * 从ZIP文件导入插件（旧版一次性导入，保留用于兼容）
      */
     suspend fun importFromZip(uri: Uri): Result<PluginInfo> {
-        return try {
-            // 1. 复制到临时文件
-            val tempFile = File(context.cacheDir, "plugin_import_${System.currentTimeMillis()}.zip")
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    input.copyTo(output)
-                }
-            } ?: return Result.failure(IllegalStateException("无法读取文件"))
-
-            // 2. 解压到临时目录
-            val tempDir = File(context.cacheDir, "plugin_import_${System.currentTimeMillis()}")
-            unzip(tempFile, tempDir)
-
-            // 3. 查找manifest.json
-            val manifestFile = findManifest(tempDir)
-                ?: return Result.failure(IllegalArgumentException("找不到 manifest.json"))
-
-            // 4. 解析manifest
-            val content = manifestFile.readText()
-            val manifest = json.decodeFromString(PluginManifest.serializer(), content)
-
-            // 5. 检查ID是否重复
-            val existingPlugins = scanPlugins()
-            if (existingPlugins.any { it.manifest.id == manifest.id }) {
-                // 清理临时文件
-                tempFile.delete()
-                tempDir.deleteRecursively()
-                return Result.failure(IllegalArgumentException("插件 ${manifest.id} 已存在"))
-            }
-
-            // 6. 验证入口文件
-            val entryFile = File(manifestFile.parentFile, manifest.entry)
-            if (!entryFile.exists()) {
-                tempFile.delete()
-                tempDir.deleteRecursively()
-                return Result.failure(IllegalArgumentException("找不到入口文件: ${manifest.entry}"))
-            }
-
-            // 7. 移动到插件目录
-            val pluginDir = File(pluginsDir, manifest.id)
-            if (pluginDir.exists()) {
-                pluginDir.deleteRecursively()
-            }
-            manifestFile.parentFile?.copyRecursively(pluginDir, overwrite = true)
-
-            // 8. 清理临时文件
-            tempFile.delete()
-            tempDir.deleteRecursively()
-
-            // 9. 返回插件信息
-            loadPluginInfo(pluginDir)?.let { Result.success(it) }
-                ?: Result.failure(IllegalStateException("无法加载插件信息"))
-
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        val preview = previewFromZip(uri)
+        val (manifest, directory) = preview.getOrElse { return Result.failure(it) }
+        return completeImport(manifest, directory)
     }
 
     /**
      * 删除插件
      */
     fun deletePlugin(pluginId: String): Boolean {
-        val pluginDir = File(pluginsDir, pluginId)
-        return if (pluginDir.exists()) {
-            pluginDir.deleteRecursively()
-        } else {
-            false
-        }
+        return runCatching {
+            val pluginDir = pluginDirectory(pluginsDir, pluginId)
+            pluginDir.exists() && pluginDir.deleteRecursively()
+        }.getOrDefault(false)
     }
 
     /**
      * 获取插件目录
      */
     fun getPluginDir(pluginId: String): File {
-        return File(pluginsDir, pluginId)
+        return pluginDirectory(pluginsDir, pluginId)
     }
 
-    /**
-     * 解压ZIP文件
-     */
-    private fun unzip(zipFile: File, destDir: File) {
-        destDir.mkdirs()
-        ZipInputStream(zipFile.inputStream().buffered()).use { zis ->
-            var entry: java.util.zip.ZipEntry? = zis.nextEntry
-            while (entry != null) {
-                val file = File(destDir, entry.name)
-                if (entry.isDirectory) {
-                    file.mkdirs()
-                } else {
-                    file.parentFile?.mkdirs()
-                    FileOutputStream(file).use { output ->
-                        zis.copyTo(output)
-                    }
-                }
-                entry = zis.nextEntry
-            }
-        }
+    private fun validateManifestPaths(manifest: PluginManifest, directory: File) {
+        requirePluginId(manifest.id)
+        resolvePluginFile(directory, manifest.entry)
+        manifest.customPageWebView?.let { resolvePluginFile(directory, it.entry) }
     }
 
     /**
@@ -311,7 +245,7 @@ class PluginScanner(
      */
     private fun findManifest(dir: File): File? {
         // 优先在根目录找
-        val rootManifest = File(dir, MANIFEST_FILE)
+        val rootManifest = resolvePluginFile(dir, MANIFEST_FILE)
         if (rootManifest.exists()) {
             return rootManifest
         }
@@ -319,7 +253,7 @@ class PluginScanner(
         // 在子目录中查找
         return dir.listFiles { file -> file.isDirectory }
             ?.asSequence()
-            ?.map { subdir -> File(subdir, MANIFEST_FILE) }
+            ?.map { subdir -> resolvePluginFile(dir, "${subdir.name}/$MANIFEST_FILE") }
             ?.firstOrNull { it.exists() }
     }
 
@@ -329,6 +263,11 @@ class PluginScanner(
     private fun computePluginChecksum(dir: File): String {
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         dir.walkTopDown()
+            .onEnter { directory ->
+                resolvePluginFile(dir, directory.relativeTo(dir).path, allowRoot = true)
+                true
+            }
+            .onEach { file -> resolvePluginFile(dir, file.relativeTo(dir).path, allowRoot = true) }
             .filter { it.isFile && it.name != ".integrity" }
             .sortedBy { it.relativeTo(dir).path.replace('\\', '/') }
             .forEach { file ->
