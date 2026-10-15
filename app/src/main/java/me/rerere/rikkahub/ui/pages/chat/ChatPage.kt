@@ -466,18 +466,10 @@ private fun ChatPageContent(
                     onUpdateChatModel = {
                         vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
                     },
-                    onUpdateAssistant = {
-                        vm.updateSettings(
-                            setting.copy(
-                                assistants = setting.assistants.map { assistant ->
-                                    if (assistant.id == it.id) {
-                                        it
-                                    } else {
-                                        assistant
-                                    }
-                                }
-                            )
-                        )
+                    onUpdateAssistant = { updated ->
+                        setting.assistants.find { it.id == updated.id }?.let { previous ->
+                            vm.updateAssistant(previous, updated)
+                        }
                     },
                     onUpdateSearchService = { index ->
                         vm.updateSettings(

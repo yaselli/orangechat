@@ -52,8 +52,9 @@ class TranslatorVM(
     private var currentJob: Job? = null
 
     fun updateSettings(settings: Settings) {
+        val previous = this.settings.value
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.updateFrom(previous, settings)
         }
     }
 

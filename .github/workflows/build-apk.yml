@@ -10,6 +10,7 @@ on:
       - refactor/shared-tool-loop
       - refactor/generation-message-updates
       - fix/mixed-tool-approval
+      - fix/assistant-settings-writes
 
 jobs:
   build:

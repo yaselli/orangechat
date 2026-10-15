@@ -48,8 +48,9 @@ class BackupVM(
     }
 
     fun updateSettings(settings: Settings) {
+        val previous = this.settings.value
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.updateFrom(previous, settings)
         }
     }
 
@@ -104,14 +105,13 @@ class BackupVM(
             providers = settings.value.providers,
         )
         val targetAssistantId = settings.value.assistantId
-        val mergedProviders = payload.providers + settings.value.providers
         val shouldAllowConversationSystemPrompt = payload.conversations.conversations.any {
             !it.customSystemPrompt.isNullOrBlank()
         }
-        settingsStore.update(
-            settings.value.copy(
-                providers = mergedProviders,
-                assistants = settings.value.assistants.map { assistant ->
+        settingsStore.update { current ->
+            current.copy(
+                providers = payload.providers + current.providers,
+                assistants = current.assistants.map { assistant ->
                     if (shouldAllowConversationSystemPrompt && assistant.id == targetAssistantId) {
                         assistant.copy(allowConversationSystemPrompt = true)
                     } else {
@@ -119,7 +119,7 @@ class BackupVM(
                     }
                 }
             )
-        )
+        }
 
         var importedConversations = 0
         var skippedExistingConversations = 0

@@ -154,7 +154,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                     val newAssistants = settings.assistants.toMutableList().apply {
                         add(to.index, removeAt(from.index))
                     }
-                    vm.updateSettings(settings.copy(assistants = newAssistants))
+                    vm.reorderAssistants(newAssistants.map { it.id })
                 }
             }
             val haptic = LocalHapticFeedback.current
@@ -275,7 +275,7 @@ private fun AssistantTagsFilterRow(
             val newTags = settings.assistantTags.toMutableList().apply {
                 add(to.index, removeAt(from.index))
             }
-            vm.updateSettings(settings.copy(assistantTags = newTags))
+            vm.reorderTags(newTags.map { it.id })
         }
 
         LazyRow(
