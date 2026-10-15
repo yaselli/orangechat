@@ -6,6 +6,10 @@
 
 package me.rerere.rikkahub.ui.components.ai
 
+import me.rerere.rikkahub.ui.theme.LocalDarkMode
+
+import me.rerere.rikkahub.ui.theme.glassSurface
+
 import androidx.compose.ui.platform.LocalResources
 import android.net.Uri
 import android.util.Log
@@ -566,7 +570,9 @@ fun ChatInput(
                         else Modifier
                     )
                     .then(
-                        if (inputMaterialStyle != UiMaterialStyle.ORIGINAL) {
+                        if (inputMaterialStyle == UiMaterialStyle.FROSTED ||
+                            (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS && inputBgFile != null)
+                        ) {
                             Modifier.border(
                                 1.dp,
                                 if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS) {
@@ -599,8 +605,17 @@ fun ChatInput(
                     }
                     else settings.displaySetting.inputFieldColor?.let { it.toComposeColor() } ?: hazeTintColor,
             ) {
-                // Use Box so background image can match parent size
-                Box {
+                // Keep custom background images in control of their own appearance.
+                Box(
+                    modifier = if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS && inputBgFile == null) {
+                        Modifier.glassSurface(
+                            shape = MaterialTheme.shapes.largeIncreased,
+                            tint = MaterialTheme.colorScheme.surface,
+                            dark = LocalDarkMode.current,
+                            drawFill = false,
+                        )
+                    } else Modifier,
+                ) {
                     // Background image inside input area (matches content size exactly)
                     if (inputBgFile != null) {
                         AsyncImage(

@@ -6,6 +6,10 @@
 
 package me.rerere.rikkahub.ui.pages.chat
 
+import me.rerere.rikkahub.ui.theme.LocalDarkMode
+
+import me.rerere.rikkahub.ui.theme.glassSurface
+
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Forward02
@@ -199,18 +203,15 @@ private fun DateHeaderItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (glassStyleEnabled) Modifier.clip(headerShape) else Modifier)
-            .background(
-                MaterialTheme.colorScheme.surfaceContainerLow.copy(
-                    alpha = if (glassStyleEnabled) 0.48f * drawerItemAlpha else drawerItemAlpha
-                )
-            )
             .then(
-                if (glassStyleEnabled) Modifier.border(
-                    1.dp,
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.055f * drawerItemAlpha),
-                    headerShape,
-                ) else Modifier
+                if (glassStyleEnabled) Modifier.glassSurface(
+                    shape = headerShape,
+                    tint = MaterialTheme.colorScheme.surfaceContainerLow,
+                    dark = LocalDarkMode.current,
+                    opacity = 0.65f * drawerItemAlpha,
+                ) else Modifier.background(
+                    MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = drawerItemAlpha)
+                )
             )
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -234,18 +235,15 @@ private fun PinnedHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (glassStyleEnabled) Modifier.clip(headerShape) else Modifier)
-            .background(
-                MaterialTheme.colorScheme.surfaceContainerLow.copy(
-                    alpha = if (glassStyleEnabled) 0.48f * drawerItemAlpha else drawerItemAlpha
-                )
-            )
             .then(
-                if (glassStyleEnabled) Modifier.border(
-                    1.dp,
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.055f * drawerItemAlpha),
-                    headerShape,
-                ) else Modifier
+                if (glassStyleEnabled) Modifier.glassSurface(
+                    shape = headerShape,
+                    tint = MaterialTheme.colorScheme.surfaceContainerLow,
+                    dark = LocalDarkMode.current,
+                    opacity = 0.65f * drawerItemAlpha,
+                ) else Modifier.background(
+                    MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = drawerItemAlpha)
+                )
             )
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -311,8 +309,15 @@ private fun ConversationItem(
                     showDropdownMenu = true
                 }
             )
-            .background(backgroundColor)
-            .then(if (glassStyleEnabled) Modifier.border(1.dp, borderColor, itemShape) else Modifier),
+            .then(
+                if (glassStyleEnabled) Modifier.glassSurface(
+                    shape = itemShape,
+                    tint = backgroundColor,
+                    dark = LocalDarkMode.current,
+                    opacity = (if (selected) 1f else 0.65f) * drawerItemAlpha,
+                    borderColor = borderColor,
+                ) else Modifier.background(backgroundColor)
+            ),
     ) {
         Row(
             modifier = Modifier

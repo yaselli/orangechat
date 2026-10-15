@@ -6,6 +6,10 @@
 
 package me.rerere.rikkahub.ui.pages.chat
 
+import me.rerere.rikkahub.ui.theme.LocalDarkMode
+
+import me.rerere.rikkahub.ui.theme.glassSurface
+
 import androidx.compose.ui.platform.LocalResources
 import androidx.activity.ComponentActivity
 import android.graphics.BitmapFactory
@@ -214,7 +218,6 @@ fun ChatDrawerContent(
         300.dp
     }
     val glassTint = MaterialTheme.colorScheme.surface.copy(alpha = 0.66f)
-    val glassBorder = Color.White.copy(alpha = 0.48f)
 
     ModalDrawerSheet(
         modifier = Modifier
@@ -233,7 +236,12 @@ fun ChatDrawerContent(
                             state = hazeState,
                             style = HazeMaterials.ultraThin(containerColor = glassTint),
                         )
-                        .border(1.dp, glassBorder, drawerShape)
+                        .glassSurface(
+                            shape = drawerShape,
+                            tint = glassTint,
+                            dark = LocalDarkMode.current,
+                            drawFill = false,
+                        )
                 } else {
                     Modifier
                 }
@@ -262,24 +270,6 @@ fun ChatDrawerContent(
                         )
                     }
                 }
-            }
-
-            // A very soft highlight makes the translucent panel read as glass
-            // on both light and dark themes without replacing the user's theme.
-            if (glassDrawerEnabled) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.22f),
-                                    Color.Transparent,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.045f),
-                                )
-                            )
-                        )
-                )
             }
 
             Column(

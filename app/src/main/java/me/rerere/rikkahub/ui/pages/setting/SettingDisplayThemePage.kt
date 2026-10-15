@@ -168,15 +168,16 @@ fun SettingDisplayThemePage(vm: SettingVM = koinViewModel()) {
                     listOf(
                         VisualThemePalette.ORIGINAL,
                         VisualThemePalette.SEA_SALT,
+                        VisualThemePalette.APRICOT_CREAM,
+                        VisualThemePalette.MIST_BLUE,
                     ).forEach { palette ->
                         item(
                             headlineContent = {
-                                Text(if (palette == VisualThemePalette.ORIGINAL) "原始配色" else "海盐")
+                                Text(palette.paletteTitle())
                             },
                             supportingContent = {
                                 Text(
-                                    if (palette == VisualThemePalette.ORIGINAL) "使用应用原有主题配色"
-                                    else "清透、低饱和的海盐配色"
+                                    palette.paletteDescription()
                                 )
                             },
                             trailingContent = {
@@ -281,4 +282,22 @@ private fun UiMaterialStyle.materialDescription(): String = when (this) {
     UiMaterialStyle.ORIGINAL -> "保留应用原有材质"
     UiMaterialStyle.LIQUID_GLASS -> "清透玻璃、柔和高光与景深"
     UiMaterialStyle.FROSTED -> "细腻雾面、低反射的磨砂质感"
+}
+
+private fun VisualThemePalette.paletteTitle(): String = when (this) {
+    VisualThemePalette.ORIGINAL -> "原始配色"
+    VisualThemePalette.SEA_SALT -> "海盐"
+    VisualThemePalette.APRICOT_CREAM -> "奶杏"
+    VisualThemePalette.MIST_BLUE -> "雾蓝"
+    VisualThemePalette.SAKURA_MIST -> "樱雾"
+    VisualThemePalette.AURORA -> "极光"
+    VisualThemePalette.MIDNIGHT -> "午夜"
+}
+
+private fun VisualThemePalette.paletteDescription(): String = when (this) {
+    VisualThemePalette.ORIGINAL -> "使用应用原有主题配色"
+    VisualThemePalette.SEA_SALT -> "清透、低饱和的海盐配色"
+    VisualThemePalette.APRICOT_CREAM -> "奶油暖白与柔和杏色，支持浅色与深色"
+    VisualThemePalette.MIST_BLUE -> "清淡雾蓝与冰白，支持浅色与深色"
+    else -> "跟随当前配色设置"
 }
