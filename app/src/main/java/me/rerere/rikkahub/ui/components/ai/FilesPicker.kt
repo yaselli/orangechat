@@ -12,6 +12,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import me.rerere.ai.util.supportsRawAudioInput
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import me.rerere.hugeicons.stroke.Voice
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -89,6 +93,7 @@ internal fun FilesPicker(
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
     onPickAudio: () -> Unit,
+    onRecordAudio: () -> Unit,
     onPickFile: () -> Unit,
 ) {
     // settings 仍保留给 InjectionQuickConfigSheet -> ExtensionSelector 使用（它需要完整 Settings）
@@ -103,22 +108,27 @@ internal fun FilesPicker(
             .fillMaxWidth()
             .padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             TakePicButton(onLaunchCamera = onTakePic)
 
             ImagePickButton(onClick = onPickImage)
 
-            if (provider != null && provider is ProviderSetting.Google) {
+            FilePickButton(onClick = onPickFile)
+            BigIconTextButton(
+                icon = { Icon(HugeIcons.Voice, contentDescription = null) },
+                text = { Text("录音") },
+                onClick = onRecordAudio,
+            )
+            if (provider is ProviderSetting.Google) {
                 VideoPickButton(onClick = onPickVideo)
-
+            }
+            if (supportsRawAudioInput(provider)) {
                 AudioPickButton(onClick = onPickAudio)
             }
 
-            FilePickButton(onClick = onPickFile)
         }
 
         HorizontalDivider(

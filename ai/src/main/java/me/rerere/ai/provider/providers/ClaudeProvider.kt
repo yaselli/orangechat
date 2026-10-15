@@ -359,6 +359,9 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         promptCaching: Boolean,
         promptCacheTtl: ClaudePromptCacheTtl
     ) = buildJsonArray {
+        require(messages.none { message -> message.parts.any { it is UIMessagePart.Audio } }) {
+            "当前 Claude 接口未接入原始音频，请切换 Gemini 或 OpenAI 兼容音频接口"
+        }
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->

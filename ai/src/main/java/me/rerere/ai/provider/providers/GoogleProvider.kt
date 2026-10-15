@@ -55,6 +55,8 @@ import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
+import me.rerere.ai.util.encodeAudio
+import me.rerere.ai.util.toGoogleAudio
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
@@ -732,16 +734,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             }
         }
 
-        is UIMessagePart.Audio -> {
-            encodeBase64(false).getOrNull()?.let { base64Data ->
-                buildJsonObject {
-                    put("inlineData", buildJsonObject {
-                        put("mimeType", "audio/mp3")
-                        put("data", base64Data)
-                    })
-                }
-            }
-        }
+        is UIMessagePart.Audio -> encodeAudio().toGoogleAudio()
 
         else -> null
     }

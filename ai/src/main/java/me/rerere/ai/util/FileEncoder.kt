@@ -104,20 +104,8 @@ fun UIMessagePart.Video.encodeBase64(withPrefix: Boolean = true): Result<String>
 }
 
 fun UIMessagePart.Audio.encodeBase64(withPrefix: Boolean = true): Result<String> = runCatching {
-    when {
-        this.url.startsWith("file://") -> {
-            val filePath =
-                this.url.toUri().path ?: throw IllegalArgumentException("Invalid file URI: ${this.url}")
-            val file = File(filePath)
-            if (!file.exists()) {
-                throw IllegalArgumentException("File does not exist: ${this.url}")
-            }
-            val encoded = file.encodeToBase64Streaming()
-            if (withPrefix) "data:audio/mp3;base64,$encoded" else encoded
-        }
-
-        else -> throw IllegalArgumentException("Unsupported URL format: $url")
-    }
+    val audio = encodeAudio()
+    if (withPrefix) "data:${audio.mimeType};base64,${audio.data}" else audio.data
 }
 
 private fun File.compressAndEncode(

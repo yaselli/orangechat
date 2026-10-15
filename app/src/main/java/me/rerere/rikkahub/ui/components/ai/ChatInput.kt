@@ -94,6 +94,7 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.Job
 import me.rerere.ai.provider.Model
+import me.rerere.ai.util.supportsRawAudioInput
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.ui.UIMessagePart
@@ -109,6 +110,7 @@ import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.UiMaterialStyle
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -218,6 +220,19 @@ fun ChatInput(
     PermissionManager(permissionState = asrPermission)
     var asrBaseText by remember { mutableStateOf("") }
     var voiceMessageMode by remember { mutableStateOf(false) }
+
+    var showRawRecording by remember { mutableStateOf(false) }
+    val audioProvider = LocalCurrentChatModel.current?.findProvider(settings.providers)
+    val rawAudioSupported = supportsRawAudioInput(audioProvider)
+    LaunchedEffect(isVoiceCallActive) {
+        if (isVoiceCallActive) showRawRecording = false
+    }
+    if (showRawRecording) {
+        RawAudioRecordingDialog(
+            onRecorded = { uri -> state.addAudios(listOf(uri)) },
+            onDismiss = { showRawRecording = false },
+        )
+    }
 
     // Auto-start voice recording when entering from voice call notification
     LaunchedEffect(autoStartVoice) {
@@ -849,6 +864,21 @@ fun ChatInput(
                             onPickImage = { imagePickerLauncher.launch("image/*") },
                             onPickVideo = { videoPickerLauncher.launch("video/*") },
                             onPickAudio = { audioPickerLauncher.launch("audio/*") },
+                            onRecordAudio = {
+                                when {
+                                    isVoiceCallActive || asrState.status !in listOf(ASRStatus.Idle, ASRStatus.Error) ->
+                                        toaster.show("请先结束当前通话或语音识别", type = ToastType.Error)
+                                    !rawAudioSupported -> toaster.show(
+                                        "请选择支持音频输入的 Gemini 或 OpenAI Chat Completions 模型",
+                                        type = ToastType.Error,
+                                    )
+                                    !asrPermission.allRequiredPermissionsGranted -> asrPermission.requestPermissions()
+                                    else -> {
+                                        dismissExpand()
+                                        showRawRecording = true
+                                    }
+                                }
+                            },
                             onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
                         )
                     }
