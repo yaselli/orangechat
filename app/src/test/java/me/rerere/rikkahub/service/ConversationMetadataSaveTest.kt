@@ -26,7 +26,11 @@ class ConversationMetadataSaveTest {
                 chatSuggestions = listOf("new suggestion"),
             )
             session.state.value = latest
-            session.saveGeneratedTitle("generated") { true }
+            session.saveGeneratedTitle("generated") {
+                assertTrue(session.isInUse)
+                true
+            }
+            assertFalse(session.isInUse)
             assertEquals(latest.copy(title = "generated"), session.state.value)
             assertSame(latest.messageNodes, session.state.value.messageNodes)
         }
@@ -125,7 +129,8 @@ class ConversationMetadataSaveTest {
             customSystemPrompt = "custom prompt",
             workspaceCwd = "/workspace",
         )
-        val session = ConversationSession(initial.id, initial, scope) {}
+        // JVM tests exercise real reference counting and locking without Android's Log stub.
+        val session = ConversationSession(initial.id, initial, scope, debugLog = {}) {}
         try {
             block(session)
         } finally {

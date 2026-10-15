@@ -27,6 +27,10 @@ class ConversationSession(
     val id: Uuid,
     initial: Conversation,
     private val scope: CoroutineScope,
+    private val debugLog: (String) -> Unit = { message ->
+        Log.d(TAG, message)
+        Unit
+    },
     private val onIdle: (Uuid) -> Unit,
 ) {
     // 会话状态
@@ -80,11 +84,11 @@ class ConversationSession(
 
     fun acquire(): Int = refCount.incrementAndGet().also {
         cancelIdleCheck()
-        Log.d(TAG, "acquire $id (refs=$it)")
+        debugLog("acquire $id (refs=$it)")
     }
 
     fun release(): Int = refCount.decrementAndGet().also {
-        Log.d(TAG, "release $id (refs=$it)")
+        debugLog("release $id (refs=$it)")
         if (it <= 0) scheduleIdleCheck()
     }
 
