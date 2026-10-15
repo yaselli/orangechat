@@ -61,6 +61,7 @@ import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
+import me.rerere.ai.util.supportsRawAudioInput
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
@@ -405,6 +406,17 @@ private fun ChatPageContent(
                         if (currentChatModel == null) {
                             toaster.show("请先选择模型", type = ToastType.Error)
                             return@ChatInput
+                        }
+                        if (inputState.messageContent.any { it is UIMessagePart.Audio }) {
+                            val audioProvider = currentChatModel?.findProvider(setting.providers)
+                            val supported = supportsRawAudioInput(audioProvider)
+                            if (!supported) {
+                                toaster.show(
+                                    "原始录音需使用 Gemini 或 OpenAI Chat Completions 音频模型",
+                                    type = ToastType.Error,
+                                )
+                                return@ChatInput
+                            }
                         }
                         if (inputState.isEditing()) {
                             vm.handleMessageEdit(

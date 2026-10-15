@@ -6,6 +6,8 @@
 
 package me.rerere.rikkahub.ui.pages.chat
 
+import me.rerere.rikkahub.data.datastore.VisualThemePalette
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -63,5 +65,21 @@ fun AssistantBackground(setting: Settings) {
                     .background(chatBackgroundColor)
             )
         }
+        setting.displaySetting.visualThemePalette == VisualThemePalette.APRICOT_CREAM ||
+            setting.displaySetting.visualThemePalette == VisualThemePalette.MIST_BLUE -> {
+            // Static theme backdrop. User images and explicit colors above always take precedence.
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.32f),
+                            MaterialTheme.colorScheme.background,
+                        )
+                    )
+                )
+            )
+        }
+
     }
 }

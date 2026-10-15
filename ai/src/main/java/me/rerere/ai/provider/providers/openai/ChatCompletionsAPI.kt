@@ -50,6 +50,8 @@ import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
+import me.rerere.ai.util.encodeAudio
+import me.rerere.ai.util.toChatCompletionsAudio
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
@@ -850,6 +852,11 @@ class ChatCompletionsAPI(
                                 })
                             }
 
+                            is UIMessagePart.Audio -> {
+                                require(message.role == MessageRole.USER) { "录音只能作为用户消息发送" }
+                                add(part.encodeAudio().toChatCompletionsAudio())
+                            }
+
                             else -> {}
                         }
                     }
@@ -955,7 +962,9 @@ class ChatCompletionsAPI(
     }
 
     private fun List<UIMessagePart>.isOnlyTextPart(): Boolean {
-        val gonnaSend = filter { it is UIMessagePart.Text || it is UIMessagePart.Image }.size
+        val gonnaSend = count {
+            it is UIMessagePart.Text || it is UIMessagePart.Image || it is UIMessagePart.Audio
+        }
         val texts = filter { it is UIMessagePart.Text }.size
         return gonnaSend == texts && texts == 1
     }

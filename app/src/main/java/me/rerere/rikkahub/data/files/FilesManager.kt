@@ -355,7 +355,8 @@ class FilesManager(
     suspend fun delete(id: Long, deleteFromDisk: Boolean = true): Boolean = withContext(Dispatchers.IO) {
         val entity = repository.getById(id) ?: return@withContext false
         if (deleteFromDisk) {
-            runCatching { getFile(entity).delete() }
+            val file = getFile(entity)
+            if (file.exists() && !file.delete()) return@withContext false
         }
         repository.deleteById(id) > 0
     }

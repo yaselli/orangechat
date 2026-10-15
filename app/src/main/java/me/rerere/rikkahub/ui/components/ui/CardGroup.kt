@@ -6,6 +6,16 @@
 
 package me.rerere.rikkahub.ui.components.ui
 
+import androidx.compose.ui.graphics.Color
+
+import me.rerere.rikkahub.data.datastore.UiMaterialStyle
+
+import me.rerere.rikkahub.ui.context.LocalDisplaySettings
+
+import me.rerere.rikkahub.ui.theme.LocalDarkMode
+
+import me.rerere.rikkahub.ui.theme.glassSurface
+
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
@@ -103,17 +113,26 @@ private fun CardGroupListItem(
         animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
     )
 
+    val shape = RoundedCornerShape(
+        topStart = topCorner,
+        topEnd = topCorner,
+        bottomStart = bottomCorner,
+        bottomEnd = bottomCorner,
+    )
+    val colors = item.colors ?: CustomColors.listItemColors
+    val useGlass = LocalDisplaySettings.current.bubbleMaterialStyle == UiMaterialStyle.LIQUID_GLASS
+
     ListItem(
         headlineContent = item.headlineContent,
         modifier = item.modifier
             .fillMaxWidth()
-            .clip(
-                RoundedCornerShape(
-                    topStart = topCorner,
-                    topEnd = topCorner,
-                    bottomStart = bottomCorner,
-                    bottomEnd = bottomCorner,
-                )
+            .clip(shape)
+            .then(
+                if (useGlass) Modifier.glassSurface(
+                    shape = shape,
+                    tint = colors.containerColor,
+                    dark = LocalDarkMode.current,
+                ) else Modifier
             )
             .then(
                 if (item.onClick != null) {
@@ -128,7 +147,7 @@ private fun CardGroupListItem(
         supportingContent = item.supportingContent,
         leadingContent = item.leadingContent,
         trailingContent = item.trailingContent,
-        colors = item.colors ?: CustomColors.listItemColors,
+        colors = if (useGlass) colors.copy(containerColor = Color.Transparent) else colors,
     )
 }
 

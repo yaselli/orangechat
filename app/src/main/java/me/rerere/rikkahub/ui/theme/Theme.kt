@@ -94,45 +94,7 @@ fun RikkahubTheme(
         settings.themeId,
     ) {
         var scheme = colorSchemeConverted
-        scheme = when (settings.displaySetting.visualThemePalette) {
-            VisualThemePalette.ORIGINAL -> scheme
-            VisualThemePalette.SEA_SALT -> scheme.copy(
-                primary = if (darkTheme) Color(0xFF9ACFD1) else Color(0xFF4F858A),
-                onPrimary = if (darkTheme) Color(0xFF003739) else Color.White,
-                primaryContainer = if (darkTheme) Color(0xFF215054) else Color(0xFFD9EEEE),
-                onPrimaryContainer = if (darkTheme) Color(0xFFB7EAEB) else Color(0xFF173F42),
-                secondary = if (darkTheme) Color(0xFFB1CCCA) else Color(0xFF627C7B),
-                secondaryContainer = if (darkTheme) Color(0xFF334B4A) else Color(0xFFDDE9E8),
-                tertiary = if (darkTheme) Color(0xFFAEC8DF) else Color(0xFF607A91),
-                background = if (darkTheme) Color(0xFF101919) else Color(0xFFF5F9F9),
-                surface = if (darkTheme) Color(0xFF101919) else Color(0xFFF8FBFB),
-                surfaceContainerLow = if (darkTheme) Color(0xFF172222) else Color(0xFFF1F6F6),
-                surfaceContainer = if (darkTheme) Color(0xFF1B2727) else Color(0xFFEBF2F2),
-                surfaceContainerHigh = if (darkTheme) Color(0xFF243030) else Color(0xFFE4EDED),
-                surfaceContainerHighest = if (darkTheme) Color(0xFF2D3939) else Color(0xFFDDE7E7),
-            )
-            VisualThemePalette.SAKURA_MIST -> scheme.copy(
-                primary = Color(0xFFA75E78),
-                secondary = Color(0xFF8C6974),
-                tertiary = Color(0xFF80658F),
-                primaryContainer = Color(0xFFFFD9E4),
-                secondaryContainer = Color(0xFFF4DDE4),
-            )
-            VisualThemePalette.AURORA -> scheme.copy(
-                primary = Color(0xFF3D7E68),
-                secondary = Color(0xFF52736B),
-                tertiary = Color(0xFF536C8D),
-                primaryContainer = Color(0xFFBDEED7),
-                secondaryContainer = Color(0xFFCFE9DF),
-            )
-            VisualThemePalette.MIDNIGHT -> scheme.copy(
-                primary = Color(0xFF7D91D4),
-                secondary = Color(0xFF707A9A),
-                tertiary = Color(0xFF8B70A9),
-                primaryContainer = Color(0xFFDCE1FF),
-                secondaryContainer = Color(0xFFE0E2F2),
-            )
-        }
+        scheme = scheme.withVisualPalette(settings.displaySetting.visualThemePalette, darkTheme)
         settings.displaySetting.primaryColor?.let { pc ->
             val primaryColor = pc.toComposeColor()
             val luminance = 0.299f * primaryColor.red + 0.587f * primaryColor.green + 0.114f * primaryColor.blue

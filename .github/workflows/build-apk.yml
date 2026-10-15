@@ -12,6 +12,7 @@ on:
       - fix/mixed-tool-approval
       - fix/assistant-settings-writes
       - fix/plugin-file-boundaries
+      - feature/raw-audio-messages
 
 jobs:
   build:

@@ -6,6 +6,10 @@
 
 package me.rerere.rikkahub.ui.components.message
 
+import me.rerere.rikkahub.ui.theme.LocalDarkMode
+
+import me.rerere.rikkahub.ui.theme.glassSurface
+
 import android.content.Intent
 import android.media.MediaPlayer
 import androidx.compose.animation.AnimatedVisibility
@@ -739,8 +743,6 @@ private fun BubbleSurface(
     val bubbleShape = RoundedCornerShape(cornerRadius)
 
     if (materialStyle == UiMaterialStyle.LIQUID_GLASS) {
-        // Glass mode replaces the original bubble instead of decorating it.
-        // This avoids the opaque bubble + glass layer "double bubble" effect.
         Box(
             modifier = Modifier
                 .animateContentSize()
@@ -750,23 +752,29 @@ private fun BubbleSurface(
                     ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                     spotColor = Color.Black.copy(alpha = 0.10f),
                 )
-                .clip(bubbleShape)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.34f),
-                            color.copy(alpha = minOf(bubbleAlpha, 0.20f)),
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.16f),
-                        )
-                    )
-                )
-                .border(
-                    width = 0.8.dp,
-                    color = Color.White.copy(alpha = 0.54f),
+                .glassSurface(
                     shape = bubbleShape,
+                    tint = color,
+                    dark = LocalDarkMode.current,
+                    opacity = bubbleAlpha,
+                    drawFill = !hasImage,
                 )
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
         ) {
+            if (hasImage) {
+                AsyncImage(
+                    model = imagePath,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+                if (overlayEnabled) {
+                    Box(
+                        modifier = Modifier.matchParentSize()
+                            .background(color.copy(alpha = bubbleAlpha))
+                    )
+                }
+            }
             Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)) {
                 content()
             }

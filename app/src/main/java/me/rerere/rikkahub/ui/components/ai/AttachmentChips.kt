@@ -22,6 +22,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.key
+import me.rerere.rikkahub.ui.components.message.AudioPlayerBubble
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -117,17 +120,13 @@ internal fun MediaFileInputRow(
                     )
                 }
 
-                is UIMessagePart.Audio -> {
-                    AttachmentChip(
-                        title = attachmentNameFromUrl(
-                            url = part.url,
-                            fallback = "audio",
-                            displayNameByRelativePath = displayNameByRelativePath,
-                            displayNameByFileName = displayNameByFileName
-                        ),
-                        leading = { AttachmentLeadingIcon(icon = HugeIcons.MusicNote03) },
-                        onRemove = { removePart(part, part.url) }
-                    )
+                is UIMessagePart.Audio -> key(part.url) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AudioPlayerBubble(url = part.url)
+                        IconButton(onClick = { removePart(part, part.url) }) {
+                            Icon(HugeIcons.Cancel01, contentDescription = "移除录音")
+                        }
+                    }
                 }
 
                 is UIMessagePart.Document -> {

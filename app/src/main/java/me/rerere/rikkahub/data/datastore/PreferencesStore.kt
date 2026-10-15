@@ -804,6 +804,8 @@ enum class VisualThemePalette {
     SAKURA_MIST,
     AURORA,
     MIDNIGHT,
+    APRICOT_CREAM,
+    MIST_BLUE,
 }
 
 @Serializable

@@ -297,6 +297,9 @@ class ResponseAPI(
     }
 
     internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
+        require(messages.none { message -> message.parts.any { it is UIMessagePart.Audio } }) {
+            "原始音频请使用 Chat Completions 接口；请关闭该提供商的 Responses API 选项"
+        }
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->

@@ -9,6 +9,10 @@ package me.rerere.rikkahub.ui.pages.setting
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.Delete01
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.Checkbox
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,39 +76,69 @@ fun SettingFilesPage(
     val toaster = LocalToaster.current
     val folders = remember { listOf(FileFolders.UPLOAD) }
 
-    // 预先获取字符串资源
-    val deletedToast = stringResource(R.string.setting_files_page_deleted_toast)
-    val deleteFailedToast = stringResource(R.string.setting_files_page_delete_failed_toast)
-
     var selectedFolder by remember { mutableStateOf(FileFolders.UPLOAD) }
-    var pendingDelete by remember { mutableStateOf<ManagedFileEntity?>(null) }
+    var pendingDelete by remember { mutableStateOf<List<ManagedFileEntity>>(emptyList()) }
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var deleting by remember { mutableStateOf(false) }
     val files by filesManager.observe(selectedFolder).collectAsState(initial = emptyList())
 
-    if (pendingDelete != null) {
-        val target = pendingDelete!!
+    val selectedFiles = files.filter { it.id in selectedIds }
+
+    fun toggleSelection(file: ManagedFileEntity) {
+        selectedIds = if (file.id in selectedIds) selectedIds - file.id else selectedIds + file.id
+    }
+
+    fun exitSelection() {
+        selectionMode = false
+        selectedIds = emptySet()
+    }
+
+    BackHandler(enabled = selectionMode || deleting) {
+        if (!deleting) exitSelection()
+    }
+
+    if (pendingDelete.isNotEmpty()) {
         AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text(stringResource(R.string.setting_files_page_delete_file_title)) },
-            text = { Text(target.displayName) },
+            onDismissRequest = { if (!deleting) pendingDelete = emptyList() },
+            title = { Text("删除 ${pendingDelete.size} 个文件？") },
+            text = {
+                Text("共 ${formatBytes(pendingDelete.sumOf { it.sizeBytes })}。删除后无法恢复，" +
+                    "聊天记录中引用这些文件的图片、录音等附件将无法打开。")
+            },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            val ok = filesManager.delete(target.id, deleteFromDisk = true)
-                            if (ok) {
-                                toaster.show(deletedToast)
-                            } else {
-                                toaster.show(deleteFailedToast)
+                TextButton(enabled = !deleting, onClick = {
+                    val targets = pendingDelete
+                    deleting = true
+                    scope.launch {
+                        val failedIds = mutableSetOf<Long>()
+                        try {
+                            for (file in targets) {
+                                val ok = try {
+                                    filesManager.delete(file.id, deleteFromDisk = true)
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    false
+                                }
+                                if (!ok) failedIds.add(file.id)
                             }
-                            pendingDelete = null
+                            selectedIds = failedIds
+                            selectionMode = failedIds.isNotEmpty()
+                            pendingDelete = emptyList()
+                            val deleted = targets.size - failedIds.size
+                            toaster.show(if (failedIds.isEmpty()) "已删除 $deleted 个文件"
+                                else "已删除 $deleted 个文件，${failedIds.size} 个失败，可重新选择删除")
+                        } finally {
+                            deleting = false
                         }
                     }
-                ) {
-                    Text(stringResource(R.string.setting_files_page_delete_action))
+                }) {
+                    Text(if (deleting) "正在删除…" else stringResource(R.string.setting_files_page_delete_action))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) {
+                TextButton(enabled = !deleting, onClick = { pendingDelete = emptyList() }) {
                     Text(stringResource(R.string.setting_files_page_cancel_action))
                 }
             }
@@ -115,7 +149,18 @@ fun SettingFilesPage(
         topBar = {
             LargeFlexibleTopAppBar(
                 title = { Text(stringResource(R.string.setting_files_page_title)) },
-                navigationIcon = { BackButton() },
+                navigationIcon = {
+                    if (selectionMode) {
+                        TextButton(enabled = !deleting, onClick = { exitSelection() }) { Text("取消") }
+                    } else {
+                        BackButton()
+                    }
+                },
+                actions = {
+                    if (files.isNotEmpty() && !selectionMode) {
+                        TextButton(onClick = { selectionMode = true }) { Text("多选") }
+                    }
+                },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors
             )
@@ -133,6 +178,22 @@ fun SettingFilesPage(
                 selectedFolder = selectedFolder,
                 onFolderSelected = { selectedFolder = it }
             )
+
+            if (selectionMode) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    Text("已选 ${selectedFiles.size} 个 · ${formatBytes(selectedFiles.sumOf { it.sizeBytes })}",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val allSelected = files.isNotEmpty() && selectedFiles.size == files.size
+                        TextButton(enabled = !deleting && files.isNotEmpty(), onClick = {
+                            selectedIds = if (allSelected) emptySet() else files.map { it.id }.toSet()
+                        }) { Text(if (allSelected) "取消全选" else "全选") }
+                        TextButton(enabled = !deleting && selectedFiles.isNotEmpty(), onClick = {
+                            pendingDelete = selectedFiles.toList()
+                        }) { Text("删除所选") }
+                    }
+                }
+            }
 
             if (files.isEmpty()) {
                 Box(
@@ -155,7 +216,14 @@ fun SettingFilesPage(
                         FileItem(
                             file = file,
                             fileOnDisk = filesManager.getFile(file),
-                            onDelete = { pendingDelete = file }
+                            selectionMode = selectionMode,
+                            selected = file.id in selectedIds,
+                            onClick = { if (selectionMode) toggleSelection(file) },
+                            onLongClick = {
+                                selectionMode = true
+                                toggleSelection(file)
+                            },
+                            onDelete = { pendingDelete = listOf(file) }
                         )
                     }
                 }
@@ -197,10 +265,14 @@ private fun folderDisplayName(folder: String): String = when (folder) {
 private fun FileItem(
     file: ManagedFileEntity,
     fileOnDisk: File,
+    selectionMode: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick),
         colors = CardDefaults.cardColors(containerColor = CustomColors.listItemColors.containerColor)
     ) {
         Column {
@@ -231,14 +303,22 @@ private fun FileItem(
                     }
                 }
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.align(Alignment.TopEnd)
-                ) {
-                    Icon(
-                        HugeIcons.Delete01,
-                        contentDescription = stringResource(R.string.setting_files_page_delete_content_description)
+                if (selectionMode) {
+                    Checkbox(
+                        checked = selected,
+                        onCheckedChange = { onClick() },
+                        modifier = Modifier.align(Alignment.TopEnd)
                     )
+                } else {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        Icon(
+                            HugeIcons.Delete01,
+                            contentDescription = stringResource(R.string.setting_files_page_delete_content_description)
+                        )
+                    }
                 }
             }
 
