@@ -104,6 +104,7 @@ import me.rerere.rikkahub.data.model.selectCompactedContext
 import me.rerere.rikkahub.data.ai.compressContext
 import me.rerere.rikkahub.data.ai.contextSummaryMessage
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ContextCompaction
 import me.rerere.rikkahub.data.model.GenerationMessageTarget
 import me.rerere.rikkahub.data.model.updateGenerationMessages
 import me.rerere.rikkahub.data.model.Assistant
@@ -1525,6 +1526,35 @@ class ChatService(
     }
 
     // ---- 压缩对话历史 ----
+
+    /** Manual edits use the same source validation and atomic summary-only save as model output. */
+    suspend fun editConversationSummary(
+        conversationId: Uuid,
+        expected: ContextCompaction,
+        text: String,
+    ): Result<Unit> = try {
+        val summary = text.trim()
+        require(summary.isNotBlank()) { "摘要不能为空" }
+        val session = getOrCreateSession(conversationId)
+        withContext(Dispatchers.Default) {
+            session.withRefSuspend {
+                check(session.compactionMutex.tryLock()) { "正在生成或保存摘要，请稍后再试" }
+                try {
+                    val updated = expected.copy(summary = summary, createdAtMillis = System.currentTimeMillis())
+                    check(session.saveCompaction(expected, updated) {
+                        conversationRepo.updateCompaction(conversationId, expected, updated)
+                    }) { "原对话或摘要已变化，修改未保存；请重新打开摘要" }
+                } finally {
+                    session.compactionMutex.unlock()
+                }
+            }
+        }
+        Result.success(Unit)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        Result.failure(failure)
+    }
 
     suspend fun compressConversation(
         conversationId: Uuid,

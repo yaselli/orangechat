@@ -129,6 +129,48 @@ class ConversationCompactionSaveTest {
         }
     }
 
+    @Test
+    fun `manual summary edit preserves coverage history and newly appended messages`() = runBlocking {
+        withSession { session ->
+            val old = session.state.value
+            val first = old.planCompaction(0).result("generated summary")
+            assertTrue(session.saveCompaction(null, first) { true })
+            val appended = session.state.value.copy(
+                messageNodes = old.messageNodes + MessageNode.of(UIMessage.user("new message")),
+            )
+            session.state.value = appended
+            val edited = first.copy(summary = "my corrected facts")
+            assertTrue(session.saveCompaction(first, edited) { true })
+            assertEquals(first.coveredMessageCount, edited.coveredMessageCount)
+            assertEquals(first.coveredPrefixHash, edited.coveredPrefixHash)
+            assertSame(appended.messageNodes, session.state.value.messageNodes)
+            assertEquals("my corrected facts", session.state.value.contextCompaction?.summary)
+            assertTrue(edited.matches(session.state.value.currentMessages))
+        }
+    }
+
+    @Test
+    fun `stale manual editor cannot overwrite newer summary or edited source history`() = runBlocking {
+        withSession { session ->
+            val old = session.state.value
+            val first = old.planCompaction(0).result("generated summary")
+            assertTrue(session.saveCompaction(null, first) { true })
+            val winner = first.copy(summary = "newer saved summary")
+            assertTrue(session.saveCompaction(first, winner) { true })
+            assertFalse(session.saveCompaction(first, first.copy(summary = "stale draft")) {
+                fail("Stale editor must not persist")
+                true
+            })
+            assertEquals(winner, session.state.value.contextCompaction)
+            session.state.value = session.state.value.copy(messageNodes = emptyList())
+            assertFalse(session.saveCompaction(winner, winner.copy(summary = "invalid source")) {
+                fail("Invalid source must not persist")
+                true
+            })
+            assertTrue(session.state.value.messageNodes.isEmpty())
+        }
+    }
+
     private suspend fun withSession(block: suspend (ConversationSession) -> Unit) = coroutineScope {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         val conversation = Conversation(
