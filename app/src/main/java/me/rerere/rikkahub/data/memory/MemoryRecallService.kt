@@ -41,6 +41,11 @@ class MemoryRecallService(
     private val embedding = OpenAIProvider(
         client.newBuilder().retryOnConnectionFailure(false).callTimeout(8, TimeUnit.SECONDS).build(), context,
     )
+    // Manual batch indexing is not on the chat send path; do not impose its 8-second deadline.
+    private val indexEmbedding = OpenAIProvider(
+        client.newBuilder().retryOnConnectionFailure(false)
+            .callTimeout(60, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build(), context,
+    )
     private val budget = MemoryTextBudget()
     private val queries = MemoryQueryCache()
     private val queryMutex = Mutex()
@@ -126,7 +131,7 @@ class MemoryRecallService(
             sourceRows.forEach { index.removeStaleSource(it.id, it.revision, memoryHash(it.content)) }
             var completed = 0
             for (batch in pending.chunked(32)) {
-                val vectors = embed(config, batch.map { it.text })
+                val vectors = embed(config, batch.map { it.text }, indexEmbedding)
                 // Re-read source after the network await: stale batches must never resurrect deleted records.
                 val current = sources(scope).associateBy { it.id }
                 index.putVectors(batch.zip(vectors).mapNotNull { (slice, vector) ->
@@ -155,8 +160,12 @@ class MemoryRecallService(
         }
     }
 
-    private suspend fun embed(config: EmbeddingConfig, inputs: List<String>): List<List<Float>> {
-        val result = embedding.generateEmbedding(config.provider, EmbeddingGenerationParams(
+    private suspend fun embed(
+        config: EmbeddingConfig,
+        inputs: List<String>,
+        provider: OpenAIProvider = embedding,
+    ): List<List<Float>> {
+        val result = provider.generateEmbedding(config.provider, EmbeddingGenerationParams(
             model = config.model, input = inputs,
             customHeaders = config.model.customHeaders, customBody = config.model.customBodies,
         )).embeddings

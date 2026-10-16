@@ -94,6 +94,8 @@ class MemoryRecallServiceTest {
         val history = HistoryStore()
         var duringEmbedding: (() -> Unit)? = null
         var calls = 0
+        var httpStatus = 200
+        val callTimeouts = mutableListOf<Long>()
         var failTransport = false
         val dao = Proxy.newProxyInstance(
             MemoryDAO::class.java.classLoader, arrayOf(MemoryDAO::class.java),
@@ -106,6 +108,7 @@ class MemoryRecallServiceTest {
         } as MemoryDAO
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             calls++
+            callTimeouts += chain.call().timeout().timeoutNanos()
             if (failTransport) throw IOException("offline")
             val buffer = Buffer()
             chain.request().body!!.writeTo(buffer)
@@ -115,10 +118,34 @@ class MemoryRecallServiceTest {
             val body = """{"model":"test-embedding","data":[""" + (0 until count).joinToString(",") {
                 """{"index":$it,"embedding":[1,0]}"""
             } + "]}"
-            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
-                .body(body.toResponseBody("application/json".toMediaType())).build()
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(httpStatus).message("response")
+                .body((if (httpStatus == 200) body else """{"error":{"message":"rate limited"}}""")
+                    .toResponseBody("application/json".toMediaType())).build()
         }.build()
         val service = MemoryRecallService(dao, store, client, history = history)
+    }
+
+    @Test
+    fun `manual batch indexing has longer deadline while chat retrieval remains eight seconds`() = runBlocking {
+        val f = Fixture()
+        assertEquals(1, f.service.buildIndex(f.assistant, f.settings))
+        f.service.prepare(f.assistant, f.settings, "chat", listOf(UIMessage.user("炸鸡")))
+        assertEquals(listOf(60_000_000_000L, 8_000_000_000L), f.callTimeouts)
+    }
+
+    @Test
+    fun `HTTP indexing failure reports status without automatic retries or saved invalid vectors`() = runBlocking {
+        val f = Fixture()
+        f.httpStatus = 429
+        try {
+            f.service.buildIndex(f.assistant, f.settings)
+            fail("Must propagate interface failure")
+        } catch (failure: IllegalStateException) {
+            assertTrue(memoryIndexFailureReason(failure).contains("HTTP 429"))
+        }
+        assertEquals(1, f.calls)
+        assertTrue(f.store.vectors.isEmpty())
+        assertEquals(listOf(f.source), f.rows)
     }
 
     @Test

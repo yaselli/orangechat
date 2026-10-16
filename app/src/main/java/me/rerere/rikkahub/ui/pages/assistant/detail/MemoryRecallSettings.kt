@@ -25,6 +25,7 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.memory.MemoryRecallService
+import me.rerere.rikkahub.data.memory.memoryIndexFailureReason
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -112,8 +113,8 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
                                 plan = service.indexPlan(plannedAssistant, plannedSettings)
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
-                            } catch (_: Exception) {
-                                status = "无法准备索引，请检查嵌入模型配置或记忆数量。"
+                            } catch (failure: Exception) {
+                                status = "无法准备索引：${memoryIndexFailureReason(failure)}"
                             } finally {
                                 busy = false
                             }
@@ -147,8 +148,9 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
                         } catch (cancelled: CancellationException) {
                             status = "已取消，完成的索引已保留。"
                             throw cancelled
-                        } catch (_: Exception) {
-                            status = "本次索引未完成。已完成片段保留，请检查接口后手动重试。"
+                        } catch (failure: Exception) {
+                            status = "本次索引未完成：${memoryIndexFailureReason(failure)}\n" +
+                                "已完成片段保留，原聊天和记忆不变；不会自动重试。"
                         } finally { busy = false }
                     }
                 }) { Text("开始") }
