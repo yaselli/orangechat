@@ -55,6 +55,7 @@ import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -74,6 +75,7 @@ fun AssistantMemoryPage(id: String) {
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val memories by vm.memories.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -95,6 +97,7 @@ fun AssistantMemoryPage(id: String) {
         AssistantMemoryContent(
             modifier = Modifier.padding(innerPadding),
             assistant = assistant,
+            settings = settings,
             memories = memories,
             onUpdateAssistant = { vm.update(it) },
             onDeleteMemory = { vm.deleteMemory(it) },
@@ -108,6 +111,7 @@ fun AssistantMemoryPage(id: String) {
 private fun AssistantMemoryContent(
     modifier: Modifier = Modifier,
     assistant: Assistant,
+    settings: Settings,
     memories: List<AssistantMemory>,
     onUpdateAssistant: (Assistant) -> Unit,
     onAddMemory: (AssistantMemory) -> Unit,
@@ -270,6 +274,8 @@ private fun AssistantMemoryContent(
                 },
             )
         }
+
+        MemoryRecallSettings(assistant, settings, onUpdateAssistant)
 
         Box(
             modifier = Modifier

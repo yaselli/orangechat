@@ -67,6 +67,7 @@ class ToolSurfaceBuilder(
                 json = json,
                 onCreation = { content -> memoryRepository.addMemory(memoryAssistantId, content, source) },
                 onUpdate = { id, content -> memoryRepository.updateContent(id, content, source, memoryAssistantId) },
+                onRead = { id -> memoryRepository.getMemoryInScope(id, memoryAssistantId) },
                 onDelete = { id -> memoryRepository.deleteMemory(id, memoryAssistantId) },
             ))
         }

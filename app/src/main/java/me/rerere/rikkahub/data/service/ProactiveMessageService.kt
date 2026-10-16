@@ -43,6 +43,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.rikkahub.data.ai.buildGenerationRequestParameters
 import me.rerere.rikkahub.data.ai.GenerationScene
+import me.rerere.rikkahub.data.memory.MemoryRecallService
 import me.rerere.rikkahub.data.ai.buildGenerationMemoryPrompt
 import me.rerere.rikkahub.data.model.selectCompactedContext
 import me.rerere.rikkahub.data.ai.contextSummaryMessage
@@ -308,6 +309,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val settingsStore: SettingsStore by inject()
     private val conversationRepository: ConversationRepository by inject()
     private val memoryRepository: MemoryRepository by inject()
+    private val memoryRecallService: MemoryRecallService by inject()
     private val providerManager: ProviderManager by inject()
     private val json: Json by inject()
     private val chatService: ChatService by inject()
@@ -1041,7 +1043,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             }
 
             // 记忆（设备事件上下文移到最后面，避免被网关注入的内容淹没）
-            if (assistant.enableMemory) {
+            if (assistant.enableMemory && !assistant.memoryRecallEnabled) {
                 val memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
@@ -1351,6 +1353,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         runAssistantMessageIds: MutableSet<Uuid>,
         protectedMessageIds: Set<Uuid>,
     ): Triple<List<UIMessage>, Boolean, Boolean> {
+        val recallTurn = memoryRecallService.prepare(
+            assistant, settings, conversationId.toString(), initialMessages,
+        )
         var hasToolCalls = false
         var hasJumpFlag = false
         val messages = runGenerationToolLoop(
@@ -1368,7 +1373,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // The provider-only copy may merge adjacent roles for API compatibility. Never merge
                 // the local streaming list: doing so can fold this run's assistant into the previous
                 // persisted assistant and transfer ownership back to the old message id.
-                val requestMessages = mergeAdjacentSameRoleMessages(currentMessages)
+                val requestMessages = mergeAdjacentSameRoleMessages(
+                    memoryRecallService.apply(recallTurn, currentMessages)
+                )
                 // A proactive request may legitimately end with an existing ASSISTANT message. Seed a
                 // fresh assistant placeholder locally so handleMessageChunk cannot append the new
                 // stream to that old message and reuse its id. Do not send the placeholder upstream.

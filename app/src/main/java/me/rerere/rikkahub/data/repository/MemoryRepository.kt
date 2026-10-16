@@ -9,6 +9,7 @@ package me.rerere.rikkahub.data.repository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
+import me.rerere.rikkahub.data.db.entity.isSummaryMemory
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.MemorySource
@@ -44,10 +45,10 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
             .map { AssistantMemory(it.id, it.content) }
     }
 
-    private fun MemoryEntity.isSummaryMemory(): Boolean {
-        return content.startsWith("[daily_summary]") ||
-            content.startsWith("[phase_summary]") ||
-            content.startsWith("[auto_summary]")
+    suspend fun getMemoryInScope(id: Int, assistantId: String): AssistantMemory {
+        val memory = memoryDAO.getMemoryById(id)
+        require(memory != null && memory.assistantId == assistantId) { "记忆不存在或不属于当前助手" }
+        return AssistantMemory(memory.id, memory.content)
     }
 
     suspend fun deleteMemoriesOfAssistant(assistantId: String) {

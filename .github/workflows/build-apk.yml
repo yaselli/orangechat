@@ -96,6 +96,7 @@ jobs:
             **/build/test-results/**
             **/build/reports/lint-results*.*
             app/schemas/**/30.json
+            app/schemas/**/31.json
           if-no-files-found: warn
 
       - name: Build APK

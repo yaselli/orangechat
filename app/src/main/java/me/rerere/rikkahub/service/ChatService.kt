@@ -1107,7 +1107,9 @@ class ChatService(
                 contextCompaction = conversation.contextCompaction,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 workspaceCwd = conversation.workspaceCwd,
-                memories = if (assistant.useGlobalMemory) {
+                memories = if (!assistant.enableMemory || assistant.memoryRecallEnabled) {
+                    emptyList()
+                } else if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
                     memoryRepository.getMemoriesOfAssistant(assistant.id.toString())

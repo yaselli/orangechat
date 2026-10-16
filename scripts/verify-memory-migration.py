@@ -57,3 +57,40 @@ assert db.execute("SELECT messages,select_index FROM message_node").fetchone() =
 db.execute("DELETE FROM ConversationEntity WHERE id='chat'")
 assert db.execute(compact, dict(id="chat", value="obsolete")).rowcount == 0
 print("PASS: v29→v30 data preservation, legacy provenance, scoped revision writes/deletes, summary-only updates")
+
+# Verify the next additive migration against the actual KSP-generated v30 schema.
+schema30 = json.loads((ROOT / "app/schemas/me.rerere.rikkahub.data.db.AppDatabase/30.json").read_text())
+db31 = sqlite3.connect(":memory:")
+db31.execute("PRAGMA foreign_keys=ON")
+for entity in schema30["database"]["entities"]:
+    db31.execute(entity["createSql"].replace("${TABLE_NAME}", entity["tableName"]))
+    for index in entity.get("indices", entity.get("indexes", [])):
+        db31.execute(index["createSql"].replace("${TABLE_NAME}", entity["tableName"]))
+db31.execute("INSERT INTO ConversationEntity(id,title,nodes,create_at,update_at) VALUES('chat','title','[]',1,2)")
+db31.execute("INSERT INTO MemoryEntity(id,assistant_id,content) VALUES(7,'a','original')")
+db31.execute("INSERT INTO message_node VALUES('node','chat',0,?,1)", (nodes,))
+before31 = list(db31.execute("SELECT * FROM MemoryEntity"))
+source31 = (SOURCE / "db/migrations/Migration_30_31.kt").read_text()
+statements31 = [a or b for a, b in re.findall(r'db\.execSQL\((?:"""(.*?)"""|"([^"\n]+)")\)', source31, re.S)]
+assert len(statements31) == 6
+for statement in statements31:
+    db31.execute(statement)
+assert list(db31.execute("SELECT * FROM MemoryEntity")) == before31
+assert db31.execute("SELECT messages,select_index FROM message_node").fetchone() == (nodes, 1)
+db31.execute("INSERT INTO memory_vector VALUES('model-a','slice','a',7,1,'hash','[1,0]')")
+db31.execute("INSERT INTO memory_recall_snapshot VALUES('key','chat','a','user','hash','[]',1)")
+# Duplicate retries cannot overwrite a frozen snapshot.
+db31.execute("INSERT OR IGNORE INTO memory_recall_snapshot VALUES('key','chat','a','user','changed','bad',2)")
+assert db31.execute("SELECT messageHash,excerpts FROM memory_recall_snapshot").fetchone() == ("hash", "[]")
+# Deleting a source cascades vectors; deleting a conversation cascades only its derived snapshots.
+db31.execute("DELETE FROM MemoryEntity WHERE id=7")
+assert db31.execute("SELECT COUNT(*) FROM memory_vector").fetchone() == (0,)
+assert db31.execute("SELECT COUNT(*) FROM memory_recall_snapshot").fetchone() == (1,)
+try:
+    db31.execute("INSERT INTO memory_vector VALUES('model-a','late','a',7,1,'hash','[1,0]')")
+    raise AssertionError("Deleted memory must not be resurrected by late vector results")
+except sqlite3.IntegrityError:
+    pass
+db31.execute("DELETE FROM ConversationEntity WHERE id='chat'")
+assert db31.execute("SELECT COUNT(*) FROM memory_recall_snapshot").fetchone() == (0,)
+print("PASS: v30→v31 source preservation, snapshot freeze, vector/snapshot cascades, deleted-source rejection")

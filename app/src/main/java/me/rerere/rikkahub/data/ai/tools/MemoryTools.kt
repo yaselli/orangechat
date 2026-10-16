@@ -27,17 +27,19 @@ fun buildMemoryTools(
     json: Json,
     onCreation: suspend (String) -> AssistantMemory,
     onUpdate: suspend (Int, String) -> AssistantMemory,
-    onDelete: suspend (Int) -> Unit
+    onDelete: suspend (Int) -> Unit,
+    onRead: (suspend (Int) -> AssistantMemory)? = null,
 ): List<Tool> = listOf(
     Tool(
         name = "memory_tool",
         description = """
             The memory tool stores long-term information across conversations.
-            Use `action` to control the operation: `create` (add), `edit` (update), `delete` (remove).
+            Use `action` to control the operation: `create` (add), `edit` (update), `delete` (remove), `read` (fetch the complete record before editing a recalled excerpt).
             - No relevant record: `create` + `content`
             - Existing relevant record: `edit` + `id` + `content`
             - Outdated/irrelevant record: `delete` + `id`
-            Memories will automatically appear in the <memories> tag in later conversations.
+            Memories may be retrieved as partial background excerpts in later conversations.
+            A recalled excerpt is NOT the full record: read the complete record before editing it.
             Do not store sensitive information (e.g., ethnicity, religion, sexual orientation, political views, sex life, criminal records).
             You may store: preferred name, preferences, plans, work-related notes, chat style preferences, first chat time, etc.
             Do not show memory content directly in the conversation unless the user explicitly asks.
@@ -60,13 +62,14 @@ fun buildMemoryTools(
                                 add("create")
                                 add("edit")
                                 add("delete")
+                                if (onRead != null) add("read")
                             }
                         )
-                        put("description", "Operation to perform: create, edit, or delete")
+                        put("description", "Operation to perform: create, edit, delete, or read")
                     })
                     put("id", buildJsonObject {
                         put("type", "integer")
-                        put("description", "The id of the memory record (required for edit/delete)")
+                        put("description", "The id of the memory record (required for edit/delete/read)")
                     })
                     put("content", buildJsonObject {
                         put("type", "string")
@@ -91,6 +94,12 @@ fun buildMemoryTools(
                     json.encodeToJsonElement(AssistantMemory.serializer(), onUpdate(id, content))
                 }
 
+                "read" -> {
+                    val id = params["id"]?.jsonPrimitive?.intOrNull ?: error("id is required")
+                    val read = onRead ?: error("Reading memory is not available")
+                    json.encodeToJsonElement(AssistantMemory.serializer(), read(id))
+                }
+
                 "delete" -> {
                     val id = params["id"]?.jsonPrimitive?.intOrNull ?: error("id is required")
                     onDelete(id)
@@ -100,7 +109,7 @@ fun buildMemoryTools(
                     }
                 }
 
-                else -> error("unknown action: $action, must be one of [create, edit, delete]")
+                else -> error("unknown action: $action, must be one of [create, edit, delete, read]")
             }
             listOf(UIMessagePart.Text(payload.toString()))
         }

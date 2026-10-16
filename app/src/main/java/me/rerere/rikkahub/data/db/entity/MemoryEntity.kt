@@ -32,3 +32,7 @@ data class MemoryEntity(
     @ColumnInfo("updated_at", defaultValue = "0")
     val updatedAt: Long = 0,
 )
+
+/** Legacy summary records have their own management path and must not become individual fact memories. */
+fun MemoryEntity.isSummaryMemory(): Boolean = content.startsWith("[daily_summary]") ||
+    content.startsWith("[phase_summary]") || content.startsWith("[auto_summary]")
