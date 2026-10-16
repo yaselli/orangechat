@@ -63,4 +63,48 @@ class MemoryRecallSnapshotTest {
             message.copy(parts = listOf(UIMessagePart.Text("改了")))
         ))
     }
+    @Test
+    fun `history snapshot revalidates current selected source hash role and assistant scope`() {
+        val original = HistoryMemorySource("past", "node", "old-message", "assistant-a", "user",
+            "2020-01-01T00:00", "喜欢燕麦牛奶", 0)
+        val saved = SavedMemoryExcerpt(0, 0, original.hash, "燕麦牛奶", original.reference)
+        val boundary = HistoryRecallBoundary("chat", 0, "2026-01-01T00:00", emptySet())
+        fun render(source: HistoryMemorySource?, scope: String = "assistant-a") = validMemorySnapshot(
+            listOf(saved), emptyMap(), "__global__",
+            source?.let { mapOf(it.reference.key to it) }.orEmpty(), scope, boundary,
+        )
+        assertTrue(render(original).contains("[history user"))
+        assertEquals("", render(null))
+        assertEquals("", render(original.copy(text = "现在不喜欢了")))
+        assertEquals("", render(original.copy(role = "assistant")))
+        assertEquals("", render(original.copy(messageId = "other-branch")))
+        assertEquals("", render(original, "assistant-b"))
+    }
+
+    @Test
+    fun `history is request only and cannot be copied into a later user turn`() {
+        val original = HistoryMemorySource("past", "node", "old-message", "assistant-a", "assistant",
+            "2020-01-01T00:00", "喜欢燕麦牛奶", 0)
+        val user = UIMessage.user("喜欢喝什么")
+        val turn = MemoryRecallTurn("__global__", user.id.toString(),
+            listOf(SavedMemoryExcerpt(0, 0, original.hash, original.text, original.reference)), "assistant-a",
+            HistoryRecallBoundary("chat", 0, "2026-01-01T00:00", setOf(user.id.toString())))
+        val sourceMap = mapOf(original.reference.key to original)
+        val request = turn.apply(listOf(user), emptyMap(), sourceMap)
+        assertEquals(2, request.single().parts.size)
+        assertEquals(1, user.parts.size)
+        assertEquals(request, turn.apply(listOf(user), emptyMap(), sourceMap))
+        val later = listOf(user, UIMessage.assistant("好的"), UIMessage.user("另一轮"))
+        assertEquals(later, turn.apply(later, emptyMap(), sourceMap))
+    }
+
+    @Test
+    fun `query embedding excludes marked time background while retaining ordinary visible text`() {
+        val user = UIMessage.user("燕麦牛奶").copy(parts = listOf(
+            UIMessagePart.Text("燕麦牛奶"),
+            me.rerere.rikkahub.data.ai.transformers.extraInfoMessagePart("hidden clock and phone background"),
+        ))
+        assertEquals("燕麦牛奶", memoryRecallQuery(listOf(user), user))
+    }
+
 }

@@ -37,7 +37,7 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
     val scope = rememberCoroutineScope()
     var job by remember { mutableStateOf<Job?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var status by remember(assistant.id, assistant.useGlobalMemory, assistant.memoryEmbeddingModelId) {
+    var status by remember(assistant.id, assistant.useGlobalMemory, assistant.memoryEmbeddingModelId, assistant.memoryHistoryRecallEnabled) {
         mutableStateOf("")
     }
     var plan by remember { mutableStateOf<MemoryRecallService.IndexPlan?>(null) }
@@ -60,6 +60,35 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
             )
         }
         if (assistant.memoryRecallEnabled && assistant.enableMemory) {
+            CardGroup {
+                item(
+                    headlineContent = { Text("同时检索当前助手的聊天历史") },
+                    supportingContent = {
+                        Text("只查当前选中的分支和普通文字，与长期记忆共用 6 个片段及总预算；默认关闭。")
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = assistant.memoryHistoryRecallEnabled, enabled = !busy,
+                            onCheckedChange = { onUpdate(assistant.copy(memoryHistoryRecallEnabled = it)) },
+                        )
+                    },
+                )
+            }
+            if (assistant.memoryHistoryRecallEnabled) TextButton(enabled = !busy, onClick = {
+                val target = assistant
+                busy = true
+                job = scope.launch {
+                    try {
+                        val count = service.refreshHistoryKeywords(target)
+                        status = "已更新 $count 条历史的关键词索引，没有调用 API。"
+                    } catch (cancelled: CancellationException) {
+                        status = "已取消本地索引更新。"
+                        throw cancelled
+                    } catch (_: Exception) {
+                        status = "本地历史索引更新失败，原聊天保留。"
+                    } finally { busy = false }
+                }
+            }) { Text("更新历史关键词索引（本地）") }
             Card(colors = CustomColors.cardColorsOnSurfaceContainer, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("嵌入模型", style = MaterialTheme.typography.titleSmall)
@@ -71,7 +100,8 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
                         type = ModelType.EMBEDDING,
                         onSelect = { onUpdate(assistant.copy(memoryEmbeddingModelId = it.id)) },
                     )
-                    Text("建立索引会把记忆正文发送给所选嵌入服务；聊天每轮最多调用一次查询嵌入，失败不重试。",
+                    Text("建立向量索引会发送记忆正文；开启历史检索后，也包含当前助手的历史普通文字。" +
+                        "聊天每轮最多共用一次查询嵌入，失败不重试。",
                         style = MaterialTheme.typography.bodySmall)
                     TextButton(enabled = !busy && assistant.memoryEmbeddingModelId != null, onClick = {
                         plannedAssistant = assistant
@@ -99,7 +129,8 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
         AlertDialog(
             onDismissRequest = { plan = null },
             title = { Text("建立记忆向量索引") },
-            text = { Text("本次有 ${currentPlan.pendingChunks} 个新片段，最多调用嵌入接口 ${currentPlan.calls} 次。" +
+            text = { Text("本批有 ${currentPlan.pendingChunks} 个新片段，最多调用嵌入接口 ${currentPlan.calls} 次。" +
+                (if (currentPlan.hasMore) "剩余片段可在完成本批后再次手动更新。" else "") +
                 "按服务商计费，已完成的片段会保留，失败或取消后不会自动重试。") },
             dismissButton = { TextButton(onClick = { plan = null }) { Text("取消") } },
             confirmButton = {

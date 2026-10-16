@@ -71,6 +71,12 @@ jobs:
       - name: Verify memory database migration SQL
         run: python3 scripts/verify-memory-migration.py
 
+      - name: Verify history memory SQL and source isolation
+        run: python3 scripts/verify-history-memory.py
+
+      - name: Compile memory device tests
+        run: ./gradlew :app:compileDebugAndroidTestKotlin
+
       - name: Upload unit test diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -97,6 +103,7 @@ jobs:
             **/build/reports/lint-results*.*
             app/schemas/**/30.json
             app/schemas/**/31.json
+            app/schemas/**/33.json
           if-no-files-found: warn
 
       - name: Build APK

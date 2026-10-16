@@ -15,7 +15,10 @@ data class MemorySlice(
     val start: Int,
     val end: Int,
     val text: String,
-)
+    val history: HistoryReference? = null,
+) {
+    val sourceKey: String get() = history?.let { "history:${it.key}" } ?: "memory:$scope:$memoryId"
+}
 
 data class RankedMemory(val slice: MemorySlice, val score: Double)
 
@@ -180,18 +183,25 @@ fun selectMemoryExcerpts(
         if (selected.size >= 6) break
         val slice = hit.slice
         if (selected.any {
-                it.slice.memoryId == slice.memoryId && it.slice.scope == slice.scope &&
+                it.slice.sourceKey == slice.sourceKey &&
                     it.slice.start < slice.end && slice.start < it.slice.end
             }) continue
-        val label = memoryExcerptLabel(slice.memoryId)
+        val label = memoryExcerptLabel(slice)
         val body = budget.excerpt(slice, query, minOf(600, remaining - budget.count(label)))
         if (body.isBlank()) continue
         selected += MemoryExcerpt(slice, body)
         remaining -= budget.count(label + body)
     }
     // Stable presentation; ordering by source position doesn't depend on query score ties.
-    return selected.sortedWith(compareBy<MemoryExcerpt> { it.slice.memoryId }.thenBy { it.slice.start })
+    return selected.sortedWith(compareBy<MemoryExcerpt> { it.slice.history != null }
+        .thenBy { it.slice.memoryId }.thenBy { it.slice.sourceKey }.thenBy { it.slice.start })
 }
+
+fun memoryExcerptLabel(slice: MemorySlice): String = slice.history?.let { historyExcerptLabel(it) }
+    ?: memoryExcerptLabel(slice.memoryId)
+
+fun historyExcerptLabel(ref: HistoryReference): String =
+    "\n[history ${ref.role} time=${ref.createdAt} conversation=${ref.conversationId} message=${ref.messageId}]\n"
 
 fun memoryExcerptLabel(memoryId: Int): String = "\n[memory #$memoryId]\n"
 
@@ -203,4 +213,5 @@ fun renderMemoryRecords(records: List<Pair<Int, String>>): String {
 }
 
 fun renderMemoryExcerpts(excerpts: List<MemoryExcerpt>): String =
-    renderMemoryRecords(excerpts.map { it.slice.memoryId to it.text })
+    if (excerpts.isEmpty()) "" else MEMORY_RECALL_HEADER +
+        excerpts.joinToString("") { memoryExcerptLabel(it.slice) + it.text } + MEMORY_RECALL_FOOTER

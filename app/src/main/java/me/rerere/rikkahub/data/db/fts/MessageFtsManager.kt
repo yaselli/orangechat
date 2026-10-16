@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.data.db.fts
 
+import me.rerere.rikkahub.data.ai.transformers.isExtraInfoInjectionPart
 import android.util.Log
 import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
@@ -178,6 +179,6 @@ class MessageFtsManager(private val database: AppDatabase) {
 }
 
 private fun UIMessage.extractFtsText(): String =
-    parts.filterIsInstance<UIMessagePart.Text>()
+    parts.filterIsInstance<UIMessagePart.Text>().filterNot { it.isExtraInfoInjectionPart() }
         .joinToString("\n") { it.text }
-        .take(10_000)
+        .take(64_000)
