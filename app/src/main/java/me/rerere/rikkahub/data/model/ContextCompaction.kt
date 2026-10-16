@@ -10,22 +10,25 @@ import java.security.MessageDigest
 @Serializable
 data class ContextCompaction(
     val summary: String,
-    val coveredMessages: List<CompactedMessageRef>,
+    val coveredMessageCount: Int,
+    val coveredPrefixHash: String,
     val createdAtMillis: Long,
 ) {
     fun matches(messages: List<UIMessage>): Boolean = summary.isNotBlank() &&
-        coveredMessages.isNotEmpty() && messages.size >= coveredMessages.size &&
-        coveredMessages.indices.all { index -> coveredMessages[index] == messages[index].compactionRef() }
+        coveredMessageCount in 1..messages.size &&
+        coveredPrefixHash == prefixHash(messages, coveredMessageCount)
 }
 
-@Serializable
-data class CompactedMessageRef(val id: String, val contentHash: String)
-
-private fun UIMessage.compactionRef(): CompactedMessageRef {
-    // Hash request content, not UI-only translation/usage. Editing a selected branch invalidates its summary.
-    val content = JsonInstant.encodeToString(copy(translation = null, usage = null, finishedAt = null))
-    val digest = MessageDigest.getInstance("SHA-256").digest(content.toByteArray(Charsets.UTF_8))
-    return CompactedMessageRef(id.toString(), digest.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') })
+private fun prefixHash(messages: List<UIMessage>, count: Int): String {
+    // Constant-size persisted cursor: a long chat must not create another oversized database row.
+    val digest = MessageDigest.getInstance("SHA-256")
+    for (index in 0 until count) {
+        val message = messages[index]
+        val content = JsonInstant.encodeToString(message.copy(translation = null, usage = null, finishedAt = null))
+        digest.update(content.toByteArray(Charsets.UTF_8))
+        digest.update(byteArrayOf(0))
+    }
+    return digest.digest().joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
 }
 
 data class CompactedContext(val summary: String?, val messages: List<UIMessage>)
@@ -33,7 +36,7 @@ data class CompactedContext(val summary: String?, val messages: List<UIMessage>)
 /** Shared by regular chat and proactive chat; invalid summaries fall back to full history. */
 fun selectCompactedContext(messages: List<UIMessage>, compaction: ContextCompaction?): CompactedContext =
     if (compaction?.matches(messages) == true) {
-        CompactedContext(compaction.summary, messages.drop(compaction.coveredMessages.size))
+        CompactedContext(compaction.summary, messages.drop(compaction.coveredMessageCount))
     } else {
         CompactedContext(null, messages)
     }
@@ -41,12 +44,13 @@ fun selectCompactedContext(messages: List<UIMessage>, compaction: ContextCompact
 data class ContextCompactionPlan(
     val previous: ContextCompaction?,
     val previousSummary: String?,
-    val coveredMessages: List<CompactedMessageRef>,
+    val coveredMessageCount: Int,
+    val coveredPrefixHash: String,
     val newMessages: List<UIMessage>,
 ) {
     fun result(summary: String): ContextCompaction {
         require(summary.isNotBlank()) { "压缩模型返回了空摘要，原对话未改变" }
-        return ContextCompaction(summary.trim(), coveredMessages, System.currentTimeMillis())
+        return ContextCompaction(summary.trim(), coveredMessageCount, coveredPrefixHash, System.currentTimeMillis())
     }
 }
 
@@ -61,7 +65,7 @@ fun Conversation.planCompaction(keepRecentMessages: Int): ContextCompactionPlan 
             (end < messages.size && messages[end].role != MessageRole.USER)
         )) end--
     val old = contextCompaction?.takeIf { it.matches(messages) }
-    val start = old?.coveredMessages?.size ?: 0
+    val start = old?.coveredMessageCount ?: 0
     require(end > start) { "没有可压缩的新对话，请减少保留条数或继续聊天后再试" }
     require(messages.take(end).all { message -> message.getTools().all { it.isExecuted } }) {
         "待压缩范围还有未完成的工具调用，请先处理或取消该轮回复"
@@ -69,7 +73,8 @@ fun Conversation.planCompaction(keepRecentMessages: Int): ContextCompactionPlan 
     return ContextCompactionPlan(
         previous = contextCompaction,
         previousSummary = old?.summary,
-        coveredMessages = messages.take(end).map { it.compactionRef() },
+        coveredMessageCount = end,
+        coveredPrefixHash = prefixHash(messages, end),
         newMessages = messages.subList(start, end),
     )
 }

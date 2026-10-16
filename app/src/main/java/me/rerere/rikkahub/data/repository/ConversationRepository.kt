@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.AppDatabase
@@ -453,8 +454,7 @@ class ConversationRepository(
             isPinned = conversationEntity.isPinned,
             customSystemPrompt = conversationEntity.customSystemPrompt.ifEmpty { null },
             folderId = conversationEntity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
-            contextCompaction = conversationEntity.contextCompaction.takeIf { it.isNotBlank() }
-                ?.let { JsonInstant.decodeFromString<ContextCompaction>(it) },
+            contextCompaction = decodeCompaction(conversationEntity.contextCompaction),
         )
     }
 
@@ -466,6 +466,17 @@ class ConversationRepository(
                     conversationEntityToConversation(entity, emptyList())
                 }
             }
+    }
+
+    private fun decodeCompaction(value: String): ContextCompaction? {
+        if (value.isBlank()) return null
+        return try {
+            JsonInstant.decodeFromString<ContextCompaction>(value)
+        } catch (_: SerializationException) {
+            // A bad derived summary must never prevent opening the original conversation.
+            Log.w(TAG, "Ignored unreadable context summary; original history remains available")
+            null
+        }
     }
 
     suspend fun togglePinStatus(conversationId: Uuid) {

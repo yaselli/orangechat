@@ -8,6 +8,17 @@ import org.junit.Test
 import kotlin.uuid.Uuid
 
 class ContextCompactionTest {
+    @Test
+    fun `cursor stays small even when thousands of messages are covered`() {
+        val messages = (1..2000).flatMap { listOf(UIMessage.user("question $it"), UIMessage.assistant("answer $it")) }
+        val original = Conversation(assistantId = Uuid.random(), messageNodes = messages.map { MessageNode.of(it) })
+        val result = original.planCompaction(0).result("summary")
+        assertEquals(4000, result.coveredMessageCount)
+        assertEquals(64, result.coveredPrefixHash.length)
+        assertTrue(JsonInstant.encodeToString(result).length < 300)
+        assertTrue(result.matches(original.currentMessages))
+    }
+
     private fun conversation() = Conversation(
         assistantId = Uuid.random(),
         messageNodes = listOf(
