@@ -34,8 +34,26 @@ class ContextCompressorTest {
     }
 
     @Test
-    fun `oversized source and call limit are rejected before first model invocation`() = runBlocking {
-        val oversized = conversation(listOf(UIMessage.user("a".repeat(50_000)), UIMessage.assistant("answer")))
+    fun `single long message folds through multiple calls without changing source`() = runBlocking {
+        val original = conversation(listOf(UIMessage.user("a".repeat(50_000)), UIMessage.assistant("answer")))
+        val inputs = mutableListOf<String>()
+        val summary = compressContext(original.planCompaction(0)) { previous, content ->
+            assertEquals(if (inputs.isEmpty()) null else "summary 1", previous)
+            inputs += content
+            "summary ${inputs.size}"
+        }
+        assertEquals(2, inputs.size)
+        assertTrue(inputs[0].startsWith("[USER]\n"))
+        assertTrue(inputs[1].startsWith("[USER; continuation of same message]\n"))
+        assertTrue(inputs[1].endsWith("[ASSISTANT]\nanswer"))
+        assertEquals("summary 2", summary)
+        assertNull(original.contextCompaction)
+        assertEquals("a".repeat(50_000), (original.currentMessages[0].parts[0] as UIMessagePart.Text).text)
+    }
+
+    @Test
+    fun `sources exceeding total call limit are rejected before first model invocation`() = runBlocking {
+        val oversized = conversation(listOf(UIMessage.user("a".repeat(400_000)), UIMessage.assistant("answer")))
         val tooMany = conversation((1..10).map { UIMessage.assistant("a".repeat(30_000)) })
         for (source in listOf(oversized, tooMany)) {
             var calls = 0
