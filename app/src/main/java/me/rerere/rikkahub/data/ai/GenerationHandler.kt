@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.data.ai
  
+import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
@@ -85,6 +86,7 @@ class GenerationHandler(
     private val aiLoggingManager: AILoggingManager,
     private val memoryBankService: MemoryBankService,
     private val memoryRecallService: MemoryRecallService,
+    private val chatInteractionRepository: ChatInteractionRepository,
 ) {
     fun generateText(
         settings: Settings,
@@ -186,6 +188,7 @@ class GenerationHandler(
                     tools = toolsInternal,
                     memories = memories ?: emptyList(),
                     recallTurn = recallTurn,
+                    conversationId = conversationId,
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
                     contextCompaction = contextCompaction,
@@ -252,6 +255,7 @@ class GenerationHandler(
         tools: List<Tool>,
         memories: List<AssistantMemory>,
         recallTurn: MemoryRecallTurn,
+        conversationId: String?,
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         contextCompaction: ContextCompaction? = null,
@@ -342,7 +346,9 @@ class GenerationHandler(
             workspaceCwd = workspaceCwd,
         )
  
-        val internalMessages = memoryRecallService.apply(recallTurn, baseMessages)
+        val internalMessages = chatInteractionRepository.decorate(
+            memoryRecallService.apply(recallTurn, baseMessages), conversationId, assistant, sourceMessages = messages,
+        )
 
         val params = buildGenerationRequestParameters(assistant, model, tools)
         aiLoggingManager.addLog(

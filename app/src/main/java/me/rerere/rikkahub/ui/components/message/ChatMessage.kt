@@ -122,6 +122,9 @@ import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.data.datastore.ChatFontFamily
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.layout.ContentScale
+import me.rerere.rikkahub.data.interaction.reactionSegments
+import me.rerere.rikkahub.data.interaction.avatarInteraction
+import me.rerere.rikkahub.data.interaction.MessageReaction
 import androidx.compose.foundation.Image
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.base64Encode
@@ -152,8 +155,23 @@ fun ChatMessage(
     onClearTranslation: (UIMessage) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    reactions: List<MessageReaction> = emptyList(),
+    onReact: ((String, String) -> Unit)? = null,
+    onAvatarInteraction: ((UIMessage) -> Unit)? = null,
+    avatarPulse: String? = null,
 ) {
     val message = node.messages[node.selectIndex]
+    if (message.avatarInteraction() != null) {
+        Text(
+            text = message.parts.filterIsInstance<UIMessagePart.Text>().joinToString(" ") { it.text },
+            modifier = modifier.fillMaxWidth().padding(vertical = 6.dp),
+            textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    val avatarGesture = avatarInteractionModifier(avatarPulse,
+        onAvatarInteraction?.let { callback -> { callback(message) } })
     val settings = LocalDisplaySettings.current
     val textStyle = LocalTextStyle.current.copy(
         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
@@ -174,6 +192,7 @@ fun ChatMessage(
         }
     )
     var showActionsSheet by remember { mutableStateOf(false) }
+    var showReactionPicker by remember(message.id) { mutableStateOf(false) }
     var showSelectCopySheet by remember { mutableStateOf(false) }
     val navController = LocalNavController.current
     val context = LocalContext.current
@@ -195,13 +214,15 @@ fun ChatMessage(
                     model = model,
                     assistant = assistant,
                     loading = loading,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    interactionModifier = avatarGesture,
                 )
                 ChatMessageUserAvatar(
                     message = message,
                     avatar = settings.userAvatar,
                     nickname = settings.userNickname,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    interactionModifier = avatarGesture,
                 )
             }
         }
@@ -216,6 +237,8 @@ fun ChatMessage(
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
                 onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
+                reactions = reactions,
+                onReact = onReact,
             )
 
             message.translation?.let { translation ->
@@ -226,6 +249,9 @@ fun ChatMessage(
             }
         }
 
+        if (message.parts.none { it is UIMessagePart.Text }) {
+            MessageReactionBar("", reactions, onReact)
+        }
         val showActions = if (lastMessage) {
             !loading
         } else {
@@ -271,6 +297,7 @@ fun ChatMessage(
             },
             isFavorite = isFavorite,
             onToggleFavorite = onToggleFavorite,
+            onReact = onReact?.let { { showReactionPicker = true } },
             onWebViewPreview = {
                 val textContent = message.parts
                     .filterIsInstance<UIMessagePart.Text>()
@@ -289,6 +316,14 @@ fun ChatMessage(
             onDismissRequest = {
                 showActionsSheet = false
             }
+        )
+    }
+
+    if (showReactionPicker && onReact != null) {
+        MessageReactionPicker(
+            reactionSegments(message, assistant ?: Assistant()),
+            onDismiss = { showReactionPicker = false },
+            onSelect = { emoji, quote -> onReact(emoji, quote); showReactionPicker = false },
         )
     }
 
@@ -313,6 +348,8 @@ private fun MessagePartsBlock(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
+    reactions: List<MessageReaction> = emptyList(),
+    onReact: ((String, String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -437,6 +474,7 @@ private fun MessagePartsBlock(
                                                             onClickCitation = handleClickCitation
                                                         )
                                                     }
+                                                    MessageReactionBar(segment, reactions, onReact)
                                                 }
                                             }
                                         }
@@ -458,6 +496,7 @@ private fun MessagePartsBlock(
                                                 onClickCitation = handleClickCitation
                                             )
                                         }
+                                        MessageReactionBar(displayText, reactions, onReact)
                                     }
                                 } else if (assistant?.splitBubbleByLine == true) {
                                     // 分气泡: 按模型自己写的换行 (\n) 拆成多个独立气泡,
@@ -499,6 +538,7 @@ private fun MessagePartsBlock(
                                                             .animateContentSize()
                                                     )
                                                 }
+                                                MessageReactionBar(segment, reactions, onReact)
                                             }
                                         }
                                     }
@@ -532,6 +572,7 @@ private fun MessagePartsBlock(
                                                 .animateContentSize()
                                         )
                                     }
+                                    MessageReactionBar(displayText, reactions, onReact)
                                 }
 
                             }
@@ -690,6 +731,7 @@ private fun MessagePartsBlock(
                     ) {
                         annotations.fastForEachIndexed { index, annotation ->
                             when (annotation) {
+                                is UIMessageAnnotation.AvatarInteraction -> Unit
                                 is UIMessageAnnotation.UrlCitation -> {
                                     Row(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
