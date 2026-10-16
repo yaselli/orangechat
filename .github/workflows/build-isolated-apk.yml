@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - build/stable-release
+      - feature/chat-interactions
   workflow_dispatch:
 
 permissions:
@@ -48,6 +49,8 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew testDebugUnitTest
+      - name: Verify interaction migration
+        run: python3 scripts/verify-chat-interactions.py
       - name: Release lint
         run: ./gradlew lintRelease
       - name: Build signed release APK
@@ -81,6 +84,7 @@ jobs:
             **/build/reports/tests/**
             **/build/test-results/**
             **/build/reports/lint-results*.*
+            app/schemas/me.rerere.rikkahub.data.db.AppDatabase/32.json
           if-no-files-found: warn
       - name: Remove signing files
         if: always()

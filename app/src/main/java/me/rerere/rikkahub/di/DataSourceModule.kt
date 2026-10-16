@@ -6,6 +6,8 @@
 
 package me.rerere.rikkahub.di
 
+import me.rerere.rikkahub.data.db.migrations.Migration_29_32_ChatInteractions
+import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -65,7 +67,7 @@ val dataSourceModule = module {
         val context: Context = get()
         Room.databaseBuilder(context, AppDatabase::class.java, "rikka_hub")
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16, Migration_19_20, Migration_20_21, Migration_21_22, Migration_23_24, Migration_24_25, Migration_25_26)
+            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16, Migration_19_20, Migration_20_21, Migration_21_22, Migration_23_24, Migration_24_25, Migration_25_26, Migration_29_32_ChatInteractions)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     val dictDir = SimpleDictManager.extractDict(context)
@@ -177,6 +179,8 @@ val dataSourceModule = module {
         )
     }
 
+    single { ChatInteractionRepository(get(), get()) }
+
     single {
         GenerationHandler(
             context = get(),
@@ -185,7 +189,8 @@ val dataSourceModule = module {
             memoryRepo = get(),
             conversationRepo = get(),
             aiLoggingManager = get(),
-            memoryBankService = get()
+            memoryBankService = get(),
+            chatInteractionRepository = get()
         )
     }
 
