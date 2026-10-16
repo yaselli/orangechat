@@ -44,10 +44,14 @@ jobs:
           umask 077
           printf '%s' "$KEY_BASE64" | base64 --decode > app/app.key
           printf '%s\n' "$SIGNING_CONFIG" > local.properties
-      - name: Test, lint and build release
+      - name: Unit tests
         run: |
           chmod +x gradlew
-          ./gradlew testReleaseUnitTest lintRelease assembleRelease
+          ./gradlew testDebugUnitTest
+      - name: Release lint
+        run: ./gradlew lintRelease
+      - name: Build signed release APK
+        run: ./gradlew assembleRelease
       - name: Verify APK identity and debug flag
         run: |
           AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
