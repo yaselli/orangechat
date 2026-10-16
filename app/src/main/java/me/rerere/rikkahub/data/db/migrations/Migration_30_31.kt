@@ -6,6 +6,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /** Only derived indexes and recall snapshots; source messages and memories are unchanged. */
 object Migration_30_31 : Migration(30, 31) {
     override fun migrate(db: SupportSQLiteDatabase) {
+        // Pre-v22 releases used this name for a different, derived vector cache. Some upgraded
+        // databases retain it. v30 has no Room-owned memory_vector table, so rebuild only that
+        // cache before introducing the v31 schema. MemoryEntity, memory_bank (including its
+        // embedding column), conversations and messages remain untouched. Room wraps this in
+        // the upgrade transaction, so a later migration failure also rolls this replacement back.
+        db.execSQL("DROP TABLE IF EXISTS memory_vector")
         db.execSQL("""CREATE TABLE IF NOT EXISTS memory_vector (
             namespace TEXT NOT NULL, sliceId TEXT NOT NULL, scope TEXT NOT NULL,
             memoryId INTEGER NOT NULL, revision INTEGER NOT NULL, sourceHash TEXT NOT NULL,
