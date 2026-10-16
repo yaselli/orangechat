@@ -1,19 +1,10 @@
-name: Build Stable or Memory Test APK
+name: Build Stable Release APK
 
 on:
   push:
     branches:
       - build/stable-release
-      - feature/memory-system
   workflow_dispatch:
-    inputs:
-      variant:
-        description: APK type (memory tests use an independent package and data directory)
-        type: choice
-        options:
-          - release
-          - memoryTest
-        default: memoryTest
 
 permissions:
   contents: read
@@ -21,8 +12,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      APK_VARIANT: ${{ github.event_name == 'workflow_dispatch' && inputs.variant || (github.ref_name == 'build/stable-release' && 'release' || 'memoryTest') }}
     steps:
       - uses: actions/checkout@v4
       - name: Download color utilities
@@ -44,7 +33,6 @@ jobs:
           java-version: "17"
           cache: gradle
       - name: Restore release signing
-        if: env.APK_VARIANT == 'release'
         env:
           KEY_BASE64: ${{ secrets.KEY_BASE64 }}
           SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG }}
@@ -56,53 +44,35 @@ jobs:
           umask 077
           printf '%s' "$KEY_BASE64" | base64 --decode > app/app.key
           printf '%s\n' "$SIGNING_CONFIG" > local.properties
-      - name: Restore memory test signing
-        if: env.APK_VARIANT == 'memoryTest'
-        env:
-          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
-        run: |
-          test -n "$ANDROID_DEBUG_KEYSTORE_BASE64" || { echo '::error::Missing ANDROID_DEBUG_KEYSTORE_BASE64'; exit 1; }
-          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > app/debug.keystore
-          keytool -list -keystore app/debug.keystore -storepass android -alias androiddebugkey
-      - name: Test, lint and build chosen variant
+      - name: Test, lint and build release
         run: |
           chmod +x gradlew
-          if [ "$APK_VARIANT" = release ]; then
-            ./gradlew testReleaseUnitTest lintRelease assembleRelease
-          else
-            ./gradlew :app:testMemoryTestUnitTest :app:lintMemoryTest :app:assembleMemoryTest
-          fi
+          ./gradlew testReleaseUnitTest lintRelease assembleRelease
       - name: Verify APK identity and debug flag
         run: |
           AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
           test -n "$AAPT"
           EXPECTED_PACKAGE=me.rerere.orangechat
-          if [ "$APK_VARIANT" = memoryTest ]; then EXPECTED_PACKAGE=me.rerere.orangechat.memorytest; fi
           count=0
-          for apk in app/build/outputs/apk/"$APK_VARIANT"/*.apk; do
+          for apk in app/build/outputs/apk/release/*.apk; do
             test -f "$apk"
             "$AAPT" dump badging "$apk" > "$RUNNER_TEMP/apk-badging.txt"
             grep -q "^package: name='$EXPECTED_PACKAGE' " "$RUNNER_TEMP/apk-badging.txt"
-            if [ "$APK_VARIANT" = release ]; then
-              if grep -q '^application-debuggable' "$RUNNER_TEMP/apk-badging.txt"; then exit 1; fi
-            else
-              grep -q '^application-debuggable' "$RUNNER_TEMP/apk-badging.txt"
-              grep -q "^application-label:'西瓜瓣·记忆测试'" "$RUNNER_TEMP/apk-badging.txt"
-            fi
+            if grep -q '^application-debuggable' "$RUNNER_TEMP/apk-badging.txt"; then exit 1; fi
             count=$((count + 1))
           done
           test "$count" -gt 0
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Xiguaban-${{ env.APK_VARIANT }}
-          path: app/build/outputs/apk/${{ env.APK_VARIANT }}/*.apk
+          name: Xiguaban-release
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
       - name: Upload verification reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: Xiguaban-${{ env.APK_VARIANT }}-reports
+          name: Xiguaban-release-reports
           path: |
             **/build/reports/tests/**
             **/build/test-results/**
