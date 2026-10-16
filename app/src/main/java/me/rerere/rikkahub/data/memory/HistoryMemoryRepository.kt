@@ -64,7 +64,9 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
         val terms = historyQueryTerms(query)
         if (terms.isEmpty()) return emptyList()
         val match = terms.joinToString(" || ' OR ' || ") { "jieba_query(?)" }
-        val args = terms + listOf(scope, boundary.latestTime, boundary.conversationId, boundary.maxNodeIndex)
+        val args: List<Any> = terms + listOf<Any>(
+            scope, boundary.latestTime, boundary.conversationId, boundary.maxNodeIndex,
+        )
         val ids = mutableListOf<String>()
         database.openHelper.writableDatabase.query(
             """SELECT DISTINCT n.id FROM message_fts
@@ -77,7 +79,7 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
                 AND json_extract(n.messages, '$[' || n.select_index || '].createdAt') <= ?
                 AND (n.conversation_id != ? OR n.node_index < ?)
                 ORDER BY rank, n.id LIMIT 80""",
-            args.toTypedArray(),
+            args.toTypedArray<Any>(),
         ).use { while (it.moveToNext()) ids += it.getString(0) }
         return sources(scope, ids).filter(boundary::allows).flatMap { historyMemorySlices(it) }
     }
