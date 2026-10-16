@@ -38,6 +38,12 @@ fun buildMemoryTools(
             - No relevant record: `create` + `content`
             - Existing relevant record: `edit` + `id` + `content`
             - Outdated/irrelevant record: `delete` + `id`
+            For create/edit, write memories from your own perspective as the assistant, not as an outside narrator.
+            In Chinese, refer to yourself as “我” and the user as “她”.
+            Do not use your character name or “用户” as the narrator's subject.
+            “我” in a saved memory means the assistant; do not mistake the user's quoted “我” for yourself.
+            Preserve who did what and the names of other people. Store only supported facts;
+            do not invent experiences or promises to fit this perspective.
             Memories may be retrieved as partial background excerpts in later conversations.
             A recalled excerpt is NOT the full record: read the complete record before editing it.
             Do not store sensitive information (e.g., ethnicity, religion, sexual orientation, political views, sex life, criminal records).
@@ -47,8 +53,8 @@ fun buildMemoryTools(
             Similar memories should be merged; prefer updating existing records.
 
             Examples:
-            {"action":"create","content":"User prefers brief replies and is more active on weekends."}
-            {"action":"edit","id":12,"content":"User’s preferred name updated to “A-Xing”, prefers Chinese replies."}
+            {"action":"create","content":"她喜欢我简短地回复，周末更常来找我聊天。"}
+            {"action":"edit","id":12,"content":"她希望我称呼她为阿星，并用中文回复她。"}
             {"action":"delete","id":7}
         """.trimIndent(),
         parameters = {
@@ -73,7 +79,10 @@ fun buildMemoryTools(
                     })
                     put("content", buildJsonObject {
                         put("type", "string")
-                        put("description", "The content of the memory record (required for create/edit)")
+                        put(
+                            "description",
+                            "Memory content from the assistant's perspective: 我 = assistant, 她 = user (required for create/edit)"
+                        )
                     })
                 },
                 required = listOf("action")
