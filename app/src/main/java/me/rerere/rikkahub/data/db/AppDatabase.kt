@@ -9,8 +9,6 @@ package me.rerere.rikkahub.data.db
 import me.rerere.rikkahub.data.memory.MemoryIndexDAO
 import me.rerere.rikkahub.data.memory.MemoryVectorEntity
 import me.rerere.rikkahub.data.memory.MemoryRecallSnapshotEntity
-import me.rerere.rikkahub.data.interaction.MessageReaction
-import me.rerere.rikkahub.data.interaction.MessageReactionDAO
 import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -51,7 +49,6 @@ import me.rerere.rikkahub.utils.JsonInstant
 @Database(
     entities = [
         ConversationEntity::class,
-        MessageReaction::class,
         MemoryVectorEntity::class,
         MemoryRecallSnapshotEntity::class,
         MemoryEntity::class,
@@ -67,7 +64,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         SshHostEntity::class,
         SecurityAuditEntity::class,
     ],
-    version = 32,
+    version = 31,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -90,8 +87,6 @@ import me.rerere.rikkahub.utils.JsonInstant
 )
 @TypeConverters(TokenUsageConverter::class)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun messageReactionDao(): MessageReactionDAO
-
     abstract fun memoryIndexDao(): MemoryIndexDAO
 
     abstract fun conversationDao(): ConversationDAO

@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -88,25 +87,6 @@ fun TextAvatar(
     }
 }
 
-/** Read-only chat avatars must leave touch handling to their parent's double-tap gesture. */
-@Composable
-private fun AvatarSurface(
-    interactive: Boolean,
-    modifier: Modifier,
-    shape: Shape,
-    onClick: () -> Unit,
-    tonalElevation: androidx.compose.ui.unit.Dp,
-    color: Color,
-    content: @Composable () -> Unit,
-) {
-    if (interactive) Surface(
-        onClick = onClick, modifier = modifier, shape = shape, tonalElevation = tonalElevation,
-        color = color, content = content,
-    ) else Surface(
-        modifier = modifier, shape = shape, tonalElevation = tonalElevation, color = color, content = content,
-    )
-}
-
 @Composable
 fun UIAvatar(
     name: String,
@@ -114,7 +94,6 @@ fun UIAvatar(
     modifier: Modifier = Modifier,
     loading: Boolean = false,
     onUpdate: ((Avatar) -> Unit)? = null,
-    interactive: Boolean = true,
     onClick: (() -> Unit)? = null
 ) {
     val filesManager: FilesManager = koinInject()
@@ -148,10 +127,9 @@ fun UIAvatar(
     }
 
     Box(modifier = modifier.size(32.dp)) {
-        AvatarSurface(
+        Surface(
             shape = rememberAvatarShape(loading),
             modifier = Modifier.fillMaxSize(),
-            interactive = interactive,
             onClick = {
                 onClick?.invoke()
                 if (onUpdate != null) showPickOption = true

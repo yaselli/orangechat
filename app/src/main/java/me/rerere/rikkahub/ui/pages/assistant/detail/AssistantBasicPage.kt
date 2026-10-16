@@ -521,9 +521,7 @@ internal fun AssistantBasicContent(
                 )
             }
         }
-
-        ChatInteractionSettings(assistant, onUpdate)
-
+ 
         Card(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
@@ -578,4 +576,4 @@ internal fun AssistantBasicContent(
         }
     }
 }
-
+ 

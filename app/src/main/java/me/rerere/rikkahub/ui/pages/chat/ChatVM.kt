@@ -43,9 +43,6 @@ import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
-import me.rerere.ai.core.MessageRole
-import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
-import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
@@ -65,30 +62,9 @@ class ChatVM(
     val updateChecker: UpdateChecker,
     private val filesManager: FilesManager,
     private val favoriteRepository: FavoriteRepository,
-    private val chatInteractionRepository: ChatInteractionRepository,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
-    val reactions = chatInteractionRepository.observe(id)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun interactWithAvatar(target: UIMessage) = chatService.sendAvatarInteraction(_conversationId, target)
-
-    fun toggleReaction(message: UIMessage, emoji: String, quote: String) {
-        viewModelScope.launch {
-            try {
-                val assistant = settings.value.getAssistantById(conversation.value.assistantId) ?: return@launch
-                if (!assistant.enableMessageReactions) return@launch
-                chatInteractionRepository.react(_conversationId, assistant, message.id.toString(), "user", emoji,
-                    quote = quote)
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                chatService.addError(error, _conversationId, title = "消息表情")
-            }
-        }
-    }
-
     val blockedChatState = chatService.blockedChatState(_conversationId)
 
     fun setChatBlocked(

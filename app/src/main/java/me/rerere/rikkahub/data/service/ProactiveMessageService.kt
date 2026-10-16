@@ -43,7 +43,6 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.rikkahub.data.ai.buildGenerationRequestParameters
 import me.rerere.rikkahub.data.ai.GenerationScene
-import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import me.rerere.rikkahub.data.memory.MemoryRecallService
 import me.rerere.rikkahub.data.ai.buildGenerationMemoryPrompt
 import me.rerere.rikkahub.data.model.selectCompactedContext
@@ -311,7 +310,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val conversationRepository: ConversationRepository by inject()
     private val memoryRepository: MemoryRepository by inject()
     private val memoryRecallService: MemoryRecallService by inject()
-    private val chatInteractionRepository: ChatInteractionRepository by inject()
     private val providerManager: ProviderManager by inject()
     private val json: Json by inject()
     private val chatService: ChatService by inject()
@@ -1376,13 +1374,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // the local streaming list: doing so can fold this run's assistant into the previous
                 // persisted assistant and transfer ownership back to the old message id.
                 val requestMessages = mergeAdjacentSameRoleMessages(
-                    chatInteractionRepository.decorate(
-                        memoryRecallService.apply(recallTurn, currentMessages), conversationId.toString(), assistant,
-                        sourceMessages = chatService.getConversationFlow(conversationId).value.currentMessages.let { source ->
-                            val requested = currentMessages.mapTo(hashSetOf()) { it.id }
-                            source.take(source.indexOfLast { it.id in requested } + 1)
-                        },
-                    )
+                    memoryRecallService.apply(recallTurn, currentMessages)
                 )
                 // A proactive request may legitimately end with an existing ASSISTANT message. Seed a
                 // fresh assistant placeholder locally so handleMessageChunk cannot append the new
