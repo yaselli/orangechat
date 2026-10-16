@@ -1,0 +1,113 @@
+name: Build Stable or Memory Test APK
+
+on:
+  push:
+    branches:
+      - build/stable-release
+      - feature/memory-system
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: APK type (memory tests use an independent package and data directory)
+        type: choice
+        options:
+          - release
+          - memoryTest
+        default: memoryTest
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      APK_VARIANT: ${{ github.event_name == 'workflow_dispatch' && inputs.variant || (github.ref_name == 'build/stable-release' && 'release' || 'memoryTest') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download color utilities
+        run: git submodule update --init --depth 1 material3/material-color-utilities
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+      - name: Install web dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Restore release signing
+        if: env.APK_VARIANT == 'release'
+        env:
+          KEY_BASE64: ${{ secrets.KEY_BASE64 }}
+          SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG }}
+        run: |
+          if [ -z "$KEY_BASE64" ] || [ -z "$SIGNING_CONFIG" ]; then
+            echo '::error::Release requires KEY_BASE64 and SIGNING_CONFIG secrets (same keys as release.yml). Never use the public debug key for release.'
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$KEY_BASE64" | base64 --decode > app/app.key
+          printf '%s\n' "$SIGNING_CONFIG" > local.properties
+      - name: Restore memory test signing
+        if: env.APK_VARIANT == 'memoryTest'
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_DEBUG_KEYSTORE_BASE64" || { echo '::error::Missing ANDROID_DEBUG_KEYSTORE_BASE64'; exit 1; }
+          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > app/debug.keystore
+          keytool -list -keystore app/debug.keystore -storepass android -alias androiddebugkey
+      - name: Test, lint and build chosen variant
+        run: |
+          chmod +x gradlew
+          if [ "$APK_VARIANT" = release ]; then
+            ./gradlew testReleaseUnitTest lintRelease assembleRelease
+          else
+            ./gradlew :app:testMemoryTestUnitTest :app:lintMemoryTest :app:assembleMemoryTest
+          fi
+      - name: Verify APK identity and debug flag
+        run: |
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
+          test -n "$AAPT"
+          EXPECTED_PACKAGE=me.rerere.orangechat
+          if [ "$APK_VARIANT" = memoryTest ]; then EXPECTED_PACKAGE=me.rerere.orangechat.memorytest; fi
+          count=0
+          for apk in app/build/outputs/apk/"$APK_VARIANT"/*.apk; do
+            test -f "$apk"
+            "$AAPT" dump badging "$apk" > "$RUNNER_TEMP/apk-badging.txt"
+            grep -q "^package: name='$EXPECTED_PACKAGE' " "$RUNNER_TEMP/apk-badging.txt"
+            if [ "$APK_VARIANT" = release ]; then
+              if grep -q '^application-debuggable' "$RUNNER_TEMP/apk-badging.txt"; then exit 1; fi
+            else
+              grep -q '^application-debuggable' "$RUNNER_TEMP/apk-badging.txt"
+              grep -q "^application-label:'西瓜瓣·记忆测试'" "$RUNNER_TEMP/apk-badging.txt"
+            fi
+            count=$((count + 1))
+          done
+          test "$count" -gt 0
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiguaban-${{ env.APK_VARIANT }}
+          path: app/build/outputs/apk/${{ env.APK_VARIANT }}/*.apk
+          if-no-files-found: error
+      - name: Upload verification reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiguaban-${{ env.APK_VARIANT }}-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+            **/build/reports/lint-results*.*
+          if-no-files-found: warn
+      - name: Remove signing files
+        if: always()
+        run: rm -f app/app.key local.properties

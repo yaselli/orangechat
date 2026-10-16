@@ -29,6 +29,7 @@ android {
         versionName = "2.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["appLabel"] = "@string/app_name"
 
     }
 
@@ -114,6 +115,16 @@ android {
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
             buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
             buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
+        }
+        // Separate package/data directory: never overwrite the existing personal debug app.
+        create("memoryTest") {
+            initWith(getByName("debug"))
+            matchingFallbacks.add("debug")
+            applicationIdSuffix = ".memorytest"
+            versionNameSuffix = "-memory-test"
+            isDebuggable = true
+            signingConfig = signingConfigs.getByName("debug")
+            manifestPlaceholders["appLabel"] = "西瓜瓣·记忆测试"
         }
         create("baseline") {
             initWith(getByName("release"))
