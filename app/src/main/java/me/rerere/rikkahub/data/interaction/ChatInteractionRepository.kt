@@ -52,14 +52,7 @@ class ChatInteractionRepository(
         messages: List<UIMessage>, conversationId: String?, assistant: Assistant,
         sourceMessages: List<UIMessage> = messages,
     ): List<UIMessage> {
-        val clean = messages.withoutAssistantInteractionNotices().map { message ->
-            val event = message.avatarInteraction()
-            if (message.role != MessageRole.USER || event == null) message else message.copy(parts = listOf(
-                UIMessagePart.Text("App avatar event initiated by the user; " +
-                    "actor=${event.actor}, target=${event.target}. " +
-                    message.parts.filterIsInstance<UIMessagePart.Text>().joinToString(" ") { it.text })
-            ))
-        }
+        val clean = messages.withoutAssistantInteractionNotices().map { it.forInteractionRequest() }
         if (conversationId == null || !assistant.enableMessageReactions) return clean
         val reactions = dao.list(conversationId)
         val visible = sourceMessages.associateBy { it.id.toString() }

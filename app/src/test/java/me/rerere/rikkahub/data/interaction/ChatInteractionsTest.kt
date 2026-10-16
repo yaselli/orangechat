@@ -5,6 +5,8 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.transformers.extraInfoMessagePart
+import me.rerere.rikkahub.data.ai.transformers.isExtraInfoInjectionPart
 import me.rerere.rikkahub.data.model.Assistant
 import org.junit.Assert.*
 import org.junit.Test
@@ -65,6 +67,38 @@ class ChatInteractionsTest {
             resolveReactionTarget(listOf(visible, hidden), assistant, "by_quote", "牛奶")
             fail("Ambiguous quote")
         } catch (_: IllegalArgumentException) { }
+    }
+
+    @Test
+    fun `avatar display hides app background but retains the action and ordinary literal text`() {
+        val action = "你揉了揉沈渡的脸，并亲了一口"
+        val background = extraInfoMessagePart("<extra_info_context>private time</extra_info_context>")
+        val notice = UIMessage.user(action).copy(
+            parts = listOf(UIMessagePart.Text(action), background),
+            annotations = listOf(UIMessageAnnotation.AvatarInteraction("user", "assistant")),
+        )
+        assertEquals(action, notice.avatarInteractionText())
+        assertEquals(2, notice.parts.size)
+        assertTrue(notice.parts.last().isExtraInfoInjectionPart())
+        val literal = "后缀里的 <extra_info_context> 普通文字"
+        assertEquals(literal, UIMessage.user(literal).avatarInteractionText())
+    }
+
+    @Test
+    fun `provider decoration preserves background metadata and never mutates the stored notice`() {
+        val background = extraInfoMessagePart("<extra_info_context>current time</extra_info_context>")
+        val notice = UIMessage.user("你拍了拍AI").copy(
+            parts = listOf(UIMessagePart.Text("你拍了拍AI"), background),
+            annotations = listOf(UIMessageAnnotation.AvatarInteraction("user", "assistant")),
+        )
+        val request = notice.forInteractionRequest()
+        assertTrue((request.parts.first() as UIMessagePart.Text).text.contains("actor=user, target=assistant"))
+        assertEquals(background, request.parts.last())
+        assertTrue(request.parts.last().isExtraInfoInjectionPart())
+        assertFalse(request.avatarInteractionText().contains("current time"))
+        assertEquals("你拍了拍AI", notice.avatarInteractionText())
+        val ordinary = UIMessage.user("普通聊天")
+        assertEquals(ordinary, ordinary.forInteractionRequest())
     }
 
 }

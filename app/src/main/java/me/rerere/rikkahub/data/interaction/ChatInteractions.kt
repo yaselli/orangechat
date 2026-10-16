@@ -13,6 +13,22 @@ val CHAT_REACTION_EMOJIS = listOf("❤️", "👍", "👎", "😂", "🥰", "�
 fun UIMessage.avatarInteraction(): UIMessageAnnotation.AvatarInteraction? =
     annotations.filterIsInstance<UIMessageAnnotation.AvatarInteraction>().firstOrNull()
 
+/** Match ordinary bubble visibility: request-only background is never part of an avatar notice. */
+fun UIMessage.avatarInteractionText(): String = parts.filterIsInstance<UIMessagePart.Text>()
+    .filterNot { it.isExtraInfoInjectionPart() }.joinToString(" ") { it.text }
+
+/** Preserve part metadata and attachments in the provider copy; never flatten hidden background into text. */
+internal fun UIMessage.forInteractionRequest(): UIMessage {
+    val event = avatarInteraction() ?: return this
+    if (role != MessageRole.USER) return this
+    val firstText = parts.indexOfFirst { it is UIMessagePart.Text && !it.isExtraInfoInjectionPart() }
+    return copy(parts = parts.mapIndexed { index, part ->
+        if (index != firstText || part !is UIMessagePart.Text) part else part.copy(
+            text = "App avatar event initiated by the user; actor=${event.actor}, target=${event.target}. " + part.text,
+        )
+    })
+}
+
 /** AI-created notices are display events, never new system instructions for the provider. */
 fun List<UIMessage>.withoutAssistantInteractionNotices(): List<UIMessage> = filterNot {
     it.role == MessageRole.SYSTEM && it.avatarInteraction() != null

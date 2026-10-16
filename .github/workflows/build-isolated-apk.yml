@@ -49,6 +49,8 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew testDebugUnitTest
+      - name: Compile interaction device tests
+        run: ./gradlew compileDebugAndroidTestKotlin
       - name: Verify interaction migration
         run: python3 scripts/verify-chat-interactions.py
       - name: Release lint

@@ -25,7 +25,6 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -256,10 +255,25 @@ fun ChatMessageActionsSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (onReact != null) TextButton(onClick = {
-                onDismissRequest()
-                onReact()
-            }) { Text("贴表情") }
+            if (onReact != null) {
+                Card(
+                    onClick = {
+                        onDismissRequest()
+                        onReact()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Text("☺", modifier = Modifier.padding(4.dp), style = MaterialTheme.typography.headlineSmall)
+                        Text("贴表情", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
 
             // Select and Copy
             Card(

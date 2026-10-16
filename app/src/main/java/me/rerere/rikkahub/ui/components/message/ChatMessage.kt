@@ -123,6 +123,7 @@ import me.rerere.rikkahub.data.datastore.ChatFontFamily
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.layout.ContentScale
 import me.rerere.rikkahub.data.interaction.reactionSegments
+import me.rerere.rikkahub.data.interaction.avatarInteractionText
 import me.rerere.rikkahub.data.interaction.avatarInteraction
 import me.rerere.rikkahub.data.interaction.MessageReaction
 import androidx.compose.foundation.Image
@@ -163,7 +164,7 @@ fun ChatMessage(
     val message = node.messages[node.selectIndex]
     if (message.avatarInteraction() != null) {
         Text(
-            text = message.parts.filterIsInstance<UIMessagePart.Text>().joinToString(" ") { it.text },
+            text = message.avatarInteractionText(),
             modifier = modifier.fillMaxWidth().padding(vertical = 6.dp),
             textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
