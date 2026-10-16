@@ -26,7 +26,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
+import me.rerere.rikkahub.data.backup.AutoBackupStore
+import me.rerere.rikkahub.data.backup.AutoBackupScheduler
 import me.rerere.common.android.appTempFolder
 import com.whl.quickjs.android.QuickJSLoader
 import me.rerere.rikkahub.di.appModule
@@ -122,6 +126,16 @@ class RikkaHubApp : Application() {
 
         // Reschedule daily_cron alarm if plugins need it
         rescheduleDailyCronIfEnabled()
+
+        get<AppScope>().launch {
+            val backupStore = get<AutoBackupStore>()
+            var initial = true
+            backupStore.states.map { it.config }.distinctUntilChanged().collect { config ->
+                runCatching { get<AutoBackupScheduler>().schedule(config, changed = !initial) }
+                    .onFailure { Log.e(TAG, "Unable to schedule local backup", it) }
+                initial = false
+            }
+        }
 
         // Increment launch count
         incrementLaunchCount()

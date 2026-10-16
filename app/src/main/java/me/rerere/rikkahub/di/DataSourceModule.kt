@@ -9,6 +9,10 @@ package me.rerere.rikkahub.di
 import me.rerere.rikkahub.data.db.migrations.Migration_29_32_ChatInteractions
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import androidx.room.Room
+import me.rerere.rikkahub.data.backup.AutoBackupStore
+import me.rerere.rikkahub.data.backup.AutoBackupService
+import me.rerere.rikkahub.data.backup.AutoBackupScheduler
+import me.rerere.rikkahub.data.backup.SafBackupFolder
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
@@ -59,6 +63,11 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 val dataSourceModule = module {
+    single { AutoBackupStore(get()) }
+    single { SafBackupFolder(get()) }
+    single { AutoBackupScheduler(get()) }
+    single { AutoBackupService(get(), get(), get()) }
+
     single {
         SettingsStore(context = get(), scope = get())
     }
@@ -268,7 +277,8 @@ val dataSourceModule = module {
             json = get(),
             context = get(),
             httpClient = get(),
-            pluginRepository = get()
+            pluginRepository = get(),
+            database = get()
         )
     }
 
