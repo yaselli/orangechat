@@ -36,6 +36,25 @@ interface MemoryDAO {
     @Update
     suspend fun updateMemory(memory: MemoryEntity)
 
+    @Query("""
+        UPDATE memoryentity SET content = :content, revision = revision + 1, updated_at = :updatedAt,
+        source_kind = :sourceKind, source_conversation_id = :conversationId, source_message_id = :messageId
+        WHERE id = :id AND assistant_id = :assistantId AND revision = :expectedRevision
+    """)
+    suspend fun updateContentIfCurrent(
+        id: Int,
+        assistantId: String,
+        expectedRevision: Long,
+        content: String,
+        updatedAt: Long,
+        sourceKind: String,
+        conversationId: String,
+        messageId: String,
+    ): Int
+
+    @Query("DELETE FROM memoryentity WHERE id = :id AND assistant_id = :assistantId")
+    suspend fun deleteMemoryInScope(id: Int, assistantId: String): Int
+
     @Query("DELETE FROM memoryentity WHERE id = :id")
     suspend fun deleteMemory(id: Int)
 

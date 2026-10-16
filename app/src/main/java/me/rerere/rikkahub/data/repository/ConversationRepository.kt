@@ -30,6 +30,7 @@ import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ContextCompaction
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
@@ -255,6 +256,19 @@ class ConversationRepository(
         return conversationDAO.updateSuggestions(id.toString(), JsonInstant.encodeToString(suggestions)) > 0
     }
 
+    /** Recheck persisted history inside the transaction; never rewrite nodes or resurrect deleted chats. */
+    suspend fun updateCompaction(
+        id: Uuid,
+        previous: ContextCompaction?,
+        value: ContextCompaction,
+    ): Boolean = database.withTransaction {
+        val current = getConversationById(id) ?: return@withTransaction false
+        if (current.contextCompaction != previous || !value.matches(current.currentMessages)) {
+            return@withTransaction false
+        }
+        conversationDAO.updateCompaction(id.toString(), JsonInstant.encodeToString(value)) > 0
+    }
+
     suspend fun insertConversation(conversation: Conversation) {
         try {
             database.withTransaction {
@@ -288,7 +302,11 @@ class ConversationRepository(
         try {
             database.withTransaction {
                 conversationDAO.update(
-                    conversationToConversationEntity(conversation)
+                    conversationToConversationEntity(conversation).copy(
+                        // Only updateCompaction owns this column. An older streaming snapshot must not erase it.
+                        contextCompaction = conversationDAO.getConversationById(conversation.id.toString())
+                            ?.contextCompaction.orEmpty(),
+                    )
                 )
 
                 // 只查 id，不碰 messages 列，避免因个别行 blob 过大导致这里直接抛异常
@@ -416,6 +434,7 @@ class ConversationRepository(
             isPinned = conversation.isPinned,
             customSystemPrompt = conversation.customSystemPrompt ?: "",
             folderId = conversation.folderId?.toString() ?: "",
+            contextCompaction = conversation.contextCompaction?.let { JsonInstant.encodeToString(it) }.orEmpty(),
         )
     }
 
@@ -434,6 +453,8 @@ class ConversationRepository(
             isPinned = conversationEntity.isPinned,
             customSystemPrompt = conversationEntity.customSystemPrompt.ifEmpty { null },
             folderId = conversationEntity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
+            contextCompaction = conversationEntity.contextCompaction.takeIf { it.isNotBlank() }
+                ?.let { JsonInstant.decodeFromString<ContextCompaction>(it) },
         )
     }
 

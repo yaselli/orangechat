@@ -44,6 +44,8 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.rikkahub.data.ai.buildGenerationRequestParameters
 import me.rerere.rikkahub.data.ai.GenerationScene
 import me.rerere.rikkahub.data.ai.buildGenerationMemoryPrompt
+import me.rerere.rikkahub.data.model.selectCompactedContext
+import me.rerere.rikkahub.data.ai.contextSummaryMessage
 import me.rerere.rikkahub.data.ai.selectGenerationHistory
 import me.rerere.rikkahub.data.ai.selectGenerationSystemPrompt
 import me.rerere.ai.ui.UIMessage
@@ -549,8 +551,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     "idleIncluded=true currentTimeIncluded=${settings.systemToolsSetting.timeContextInjectionEnabled}",
                 )
 
+                val compacted = selectCompactedContext(
+                    conversation?.currentMessages.orEmpty(), conversation?.contextCompaction
+                )
                 val rawHistoryMessages = selectGenerationHistory(
-                    conversation?.currentMessages.orEmpty(),
+                    compacted.messages,
                     assistant.contextMessageSize,
                     GenerationScene.PROACTIVE,
                 )
@@ -656,6 +661,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             role = MessageRole.SYSTEM,
                             parts = listOf(UIMessagePart.Text(systemPrompt))
                         ))
+                        compacted.summary?.let { add(contextSummaryMessage(it)) }
                         addAll(historyMessages)
                     }
                 )

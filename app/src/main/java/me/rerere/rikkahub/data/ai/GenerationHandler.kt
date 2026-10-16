@@ -48,6 +48,9 @@ import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.MemorySource
+import me.rerere.rikkahub.data.model.ContextCompaction
+import me.rerere.rikkahub.data.model.selectCompactedContext
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -91,6 +94,7 @@ class GenerationHandler(
         tools: List<Tool> = emptyList(),
         maxSteps: Int = 256,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        contextCompaction: ContextCompaction? = null,
         conversationSystemPrompt: String? = null,
         workspaceCwd: String? = null,
         pluginPromptInjections: List<String> = emptyList(),
@@ -115,16 +119,21 @@ class GenerationHandler(
                         } else {
                             assistant.id.toString()
                         }
+                        val memorySource = MemorySource(
+                            kind = "tool",
+                            conversationId = conversationId.orEmpty(),
+                            messageId = messages.lastOrNull { it.role == MessageRole.USER }?.id?.toString().orEmpty(),
+                        )
                         buildMemoryTools(
                             json = json,
                             onCreation = { content ->
-                                memoryRepo.addMemory(memoryAssistantId, content)
+                                memoryRepo.addMemory(memoryAssistantId, content, memorySource)
                             },
                             onUpdate = { id, content ->
-                                memoryRepo.updateContent(id, content)
+                                memoryRepo.updateContent(id, content, memorySource, memoryAssistantId)
                             },
                             onDelete = { id ->
-                                memoryRepo.deleteMemory(id)
+                                memoryRepo.deleteMemory(id, memoryAssistantId)
                             }
                         ).let(this::addAll)
                     }
@@ -168,6 +177,7 @@ class GenerationHandler(
                     memories = memories ?: emptyList(),
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
+                    contextCompaction = contextCompaction,
                     conversationSystemPrompt = conversationSystemPrompt,
                     workspaceCwd = workspaceCwd,
                 )
@@ -232,6 +242,7 @@ class GenerationHandler(
         memories: List<AssistantMemory>,
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        contextCompaction: ContextCompaction? = null,
         conversationSystemPrompt: String? = null,
         workspaceCwd: String? = null,
     ) {
@@ -304,7 +315,9 @@ class GenerationHandler(
  
             }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(selectGenerationHistory(messages, assistant.contextMessageSize, GenerationScene.CHAT))
+            val compacted = selectCompactedContext(messages, contextCompaction)
+            compacted.summary?.let { add(contextSummaryMessage(it)) }
+            addAll(selectGenerationHistory(compacted.messages, assistant.contextMessageSize, GenerationScene.CHAT))
         }.transforms(
             transformers = transformers,
             context = context,
