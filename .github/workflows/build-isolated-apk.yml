@@ -1,0 +1,87 @@
+name: Build Stable Release APK
+
+on:
+  push:
+    branches:
+      - build/stable-release
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download color utilities
+        run: git submodule update --init --depth 1 material3/material-color-utilities
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+      - name: Install web dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Restore release signing
+        env:
+          KEY_BASE64: ${{ secrets.KEY_BASE64 }}
+          SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG }}
+        run: |
+          if [ -z "$KEY_BASE64" ] || [ -z "$SIGNING_CONFIG" ]; then
+            echo '::error::Release requires KEY_BASE64 and SIGNING_CONFIG secrets (same keys as release.yml). Never use the public debug key for release.'
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$KEY_BASE64" | base64 --decode > app/app.key
+          printf '%s\n' "$SIGNING_CONFIG" > local.properties
+      - name: Unit tests
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest
+      - name: Release lint
+        run: ./gradlew lintRelease
+      - name: Build signed release APK
+        run: ./gradlew assembleRelease
+      - name: Verify APK identity and debug flag
+        run: |
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
+          test -n "$AAPT"
+          EXPECTED_PACKAGE=me.rerere.orangechat
+          count=0
+          for apk in app/build/outputs/apk/release/*.apk; do
+            test -f "$apk"
+            "$AAPT" dump badging "$apk" > "$RUNNER_TEMP/apk-badging.txt"
+            grep -q "^package: name='$EXPECTED_PACKAGE' " "$RUNNER_TEMP/apk-badging.txt"
+            if grep -q '^application-debuggable' "$RUNNER_TEMP/apk-badging.txt"; then exit 1; fi
+            count=$((count + 1))
+          done
+          test "$count" -gt 0
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiguaban-release
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+      - name: Upload verification reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiguaban-release-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+            **/build/reports/lint-results*.*
+          if-no-files-found: warn
+      - name: Remove signing files
+        if: always()
+        run: rm -f app/app.key local.properties
