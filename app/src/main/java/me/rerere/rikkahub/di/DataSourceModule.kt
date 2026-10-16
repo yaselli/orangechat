@@ -6,7 +6,13 @@
 
 package me.rerere.rikkahub.di
 
+import me.rerere.rikkahub.data.db.migrations.Migration_29_32_ChatInteractions
+import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import androidx.room.Room
+import me.rerere.rikkahub.data.backup.AutoBackupStore
+import me.rerere.rikkahub.data.backup.AutoBackupService
+import me.rerere.rikkahub.data.backup.AutoBackupScheduler
+import me.rerere.rikkahub.data.backup.SafBackupFolder
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
@@ -57,6 +63,11 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 val dataSourceModule = module {
+    single { AutoBackupStore(get()) }
+    single { SafBackupFolder(get()) }
+    single { AutoBackupScheduler(get()) }
+    single { AutoBackupService(get(), get(), get()) }
+
     single {
         SettingsStore(context = get(), scope = get())
     }
@@ -65,7 +76,7 @@ val dataSourceModule = module {
         val context: Context = get()
         Room.databaseBuilder(context, AppDatabase::class.java, "rikka_hub")
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16, Migration_19_20, Migration_20_21, Migration_21_22, Migration_23_24, Migration_24_25, Migration_25_26)
+            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16, Migration_19_20, Migration_20_21, Migration_21_22, Migration_23_24, Migration_24_25, Migration_25_26, Migration_29_32_ChatInteractions)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     val dictDir = SimpleDictManager.extractDict(context)
@@ -177,6 +188,8 @@ val dataSourceModule = module {
         )
     }
 
+    single { ChatInteractionRepository(get(), get()) }
+
     single {
         GenerationHandler(
             context = get(),
@@ -185,7 +198,8 @@ val dataSourceModule = module {
             memoryRepo = get(),
             conversationRepo = get(),
             aiLoggingManager = get(),
-            memoryBankService = get()
+            memoryBankService = get(),
+            chatInteractionRepository = get()
         )
     }
 
@@ -263,7 +277,8 @@ val dataSourceModule = module {
             json = get(),
             context = get(),
             httpClient = get(),
-            pluginRepository = get()
+            pluginRepository = get(),
+            database = get()
         )
     }
 

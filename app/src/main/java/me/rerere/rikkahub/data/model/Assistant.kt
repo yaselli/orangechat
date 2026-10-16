@@ -29,6 +29,12 @@ data class Assistant(
     val topP: Float? = null,
     val contextMessageSize: Int = 0,
     val streamOutput: Boolean = true,
+    val enableAvatarInteractions: Boolean = true,
+    val enableMessageReactions: Boolean = true,
+    val userInteractionAction: String = "拍了拍",
+    val userInteractionSuffix: String = "",
+    val assistantInteractionAction: String = "拍了拍",
+    val assistantInteractionSuffix: String = "",
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val enableRecentChatsReference: Boolean = false,
