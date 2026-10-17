@@ -30,6 +30,13 @@ data class Assistant(
     val contextMessageSize: Int = 0,
     val streamOutput: Boolean = true,
     val enableMemory: Boolean = false,
+    val memoryRecallEnabled: Boolean = false,
+    val memoryHistoryRecallEnabled: Boolean = false,
+    val memoryEmbeddingModelId: Uuid? = null,
+    val memoryAutoOrganizeEnabled: Boolean = false,
+    val memoryOrganizationModelId: Uuid? = null,
+    val memoryOrganizationInterval: Int = 10,
+    val memoryOrganizationSinceMillis: Long = 0,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val enableRecentChatsReference: Boolean = false,
     val messageTemplate: String = "{{ message }}",
@@ -67,6 +74,8 @@ data class QuickMessage(
 data class AssistantMemory(
     val id: Int,
     val content: String = "",
+    @kotlinx.serialization.Transient
+    val hasOriginalEvidence: Boolean = false,
 )
  
 @Serializable

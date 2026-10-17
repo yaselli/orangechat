@@ -42,9 +42,9 @@ fun CompressContextDialog(
     onConfirm: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job
 ) {
     var additionalPrompt by remember { mutableStateOf("") }
-    var selectedTokens by remember { mutableIntStateOf(2000) }
+    var selectedTokens by remember { mutableIntStateOf(1500) }
     var keepRecentMessages by remember { mutableIntStateOf(32) }
-    val tokenOptions = listOf(500, 1000, 2000, 4000)
+    val tokenOptions = listOf(500, 1000, 1500, 3000)
     val keepRecentOptions = listOf(0, 16, 32, 64)
     var currentJob by remember { mutableStateOf<Job?>(null) }
     val isLoading = currentJob?.isActive == true
@@ -149,7 +149,7 @@ fun CompressContextDialog(
                     Text(
                         text = stringResource(R.string.chat_page_compress_warning),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

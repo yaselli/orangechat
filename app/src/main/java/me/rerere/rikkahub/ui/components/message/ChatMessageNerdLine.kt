@@ -122,6 +122,9 @@ fun ChatMessageNerdLine(
                         )
                     }
                 }
+                if (settings.showMemoryRecallReferences) {
+                    MemoryRecallReferenceButton(message)
+                }
             }
         }
     }

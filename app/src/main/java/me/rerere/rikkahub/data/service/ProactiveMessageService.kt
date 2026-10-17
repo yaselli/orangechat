@@ -43,7 +43,10 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.rikkahub.data.ai.buildGenerationRequestParameters
 import me.rerere.rikkahub.data.ai.GenerationScene
+import me.rerere.rikkahub.data.memory.MemoryRecallService
 import me.rerere.rikkahub.data.ai.buildGenerationMemoryPrompt
+import me.rerere.rikkahub.data.model.selectCompactedContext
+import me.rerere.rikkahub.data.ai.contextSummaryMessage
 import me.rerere.rikkahub.data.ai.selectGenerationHistory
 import me.rerere.rikkahub.data.ai.selectGenerationSystemPrompt
 import me.rerere.ai.ui.UIMessage
@@ -306,6 +309,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val settingsStore: SettingsStore by inject()
     private val conversationRepository: ConversationRepository by inject()
     private val memoryRepository: MemoryRepository by inject()
+    private val memoryRecallService: MemoryRecallService by inject()
     private val providerManager: ProviderManager by inject()
     private val json: Json by inject()
     private val chatService: ChatService by inject()
@@ -549,8 +553,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     "idleIncluded=true currentTimeIncluded=${settings.systemToolsSetting.timeContextInjectionEnabled}",
                 )
 
+                val compacted = selectCompactedContext(
+                    conversation?.currentMessages.orEmpty(), conversation?.contextCompaction
+                )
                 val rawHistoryMessages = selectGenerationHistory(
-                    conversation?.currentMessages.orEmpty(),
+                    compacted.messages,
                     assistant.contextMessageSize,
                     GenerationScene.PROACTIVE,
                 )
@@ -656,6 +663,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             role = MessageRole.SYSTEM,
                             parts = listOf(UIMessagePart.Text(systemPrompt))
                         ))
+                        compacted.summary?.let { add(contextSummaryMessage(it)) }
                         addAll(historyMessages)
                     }
                 )
@@ -1035,7 +1043,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             }
 
             // 记忆（设备事件上下文移到最后面，避免被网关注入的内容淹没）
-            if (assistant.enableMemory) {
+            if (assistant.enableMemory && !assistant.memoryRecallEnabled) {
                 val memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
@@ -1345,6 +1353,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         runAssistantMessageIds: MutableSet<Uuid>,
         protectedMessageIds: Set<Uuid>,
     ): Triple<List<UIMessage>, Boolean, Boolean> {
+        val recallTurn = memoryRecallService.prepare(
+            assistant, settings, conversationId.toString(), initialMessages,
+        )
         var hasToolCalls = false
         var hasJumpFlag = false
         val messages = runGenerationToolLoop(
@@ -1362,7 +1373,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // The provider-only copy may merge adjacent roles for API compatibility. Never merge
                 // the local streaming list: doing so can fold this run's assistant into the previous
                 // persisted assistant and transfer ownership back to the old message id.
-                val requestMessages = mergeAdjacentSameRoleMessages(currentMessages)
+                val requestMessages = mergeAdjacentSameRoleMessages(
+                    memoryRecallService.apply(recallTurn, currentMessages)
+                )
                 // A proactive request may legitimately end with an existing ASSISTANT message. Seed a
                 // fresh assistant placeholder locally so handleMessageChunk cannot append the new
                 // stream to that old message and reuse its id. Do not send the placeholder upstream.
@@ -1388,7 +1401,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         // 用 id 匹配就地更新（保留 node id，避免思考链闪烁 / 覆盖上一条 assistant）
                         updateOrAppendAiMessage(
                             conversationId,
-                            currentAiMessage,
+                            recallTurn.annotate(currentAiMessage),
                             trace,
                             runAssistantMessageIds,
                             protectedMessageIds,
@@ -1411,13 +1424,13 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     Log.d(TAG, "[JUMP] flag detected in raw AI output")
                 }
                 // 应用输出转换器
-                val processedMessage = listOf(aiMessage).transforms(
+                val processedMessage = recallTurn.annotate(listOf(aiMessage).transforms(
                     transformers = outputTransformers,
                     context = this@ProactiveMessageTriggerService,
                     model = model,
                     assistant = assistant,
                     settings = settings
-                ).first()
+                ).first())
                 turnMessages[turnMessages.lastIndex] = processedMessage
 
                 // 检查是否有工具调用

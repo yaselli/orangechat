@@ -48,6 +48,11 @@ import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.memory.MemoryRecallService
+import me.rerere.rikkahub.data.memory.MemoryRecallTurn
+import me.rerere.rikkahub.data.model.MemorySource
+import me.rerere.rikkahub.data.model.ContextCompaction
+import me.rerere.rikkahub.data.model.selectCompactedContext
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -79,6 +84,7 @@ class GenerationHandler(
     private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
     private val memoryBankService: MemoryBankService,
+    private val memoryRecallService: MemoryRecallService,
 ) {
     fun generateText(
         settings: Settings,
@@ -91,6 +97,7 @@ class GenerationHandler(
         tools: List<Tool> = emptyList(),
         maxSteps: Int = 256,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        contextCompaction: ContextCompaction? = null,
         conversationSystemPrompt: String? = null,
         workspaceCwd: String? = null,
         pluginPromptInjections: List<String> = emptyList(),
@@ -99,6 +106,13 @@ class GenerationHandler(
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
  
+        val recallHistory = selectCompactedContext(messages, contextCompaction).messages
+        val recallTurn = memoryRecallService.prepare(
+            assistant, settings, conversationId,
+            selectGenerationHistory(recallHistory, assistant.contextMessageSize, GenerationScene.CHAT),
+        )
+
+        val originalMessageIds = messages.mapTo(hashSetOf()) { it.id }
         runGenerationToolLoop(
             initialMessages = messages,
             maxSteps = maxSteps,
@@ -115,16 +129,22 @@ class GenerationHandler(
                         } else {
                             assistant.id.toString()
                         }
+                        val memorySource = MemorySource(
+                            kind = "tool",
+                            conversationId = conversationId.orEmpty(),
+                            messageId = messages.lastOrNull { it.role == MessageRole.USER }?.id?.toString().orEmpty(),
+                        )
                         buildMemoryTools(
                             json = json,
                             onCreation = { content ->
-                                memoryRepo.addMemory(memoryAssistantId, content)
+                                memoryRepo.addMemory(memoryAssistantId, content, memorySource)
                             },
                             onUpdate = { id, content ->
-                                memoryRepo.updateContent(id, content)
+                                memoryRepo.updateContent(id, content, memorySource, memoryAssistantId)
                             },
+                            onRead = { id -> memoryRepo.getMemoryInScope(id, memoryAssistantId) },
                             onDelete = { id ->
-                                memoryRepo.deleteMemory(id)
+                                memoryRepo.deleteMemory(id, memoryAssistantId)
                             }
                         ).let(this::addAll)
                     }
@@ -140,8 +160,13 @@ class GenerationHandler(
                     settings = settings,
                     messages = turnMessages,
                     pluginPromptInjections = pluginPromptInjections,
-                    onUpdateMessages = {
-                        turnMessages = it.transforms(
+                    onUpdateMessages = { updated ->
+                        val recorded = updated.mapIndexed { index, message ->
+                            if (index == updated.lastIndex && message.id !in originalMessageIds) {
+                                recallTurn.annotate(message)
+                            } else message
+                        }
+                        turnMessages = recorded.transforms(
                             transformers = outputTransformers,
                             context = context,
                             model = model,
@@ -166,8 +191,10 @@ class GenerationHandler(
                     provider = provider,
                     tools = toolsInternal,
                     memories = memories ?: emptyList(),
+                    recallTurn = recallTurn,
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
+                    contextCompaction = contextCompaction,
                     conversationSystemPrompt = conversationSystemPrompt,
                     workspaceCwd = workspaceCwd,
                 )
@@ -185,7 +212,9 @@ class GenerationHandler(
                     assistant = assistant,
                     settings = settings
                 )
-                turnMessages = turnMessages.slice(0 until turnMessages.lastIndex) + turnMessages.last().copy(
+                val lastReply = turnMessages.last()
+                val recordedReply = if (lastReply.id !in originalMessageIds) recallTurn.annotate(lastReply) else lastReply
+                turnMessages = turnMessages.slice(0 until turnMessages.lastIndex) + recordedReply.copy(
                     finishedAt = Clock.System.now()
                         .toLocalDateTime(TimeZone.currentSystemDefault())
                 )
@@ -230,12 +259,14 @@ class GenerationHandler(
         provider: ProviderSetting,
         tools: List<Tool>,
         memories: List<AssistantMemory>,
+        recallTurn: MemoryRecallTurn,
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        contextCompaction: ContextCompaction? = null,
         conversationSystemPrompt: String? = null,
         workspaceCwd: String? = null,
     ) {
-        val internalMessages = buildList {
+        val baseMessages = buildList {
             val system = buildString {
                 val effectiveSystemPrompt = selectGenerationSystemPrompt(
                     assistant, GenerationScene.CHAT, conversationSystemPrompt
@@ -245,7 +276,9 @@ class GenerationHandler(
                 }
  
                 // 记忆
-                append(buildGenerationMemoryPrompt(assistant.enableMemory, memories, GenerationScene.CHAT))
+                append(buildGenerationMemoryPrompt(
+                    assistant.enableMemory && !assistant.memoryRecallEnabled, memories, GenerationScene.CHAT
+                ))
  
                 if (assistant.enableRecentChatsReference) {
                     appendLine()
@@ -304,7 +337,9 @@ class GenerationHandler(
  
             }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(selectGenerationHistory(messages, assistant.contextMessageSize, GenerationScene.CHAT))
+            val compacted = selectCompactedContext(messages, contextCompaction)
+            compacted.summary?.let { add(contextSummaryMessage(it)) }
+            addAll(selectGenerationHistory(compacted.messages, assistant.contextMessageSize, GenerationScene.CHAT))
         }.transforms(
             transformers = transformers,
             context = context,
@@ -315,6 +350,8 @@ class GenerationHandler(
             workspaceCwd = workspaceCwd,
         )
  
+        val internalMessages = memoryRecallService.apply(recallTurn, baseMessages)
+
         val params = buildGenerationRequestParameters(assistant, model, tools)
         aiLoggingManager.addLog(
             AILogging.Generation(

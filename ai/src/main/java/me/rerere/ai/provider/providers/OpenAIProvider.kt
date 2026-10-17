@@ -26,6 +26,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.openai.parseEmbeddingVectors
 import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.ui.ImageAspectRatio
@@ -189,11 +190,7 @@ class OpenAIProvider(
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
         val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: params.model.modelId
 
-        val embeddings = data.map { embeddingJson ->
-            val embeddingArray = embeddingJson.jsonObject["embedding"]?.jsonArray
-                ?: error("No embedding in response")
-            embeddingArray.map { it.jsonPrimitive.content.toFloat() }
-        }
+        val embeddings = parseEmbeddingVectors(data, params.input.size)
 
         EmbeddingGenerationResult(
             model = model,
