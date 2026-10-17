@@ -21,7 +21,7 @@ class Migration_31_33_HistoryMemory_Test {
 
     @Test
     fun migrationPreservesSourcesAndCascadesDerivedVectors() {
-        val name = "history-memory-31-33"
+        val name = "history-memory-31-34"
         helper.createDatabase(name, 31).apply {
             execSQL("INSERT INTO ConversationEntity(id,title,nodes,create_at,update_at) " +
                 "VALUES('chat','title','[]',1,2)")
@@ -31,7 +31,7 @@ class Migration_31_33_HistoryMemory_Test {
             execSQL("INSERT INTO memory_recall_snapshot VALUES('key','chat','assistant','user','hash','[]',1)")
             close()
         }
-        val db = helper.runMigrationsAndValidate(name, 33, true, Migration_31_33_HistoryMemory)
+        val db = helper.runMigrationsAndValidate(name, 34, true, Migration_31_33_HistoryMemory, Migration_33_34)
         try {
             db.query("SELECT messages FROM message_node").use {
                 assertTrue(it.moveToFirst())

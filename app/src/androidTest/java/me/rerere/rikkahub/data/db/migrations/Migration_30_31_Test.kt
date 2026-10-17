@@ -54,7 +54,7 @@ class Migration_30_31_Test {
 
     @Test
     fun retainedLegacyVectorTableUpgradesToCurrentVersionWithoutChangingSources() {
-        val name = "memory-legacy-vector-30-33-test"
+        val name = "memory-legacy-vector-30-34-test"
         helper.createDatabase(name, 30).apply {
             execSQL("INSERT INTO ConversationEntity(id,title,nodes,create_at,update_at,context_compaction) " +
                 "VALUES('chat','title','[]',1,2,'saved-summary')")
@@ -70,7 +70,7 @@ class Migration_30_31_Test {
             execSQL("CREATE INDEX index_memory_vector_memoryId ON memory_vector(memory_id)")
             close()
         }
-        val db = helper.runMigrationsAndValidate(name, 33, true, Migration_30_31, Migration_31_33_HistoryMemory)
+        val db = helper.runMigrationsAndValidate(name, 34, true, Migration_30_31, Migration_31_33_HistoryMemory, Migration_33_34)
         try {
             db.query("SELECT content FROM MemoryEntity WHERE id=7").use { cursor ->
                 assertTrue(cursor.moveToFirst())

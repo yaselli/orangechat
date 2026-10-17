@@ -276,6 +276,7 @@ private fun AssistantMemoryContent(
         }
 
         MemoryRecallSettings(assistant, settings, onUpdateAssistant)
+        MemoryOrganizationSettings(assistant, settings, onUpdateAssistant)
 
         Box(
             modifier = Modifier
@@ -307,6 +308,7 @@ private fun AssistantMemoryContent(
             key(memory.id) {
                 MemoryItem(
                     memory = memory,
+                    assistant = assistant,
                     onEditMemory = {
                         memoryDialogState.open(it)
                     },
@@ -342,6 +344,7 @@ private fun AssistantMemoryContent(
 @Composable
 private fun MemoryItem(
     memory: AssistantMemory,
+    assistant: Assistant,
     onEditMemory: (AssistantMemory) -> Unit,
     onDeleteMemory: (AssistantMemory) -> Unit
 ) {
@@ -371,6 +374,7 @@ private fun MemoryItem(
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall,
                 )
+                if (memory.hasOriginalEvidence) MemoryOriginalButton(memory.id, assistant)
             }
             IconButton(
                 onClick = { onEditMemory(memory) }

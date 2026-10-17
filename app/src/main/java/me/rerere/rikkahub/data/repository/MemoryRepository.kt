@@ -23,26 +23,26 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
         memoryDAO.getMemoriesOfAssistantFlow(assistantId)
             .map { entities ->
                 entities.filterNot { it.isSummaryMemory() }
-                    .map { AssistantMemory(it.id, it.content) }
+                    .map { AssistantMemory(it.id, it.content, it.sourceKind == "automatic" && it.revision == 1L) }
             }
 
     suspend fun getMemoriesOfAssistant(assistantId: String): List<AssistantMemory> {
         return memoryDAO.getMemoriesOfAssistant(assistantId)
             .filterNot { it.isSummaryMemory() }
-            .map { AssistantMemory(it.id, it.content) }
+            .map { AssistantMemory(it.id, it.content, it.sourceKind == "automatic" && it.revision == 1L) }
     }
 
     fun getGlobalMemoriesFlow(): Flow<List<AssistantMemory>> =
         memoryDAO.getMemoriesOfAssistantFlow(GLOBAL_MEMORY_ID)
             .map { entities ->
                 entities.filterNot { it.isSummaryMemory() }
-                    .map { AssistantMemory(it.id, it.content) }
+                    .map { AssistantMemory(it.id, it.content, it.sourceKind == "automatic" && it.revision == 1L) }
             }
 
     suspend fun getGlobalMemories(): List<AssistantMemory> {
         return memoryDAO.getMemoriesOfAssistant(GLOBAL_MEMORY_ID)
             .filterNot { it.isSummaryMemory() }
-            .map { AssistantMemory(it.id, it.content) }
+            .map { AssistantMemory(it.id, it.content, it.sourceKind == "automatic" && it.revision == 1L) }
     }
 
     suspend fun getMemoryInScope(id: Int, assistantId: String): AssistantMemory {

@@ -113,6 +113,8 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
+import me.rerere.rikkahub.data.memory.MemoryOrganizationService
+import me.rerere.rikkahub.data.memory.OrganizationMessageReference
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
@@ -167,6 +169,7 @@ class ChatService(
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
+    private val memoryOrganization: MemoryOrganizationService,
     private val generationHandler: GenerationHandler,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
@@ -1230,6 +1233,30 @@ class ChatService(
                     finalConversation.currentMessages.lastOrNull(), initialConversation.currentMessages.lastOrNull()?.id
                 )
             ) return@onSuccess
+
+            if (applicationReceipt == null && assistant.enableMemory && assistant.memoryAutoOrganizeEnabled &&
+                finalConversation.currentMessages.lastOrNull()?.let {
+                    it.role == MessageRole.ASSISTANT && it.id !in initialConversation.currentMessages.map { msg -> msg.id }
+                } == true
+            ) {
+                // App scope outlives this generation job. A new send cannot cancel or duplicate paid work.
+                appScope.launch(Dispatchers.IO) {
+                    try {
+                        memoryOrganization.afterReply(
+                            assistant.id, conversationId.toString(), finalConversation.messageNodes.map { node ->
+                                val message = node.currentMessage
+                                OrganizationMessageReference(
+                                    node.id.toString(), message.id.toString(), message.createdAt.toString(),
+                                )
+                            },
+                        )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        Log.w(TAG, "Automatic memory organization unavailable; chat preserved")
+                    }
+                }
+            }
 
             // 自动唤起网易云音乐：扫描刚完成的 assistant 文本中的 orpheus:// scheme
             try {
