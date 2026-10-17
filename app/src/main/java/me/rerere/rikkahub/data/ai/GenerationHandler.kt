@@ -112,6 +112,7 @@ class GenerationHandler(
             selectGenerationHistory(recallHistory, assistant.contextMessageSize, GenerationScene.CHAT),
         )
 
+        val originalMessageIds = messages.mapTo(hashSetOf()) { it.id }
         runGenerationToolLoop(
             initialMessages = messages,
             maxSteps = maxSteps,
@@ -159,8 +160,13 @@ class GenerationHandler(
                     settings = settings,
                     messages = turnMessages,
                     pluginPromptInjections = pluginPromptInjections,
-                    onUpdateMessages = {
-                        turnMessages = it.transforms(
+                    onUpdateMessages = { updated ->
+                        val recorded = updated.mapIndexed { index, message ->
+                            if (index == updated.lastIndex && message.id !in originalMessageIds) {
+                                recallTurn.annotate(message)
+                            } else message
+                        }
+                        turnMessages = recorded.transforms(
                             transformers = outputTransformers,
                             context = context,
                             model = model,
@@ -206,7 +212,9 @@ class GenerationHandler(
                     assistant = assistant,
                     settings = settings
                 )
-                turnMessages = turnMessages.slice(0 until turnMessages.lastIndex) + turnMessages.last().copy(
+                val lastReply = turnMessages.last()
+                val recordedReply = if (lastReply.id !in originalMessageIds) recallTurn.annotate(lastReply) else lastReply
+                turnMessages = turnMessages.slice(0 until turnMessages.lastIndex) + recordedReply.copy(
                     finishedAt = Clock.System.now()
                         .toLocalDateTime(TimeZone.currentSystemDefault())
                 )

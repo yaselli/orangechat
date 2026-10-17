@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.model
 
 import me.rerere.ai.ui.UIMessage
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.*
@@ -17,6 +19,18 @@ class ContextCompactionTest {
         assertEquals(64, result.coveredPrefixHash.length)
         assertTrue(JsonInstant.encodeToString(result).length < 300)
         assertTrue(result.matches(original.currentMessages))
+    }
+
+    @Test
+    fun `local recall records do not change existing summary fingerprints or default serialized history`() {
+        val original = conversation()
+        val summary = original.planCompaction(2).result("summary")
+        assertFalse(JsonInstant.encodeToString(original.currentMessages[0]).contains("localMetadata"))
+        val annotated = original.currentMessages.map { message ->
+            message.copy(localMetadata = buildJsonObject { put("memory_recall_v1", "UI-only") })
+        }
+        assertTrue(summary.matches(annotated))
+        assertEquals("summary", selectCompactedContext(annotated, summary).summary)
     }
 
     private fun conversation() = Conversation(

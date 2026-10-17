@@ -829,6 +829,7 @@ data class DisplaySetting(
     val showModelName: Boolean = true,
     val showDateBelowName: Boolean = false,
     val showTokenUsage: Boolean = true,
+    val showMemoryRecallReferences: Boolean = true,
     val showThinkingContent: Boolean = true,
     val autoCloseThinking: Boolean = true,
     val showUpdates: Boolean = true,

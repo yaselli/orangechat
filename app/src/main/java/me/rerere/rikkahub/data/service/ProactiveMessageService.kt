@@ -1401,7 +1401,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         // 用 id 匹配就地更新（保留 node id，避免思考链闪烁 / 覆盖上一条 assistant）
                         updateOrAppendAiMessage(
                             conversationId,
-                            currentAiMessage,
+                            recallTurn.annotate(currentAiMessage),
                             trace,
                             runAssistantMessageIds,
                             protectedMessageIds,
@@ -1424,13 +1424,13 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     Log.d(TAG, "[JUMP] flag detected in raw AI output")
                 }
                 // 应用输出转换器
-                val processedMessage = listOf(aiMessage).transforms(
+                val processedMessage = recallTurn.annotate(listOf(aiMessage).transforms(
                     transformers = outputTransformers,
                     context = this@ProactiveMessageTriggerService,
                     model = model,
                     assistant = assistant,
                     settings = settings
-                ).first()
+                ).first())
                 turnMessages[turnMessages.lastIndex] = processedMessage
 
                 // 检查是否有工具调用

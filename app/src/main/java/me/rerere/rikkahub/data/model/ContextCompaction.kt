@@ -24,7 +24,7 @@ private fun prefixHash(messages: List<UIMessage>, count: Int): String {
     val digest = MessageDigest.getInstance("SHA-256")
     for (index in 0 until count) {
         val message = messages[index]
-        val content = JsonInstant.encodeToString(message.copy(translation = null, usage = null, finishedAt = null))
+        val content = JsonInstant.encodeToString(message.copy(translation = null, usage = null, finishedAt = null, localMetadata = null))
         digest.update(content.toByteArray(Charsets.UTF_8))
         digest.update(byteArrayOf(0))
     }

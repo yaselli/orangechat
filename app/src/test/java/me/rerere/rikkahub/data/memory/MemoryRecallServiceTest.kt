@@ -126,6 +126,38 @@ class MemoryRecallServiceTest {
     }
 
     @Test
+    fun `recorded successful recall survives retry snapshot reuse without another paid query`() = runBlocking {
+        val f = Fixture()
+        f.service.buildIndex(f.assistant, f.settings)
+        val user = UIMessage.user("炸鸡")
+        val turn = f.service.prepare(f.assistant, f.settings, "chat", listOf(user))
+        f.service.apply(turn, listOf(user))
+        val first = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryRecallState.USED, first.state)
+        assertEquals(MemoryVectorState.SUCCESS, first.diagnostics.vector)
+        assertEquals(2, f.calls)
+        val reused = f.service.prepare(f.assistant, f.settings, "chat", listOf(user))
+        f.service.apply(reused, listOf(user))
+        assertEquals(first, reused.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(2, f.calls)
+    }
+
+    @Test
+    fun `failed vector query with keyword fallback is recorded as degraded rather than successful vector search`() = runBlocking {
+        val f = Fixture()
+        f.service.buildIndex(f.assistant, f.settings)
+        f.failTransport = true
+        val user = UIMessage.user("炸鸡")
+        val turn = f.service.prepare(f.assistant, f.settings, "chat", listOf(user))
+        f.service.apply(turn, listOf(user))
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryRecallState.USED, trace.state)
+        assertEquals(MemoryVectorState.FAILED, trace.diagnostics.vector)
+        assertTrue(trace.degraded)
+        assertEquals(2, f.calls)
+    }
+
+    @Test
     fun `manual batch indexing has longer deadline while chat retrieval remains eight seconds`() = runBlocking {
         val f = Fixture()
         assertEquals(1, f.service.buildIndex(f.assistant, f.settings))

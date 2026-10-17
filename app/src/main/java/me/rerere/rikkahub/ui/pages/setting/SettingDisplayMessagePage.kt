@@ -180,6 +180,18 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
+                        headlineContent = { Text("显示记忆引用") },
+                        supportingContent = { Text("在新回复统计旁显示召回查看入口；仅控制显示，不影响记忆召回。") },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.showMemoryRecallReferences,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(showMemoryRecallReferences = it))
+                                },
+                            )
+                        },
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_show_thinking_content_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_show_thinking_content_desc)) },
                         trailingContent = {

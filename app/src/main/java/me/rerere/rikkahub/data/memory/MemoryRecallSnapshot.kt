@@ -15,6 +15,7 @@ data class SavedMemoryExcerpt(
     val sourceHash: String,
     val text: String,
     val history: HistoryReference? = null,
+    val createdAtMillis: Long? = null,
 )
 
 /** A request-only copy. Never return these copies to the streaming loop or save them as chat bubbles. */
@@ -24,7 +25,17 @@ class MemoryRecallTurn(
     private val excerpts: List<SavedMemoryExcerpt> = emptyList(),
     val historyScope: String? = null,
     val boundary: HistoryRecallBoundary? = null,
+    private val diagnostics: MemoryRecallDiagnostics = MemoryRecallDiagnostics(),
+    initialState: MemoryRecallState = if (scope == null) MemoryRecallState.DISABLED else MemoryRecallState.NOT_APPLIED,
 ) {
+    private var trace = encodeMemoryRecallTrace(MemoryRecallTrace(initialState, diagnostics = diagnostics))
+
+    fun annotate(message: UIMessage): UIMessage = message.attachMemoryRecallTrace(trace)
+
+    fun failed() {
+        trace = encodeMemoryRecallTrace(MemoryRecallTrace(MemoryRecallState.FAILED, diagnostics = diagnostics))
+    }
+
     fun historyReferences(): List<HistoryReference> = excerpts.mapNotNull { it.history }
 
     fun apply(
@@ -34,9 +45,29 @@ class MemoryRecallTurn(
         // Only the active user turn gets a block. Replaying every past snapshot would silently turn
         // a 3000-token per-request budget into 3000 multiplied by the number of historical turns.
         if (scope == null || messages.lastOrNull { it.role == MessageRole.USER }?.id?.toString() != messageId) {
+            if (scope != null) {
+                trace = encodeMemoryRecallTrace(MemoryRecallTrace(MemoryRecallState.NOT_APPLIED, diagnostics = diagnostics))
+            }
             return messages
         }
-        val block = validMemorySnapshot(excerpts, sources, scope, history, historyScope, boundary)
+        val valid = validMemoryExcerpts(excerpts, sources, scope, history, historyScope, boundary)
+        val block = renderMemorySnapshot(valid)
+        val sent = if (block.isBlank()) emptyList() else valid.map { excerpt ->
+            if (excerpt.history != null) excerpt else excerpt.copy(
+                createdAtMillis = sources[excerpt.memoryId]?.createdAt?.takeIf { it > 0 },
+            )
+        }
+        trace = encodeMemoryRecallTrace(MemoryRecallTrace(
+            when {
+                sent.isNotEmpty() -> MemoryRecallState.USED
+                valid.isNotEmpty() -> MemoryRecallState.FAILED // A corrupt/oversized snapshot was not sent.
+                excerpts.isNotEmpty() -> MemoryRecallState.STALE
+                diagnostics.historyKeywordsFailed || diagnostics.vector in setOf(
+                    MemoryVectorState.TIMEOUT, MemoryVectorState.FAILED,
+                ) -> MemoryRecallState.FAILED
+                else -> MemoryRecallState.NO_MATCH
+            }, sent, diagnostics,
+        ))
         if (block.isEmpty()) return messages
         return messages.map { message ->
             if (message.role == MessageRole.USER && message.id.toString() == messageId) {
@@ -49,6 +80,28 @@ class MemoryRecallTurn(
 fun memoryMessageHash(message: UIMessage): String = memoryHash(JsonInstant.encodeToString(message.parts))
 
 /** Changes to source content (including imports that reused a revision) invalidate old snapshots. */
+fun validMemoryExcerpts(
+    saved: List<SavedMemoryExcerpt>,
+    sources: Map<Int, MemoryEntity>,
+    scope: String,
+    history: Map<String, HistoryMemorySource> = emptyMap(),
+    historyScope: String? = null,
+    boundary: HistoryRecallBoundary? = null,
+): List<SavedMemoryExcerpt> = saved.filter { excerpt ->
+    val ref = excerpt.history
+    if (ref == null) {
+        val source = sources[excerpt.memoryId]
+        excerpt.text.isNotBlank() && source != null && source.assistantId == scope &&
+            source.revision == excerpt.revision && memoryHash(source.content) == excerpt.sourceHash &&
+            source.content.contains(excerpt.text)
+    } else {
+        val source = history[ref.key]
+        excerpt.text.isNotBlank() && source != null && source.scope == historyScope &&
+            source.reference == ref && source.hash == excerpt.sourceHash && source.text.contains(excerpt.text) &&
+            boundary?.allows(source) == true
+    }
+}
+
 fun validMemorySnapshot(
     saved: List<SavedMemoryExcerpt>,
     sources: Map<Int, MemoryEntity>,
@@ -56,21 +109,10 @@ fun validMemorySnapshot(
     history: Map<String, HistoryMemorySource> = emptyMap(),
     historyScope: String? = null,
     boundary: HistoryRecallBoundary? = null,
-): String {
-    val valid = saved.filter { excerpt ->
-        val ref = excerpt.history
-        if (ref == null) {
-            val source = sources[excerpt.memoryId]
-            excerpt.text.isNotBlank() && source != null && source.assistantId == scope &&
-                source.revision == excerpt.revision && memoryHash(source.content) == excerpt.sourceHash &&
-                source.content.contains(excerpt.text)
-        } else {
-            val source = history[ref.key]
-            excerpt.text.isNotBlank() && source != null && source.scope == historyScope &&
-                source.reference == ref && source.hash == excerpt.sourceHash && source.text.contains(excerpt.text) &&
-                boundary?.allows(source) == true
-        }
-    }
+): String = renderMemorySnapshot(validMemoryExcerpts(saved, sources, scope, history, historyScope, boundary))
+
+/** Render exactly the same bounded list that is recorded in the local reply trace. */
+fun renderMemorySnapshot(valid: List<SavedMemoryExcerpt>): String {
     if (valid.isEmpty()) return ""
     val block = MEMORY_RECALL_HEADER + valid.joinToString("") {
         (it.history?.let(::historyExcerptLabel) ?: memoryExcerptLabel(it.memoryId)) + it.text

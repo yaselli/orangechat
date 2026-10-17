@@ -184,13 +184,13 @@ class MemoryRecallService(
         conversationId: String?,
         messages: List<UIMessage>,
     ): MemoryRecallTurn = withContext(Dispatchers.IO) {
-        if (!assistant.enableMemory || !assistant.memoryRecallEnabled || conversationId.isNullOrBlank()) {
-            return@withContext MemoryRecallTurn()
-        }
+        if (!assistant.enableMemory) return@withContext MemoryRecallTurn(initialState = MemoryRecallState.DISABLED)
+        if (!assistant.memoryRecallEnabled) return@withContext MemoryRecallTurn(initialState = MemoryRecallState.LEGACY)
+        if (conversationId.isNullOrBlank()) return@withContext MemoryRecallTurn(initialState = MemoryRecallState.NOT_APPLIED)
         try {
             val scope = scope(assistant)
             val latest = messages.lastOrNull { it.role == MessageRole.USER }
-                ?: return@withContext MemoryRecallTurn()
+                ?: return@withContext MemoryRecallTurn(initialState = MemoryRecallState.NOT_APPLIED)
             val hash = memoryMessageHash(latest)
             val query = memoryRecallQuery(messages, latest)
             val historyScope = assistant.id.toString()
@@ -203,24 +203,26 @@ class MemoryRecallService(
                 "\u0000${memoryHash(query)}\u0000$retrievalVersion")
             var snapshot = index.snapshot(key)
             if (snapshot == null) {
-                val excerpts = recall(assistant, settings, scope, query, sources(scope), boundary)
+                val result = recall(assistant, settings, scope, query, sources(scope), boundary)
                 index.putSnapshot(MemoryRecallSnapshotEntity(
                     key, conversationId, scope, latest.id.toString(), hash,
-                    JsonInstant.encodeToString(excerpts), System.currentTimeMillis(),
+                    JsonInstant.encodeToString(result), System.currentTimeMillis(),
                 ))
                 index.trimSnapshots()
                 // Concurrent retries use the first saved result, never whichever finishes last.
                 snapshot = index.snapshot(key)
             }
-            val excerpts = try {
-                snapshot?.let { JsonInstant.decodeFromString<List<SavedMemoryExcerpt>>(it.excerpts) }.orEmpty()
-            } catch (_: SerializationException) { emptyList() }
-            MemoryRecallTurn(scope, latest.id.toString(), excerpts, historyScope, boundary)
+            val result = snapshot?.let { decodeMemoryRecallSnapshot(it.excerpts) }
+                ?: error("Recall snapshot was not saved")
+            MemoryRecallTurn(
+                scope, latest.id.toString(), result.excerpts, historyScope, boundary, result.diagnostics,
+                MemoryRecallState.NOT_APPLIED,
+            )
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             // Index errors must not block chat, fall back to injecting no recall, never the entire memory bank.
-            MemoryRecallTurn()
+            MemoryRecallTurn(initialState = MemoryRecallState.FAILED)
         }
     }
 
@@ -236,6 +238,7 @@ class MemoryRecallService(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
+            turn.failed()
             messages
         }
     }
@@ -243,14 +246,19 @@ class MemoryRecallService(
     private suspend fun recall(
         assistant: Assistant, settings: Settings, scope: String, query: String, sources: List<MemoryEntity>,
         boundary: HistoryRecallBoundary?,
-    ): List<SavedMemoryExcerpt> {
-        if (query.isBlank()) return emptyList()
+    ): MemoryRecallSnapshot {
+        if (query.isBlank()) return MemoryRecallSnapshot(emptyList(), MemoryRecallDiagnostics(MemoryVectorState.NO_QUERY))
+        var historyKeywordsFailed = false
+        var vectorState = MemoryVectorState.NOT_CONFIGURED
         val slices = slices(sources)
         val historySlices = if (boundary == null) emptyList() else try {
             history.keywords(assistant.id.toString(), query, boundary)
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) { emptyList() }
+        } catch (_: Exception) {
+            historyKeywordsFailed = true
+            emptyList()
+        }
         val keywords = rankKeywordMemories(query, slices + historySlices)
         val vectors = withTimeoutOrNull(8000) {
             try {
@@ -264,10 +272,15 @@ class MemoryRecallService(
                 val firstHistoryPage = if (boundary == null) emptyList() else {
                     history.vectors(historyScope, config.key, "", boundary)
                 }
-                if (indexed.isEmpty() && firstHistoryPage.isEmpty()) return@withTimeoutOrNull emptyList()
+                if (indexed.isEmpty() && firstHistoryPage.isEmpty()) {
+                    vectorState = MemoryVectorState.NO_INDEX
+                    return@withTimeoutOrNull emptyList()
+                }
                 val cacheKey = memoryHash(config.key + "\u0000" + scope + "\u0000" + historyScope + "\u0000" + query)
+                var cached = false
                 val queryVector = queryMutex.withLock {
-                    queries.get(cacheKey) ?: embed(config, listOf(query)).single().also { queries.put(cacheKey, it) }
+                    queries.get(cacheKey)?.also { cached = true }
+                        ?: embed(config, listOf(query)).single().also { queries.put(cacheKey, it) }
                 }
                 val memoryHits = indexed.mapNotNull { record ->
                     currentCoroutineContext().ensureActive()
@@ -281,17 +294,21 @@ class MemoryRecallService(
                 val historyHits = if (boundary == null) emptyList() else historyVectorHits(
                     historyScope, config.key, queryVector, firstHistoryPage, boundary,
                 )
+                vectorState = if (cached) MemoryVectorState.CACHED else MemoryVectorState.SUCCESS
                 (memoryHits + historyHits)
                     .sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id }).take(20)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
+                vectorState = MemoryVectorState.FAILED
                 emptyList()
             }
-        }.orEmpty()
-        return selectMemoryExcerpts(query, fuseMemoryRanks(keywords, vectors)).map {
+        }
+        if (vectors == null) vectorState = MemoryVectorState.TIMEOUT
+        val selected = selectMemoryExcerpts(query, fuseMemoryRanks(keywords, vectors.orEmpty())).map {
             SavedMemoryExcerpt(it.slice.memoryId, it.slice.revision, it.slice.sourceHash, it.text, it.slice.history)
         }
+        return MemoryRecallSnapshot(selected, MemoryRecallDiagnostics(vectorState, historyKeywordsFailed))
     }
 
     private data class HistoryScore(val record: HistoryMemoryVector, val score: Double)
