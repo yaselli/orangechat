@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.db.migrations
 
 import androidx.room.testing.MigrationTestHelper
+import androidx.room.util.TableInfo
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -30,6 +31,15 @@ class MemoryOrganizationMigrationTest {
         }
         val db = helper.runMigrationsAndValidate(name, 34, true, Migration_31_33_HistoryMemory, Migration_33_34)
         try {
+            // Room's schema validator compares referenced table names case-sensitively.
+            assertEquals(
+                setOf(TableInfo.ForeignKey("ConversationEntity", "CASCADE", "NO ACTION", listOf("conversationId"), listOf("id"))),
+                TableInfo.read(db, "memory_organization_batch").foreignKeys,
+            )
+            assertEquals(
+                setOf(TableInfo.ForeignKey("MemoryEntity", "CASCADE", "NO ACTION", listOf("memoryId"), listOf("id"))),
+                TableInfo.read(db, "memory_evidence").foreignKeys,
+            )
             db.execSQL("PRAGMA foreign_keys=ON")
             db.execSQL("INSERT INTO memory_organization_batch " +
                 "VALUES('batch','assistant','assistant','chat','[\"message\"]','failed','safe status',1)")

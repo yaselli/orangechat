@@ -25,6 +25,17 @@ statements = [a or b for a, b in re.findall(r'db\.execSQL\((?:"""(.*?)"""|"([^"\
 assert len(statements) == 4
 for statement in statements:
     db.execute(statement)
+# Room compares these names case-sensitively even though SQLite accepts lowercase references.
+# Read expected table names from the exported Room schema rather than normalizing SQL names.
+tables = {entity['tableName'] for entity in schema['database']['entities']}
+for table, parent, column in [
+    ('memory_organization_batch', 'ConversationEntity', 'conversationId'),
+    ('memory_evidence', 'MemoryEntity', 'memoryId'),
+]:
+    assert parent in tables
+    assert list(db.execute(f'PRAGMA foreign_key_list({table})')) == [
+        (0, 0, parent, column, 'id', 'NO ACTION', 'CASCADE', 'NONE')
+    ], f'{table}: foreign-key metadata must match Room exactly, including table-name case'
 assert originals == (list(db.execute('SELECT * FROM memoryentity')), list(db.execute('SELECT * FROM message_node')))
 assert [r[1] for r in db.execute('PRAGMA table_info(memory_evidence)')] == [
     'memoryId', 'owner', 'conversationId', 'nodeId', 'messageId', 'sourceHash', 'role', 'sourceCreatedAt', 'quote']
@@ -62,4 +73,4 @@ assert db.execute('SELECT state FROM memory_organization_batch').fetchone() == (
 db.execute("DELETE FROM conversationentity WHERE id='chat'")
 assert db.execute('SELECT COUNT(*) FROM memory_organization_batch').fetchone() == (0,)
 assert db.execute('SELECT content FROM memoryentity WHERE id=7').fetchone() == ('preserved memory',)
-print('PASS: v33 -> v34 additive migration, durable failed claims, exact scoped evidence, revision gate, rollback, cascades')
+print('PASS: v33 -> v34 exact Room foreign-key names, additive migration, durable failed claims, exact scoped evidence, revision gate, rollback, cascades')
