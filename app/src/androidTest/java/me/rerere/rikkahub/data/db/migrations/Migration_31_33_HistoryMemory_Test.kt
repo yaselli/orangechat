@@ -31,7 +31,7 @@ class Migration_31_33_HistoryMemory_Test {
             execSQL("INSERT INTO memory_recall_snapshot VALUES('key','chat','assistant','user','hash','[]',1)")
             close()
         }
-        val db = helper.runMigrationsAndValidate(name, 34, true, Migration_31_33_HistoryMemory, Migration_33_34)
+        val db = helper.runMigrationsAndValidate(name, 35, true, Migration_31_33_HistoryMemory, Migration_33_34, Migration_34_35)
         try {
             db.query("SELECT messages FROM message_node").use {
                 assertTrue(it.moveToFirst())

@@ -11,6 +11,21 @@ class MemoryRecallSnapshotTest {
     private val excerpt = SavedMemoryExcerpt(7, 2, memoryHash(source.content), "喜欢炸鸡")
 
     @Test
+    fun `graph memory is invalidated by evidence edit deletion branch or owner change on tool steps`() {
+        val original = HistoryMemorySource("past", "node", "original", "a", "user",
+            "2020-01-01T00:00", "我喜欢炸鸡", 0)
+        val graph = excerpt.copy(graphRelation = "她 → 喜欢 → 炸鸡", graphEvidence = original.reference,
+            graphEvidenceHash = original.hash)
+        fun valid(value: HistoryMemorySource?) = validMemoryExcerpts(listOf(graph), mapOf(7 to source), "a",
+            value?.let { mapOf(original.reference.key to it) }.orEmpty(), "a")
+        assertEquals(listOf(graph), valid(original))
+        assertTrue(valid(null).isEmpty())
+        assertTrue(valid(original.copy(text = "不喜欢了")).isEmpty())
+        assertTrue(valid(original.copy(messageId = "other-branch")).isEmpty())
+        assertTrue(valid(original.copy(scope = "other-assistant")).isEmpty())
+    }
+
+    @Test
     fun `request copies preserve source history and keep recall only in the active turn`() {
         val first = UIMessage.user("喜欢吃什么")
         val turn = MemoryRecallTurn("a", first.id.toString(), listOf(excerpt))

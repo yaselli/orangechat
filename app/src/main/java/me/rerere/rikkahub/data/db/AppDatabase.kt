@@ -6,6 +6,9 @@
 
 package me.rerere.rikkahub.data.db
 
+import me.rerere.rikkahub.data.memory.MemoryGraphRecord
+import me.rerere.rikkahub.data.memory.MemoryGraphDAO
+
 import me.rerere.rikkahub.data.memory.MemoryOrganizationBatch
 import me.rerere.rikkahub.data.memory.MemoryEvidence
 import me.rerere.rikkahub.data.memory.MemoryOrganizationDAO
@@ -60,6 +63,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         MemoryEntity::class,
         MemoryOrganizationBatch::class,
         MemoryEvidence::class,
+        MemoryGraphRecord::class,
         GenMediaEntity::class,
         MessageNodeEntity::class,
         ManagedFileEntity::class,
@@ -72,7 +76,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         SshHostEntity::class,
         SecurityAuditEntity::class,
     ],
-    version = 34,
+    version = 35,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -95,6 +99,8 @@ import me.rerere.rikkahub.utils.JsonInstant
 )
 @TypeConverters(TokenUsageConverter::class)
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun memoryGraphDao(): MemoryGraphDAO
+
     abstract fun memoryOrganizationDao(): MemoryOrganizationDAO
 
     abstract fun historyMemoryDao(): HistoryMemoryDAO

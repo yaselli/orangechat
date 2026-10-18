@@ -32,6 +32,7 @@ data class Assistant(
     val enableMemory: Boolean = false,
     val memoryRecallEnabled: Boolean = false,
     val memoryHistoryRecallEnabled: Boolean = false,
+    val memoryGraphEnabled: Boolean = false,
     val memoryEmbeddingModelId: Uuid? = null,
     val memoryAutoOrganizeEnabled: Boolean = false,
     val memoryOrganizationModelId: Uuid? = null,

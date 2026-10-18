@@ -77,7 +77,7 @@ private fun MemoryRecallReferenceDialog(trace: MemoryRecallTrace, onDismiss: () 
                     }
                     if (trace.state !in setOf(MemoryRecallState.DISABLED, MemoryRecallState.LEGACY)) {
                         Text(
-                            when (trace.diagnostics.vector) {
+                            trace.diagnostics.graph ?: when (trace.diagnostics.vector) {
                                 MemoryVectorState.NOT_CONFIGURED -> "未配置可用嵌入模型，使用关键词检索。"
                                 MemoryVectorState.NO_INDEX -> "没有可用向量索引，使用关键词检索。"
                                 MemoryVectorState.SUCCESS -> "向量查询成功，已与关键词结果融合。"
@@ -116,6 +116,7 @@ private fun MemoryRecallReferenceDialog(trace: MemoryRecallTrace, onDismiss: () 
                             Text(date ?: "原记忆未记录创建日期", style = MaterialTheme.typography.bodySmall)
                         }
                         Text(excerpt.text, style = MaterialTheme.typography.bodyMedium)
+                        excerpt.graphRelation?.let { Text("图谱依据：$it", style = MaterialTheme.typography.bodySmall) }
                     }
                     Text("仅记录按需召回片段，不统计人设、原上下文或记忆工具的读取结果。",
                         style = MaterialTheme.typography.bodySmall)

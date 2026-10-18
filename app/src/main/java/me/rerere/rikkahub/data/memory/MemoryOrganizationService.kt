@@ -55,6 +55,7 @@ class MemoryOrganizationService(
         val latest = settingsStore.settingsFlow.value.getAssistantById(assistant.id) ?: return false
         return latest.enableMemory && latest.memoryAutoOrganizeEnabled &&
             latest.memoryOrganizationModelId == assistant.memoryOrganizationModelId &&
+            latest.memoryGraphEnabled == assistant.memoryGraphEnabled &&
             latest.useGlobalMemory == assistant.useGlobalMemory &&
             latest.memoryOrganizationSinceMillis == assistant.memoryOrganizationSinceMillis
     }
@@ -116,12 +117,15 @@ class MemoryOrganizationService(
                     providers.getProviderByType(provider).generateText(
                         providerSetting = provider,
                         messages = listOf(
-                            UIMessage.system(MEMORY_ORGANIZATION_PROMPT),
+                            UIMessage.system(MEMORY_ORGANIZATION_PROMPT + if (assistant.memoryGraphEnabled) {
+                                "\n开启图谱时最多提取4条记忆；每条额外带 graph 字段。\n" + MEMORY_GRAPH_INSTRUCTIONS
+                            } else ""),
                             UIMessage.user("已有相关记忆（仅供去重）：\n$existingText\n" +
                                 "本批聊天原文：\n${JsonInstant.encodeToString(inputs)}"),
                         ),
                         params = TextGenerationParams(
-                            model = model.copy(tools = emptySet()), maxTokens = 2048,
+                            model = model.copy(tools = emptySet()),
+                            maxTokens = if (assistant.memoryGraphEnabled) 4096 else 2048,
                             customHeaders = model.customHeaders,
                         ),
                     ).choices.firstOrNull()?.message?.toText() ?: error("模型返回空结果")
@@ -155,6 +159,12 @@ class MemoryOrganizationService(
                             id, owner.toString(), conversationId, source.nodeId, source.messageId,
                             source.hash, source.role, source.createdAt, fact.quote,
                         ))
+                        if (assistant.memoryGraphEnabled) {
+                            database.memoryGraphDao().put(MemoryGraphRecord(
+                                id, owner.toString(), memoryScope, 1, memoryHash(fact.content.trim()),
+                                JsonInstant.encodeToString(fact.graph), fact.quote, now,
+                            ))
+                        }
                         added++
                     }
                     dao.finish(batch.id, "completed", "已整理，新增 $added 条记忆。" +

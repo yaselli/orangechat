@@ -29,8 +29,12 @@ class MemoryOrganizationMigrationTest {
             execSQL("INSERT INTO message_node VALUES('node','chat',0,'original history',0)")
             close()
         }
-        val db = helper.runMigrationsAndValidate(name, 34, true, Migration_31_33_HistoryMemory, Migration_33_34)
+        val db = helper.runMigrationsAndValidate(name, 35, true, Migration_31_33_HistoryMemory, Migration_33_34, Migration_34_35)
         try {
+            assertEquals(
+                setOf(TableInfo.ForeignKey("MemoryEntity", "CASCADE", "NO ACTION", listOf("memoryId"), listOf("id"))),
+                TableInfo.read(db, "memory_graph").foreignKeys,
+            )
             // Room's schema validator compares referenced table names case-sensitively.
             assertEquals(
                 setOf(TableInfo.ForeignKey("ConversationEntity", "CASCADE", "NO ACTION", listOf("conversationId"), listOf("id"))),
@@ -51,7 +55,12 @@ class MemoryOrganizationMigrationTest {
             }
             db.execSQL("INSERT INTO memory_evidence " +
                 "VALUES(7,'assistant','chat','node','message','hash','user','date','actual quote')")
+            db.execSQL("INSERT INTO memory_graph VALUES(7,'assistant','assistant',1,'hash','null','',1)")
             db.execSQL("DELETE FROM MemoryEntity WHERE id=7")
+            db.query("SELECT COUNT(*) FROM memory_graph").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(0, it.getInt(0))
+            }
             db.query("SELECT COUNT(*) FROM memory_evidence").use {
                 assertTrue(it.moveToFirst())
                 assertEquals(0, it.getInt(0))

@@ -24,6 +24,28 @@ import java.io.IOException
 import java.lang.reflect.Proxy
 
 class MemoryRecallServiceTest {
+    @Test
+    fun `graph mode uses recent dialogue and does not call embedding or broad fallback`() = runBlocking {
+        val f = Fixture()
+        var queries = 0
+        val graph = object : MemoryGraphRecall {
+            override suspend fun recall(assistant: Assistant, query: String, boundary: HistoryRecallBoundary?): MemoryRecallSnapshot {
+                queries++
+                assertTrue(query.contains("穿什么"))
+                return MemoryRecallSnapshot(emptyList(), MemoryRecallDiagnostics(graph = "图谱没有命中"))
+            }
+        }
+        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
+        val user = UIMessage.user("你猜呀")
+        val messages = listOf(UIMessage.assistant("你今天穿什么"), user)
+        val turn = service.prepare(f.assistant.copy(memoryGraphEnabled = true), f.settings, "chat", messages)
+        assertEquals(messages, service.apply(turn, messages))
+        assertEquals(1, queries)
+        assertEquals(0, f.calls)
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryRecallState.NO_MATCH, trace.state)
+        assertEquals("图谱没有命中", trace.diagnostics.graph)
+    }
     private class Store : MemoryIndexDAO {
         val vectors = mutableListOf<MemoryVectorEntity>()
         val snapshots = mutableMapOf<String, MemoryRecallSnapshotEntity>()

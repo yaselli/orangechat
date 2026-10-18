@@ -70,7 +70,7 @@ class Migration_30_31_Test {
             execSQL("CREATE INDEX index_memory_vector_memoryId ON memory_vector(memory_id)")
             close()
         }
-        val db = helper.runMigrationsAndValidate(name, 34, true, Migration_30_31, Migration_31_33_HistoryMemory, Migration_33_34)
+        val db = helper.runMigrationsAndValidate(name, 35, true, Migration_30_31, Migration_31_33_HistoryMemory, Migration_33_34, Migration_34_35)
         try {
             db.query("SELECT content FROM MemoryEntity WHERE id=7").use { cursor ->
                 assertTrue(cursor.moveToFirst())

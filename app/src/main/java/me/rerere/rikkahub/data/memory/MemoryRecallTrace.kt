@@ -21,6 +21,7 @@ enum class MemoryVectorState { NOT_CONFIGURED, NO_INDEX, SUCCESS, CACHED, TIMEOU
 data class MemoryRecallDiagnostics(
     val vector: MemoryVectorState = MemoryVectorState.UNKNOWN,
     val historyKeywordsFailed: Boolean = false,
+    val graph: String? = null,
 )
 
 @Serializable

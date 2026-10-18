@@ -36,6 +36,7 @@ class MemoryRecallService(
     client: OkHttpClient,
     context: Context? = null,
     private val history: HistoryMemoryStorage,
+    private val graph: MemoryGraphRecall? = null,
 ) {
     // Paid embedding calls must not inherit transport retries from normal streaming chat.
     private val embedding = OpenAIProvider(
@@ -198,7 +199,7 @@ class MemoryRecallService(
                 history.boundary(historyScope, conversationId, messages)
             } else null
             val retrievalVersion = (config(assistant, settings)?.key ?: "keyword-v1") +
-                ":history-v1:${assistant.memoryHistoryRecallEnabled}:$historyScope"
+                ":history-v1:${assistant.memoryHistoryRecallEnabled}:$historyScope:graph-v1:${assistant.memoryGraphEnabled}"
             val key = memoryHash("$conversationId\u0000$scope\u0000${latest.id}\u0000$hash" +
                 "\u0000${memoryHash(query)}\u0000$retrievalVersion")
             var snapshot = index.snapshot(key)
@@ -247,6 +248,9 @@ class MemoryRecallService(
         assistant: Assistant, settings: Settings, scope: String, query: String, sources: List<MemoryEntity>,
         boundary: HistoryRecallBoundary?,
     ): MemoryRecallSnapshot {
+        if (assistant.memoryGraphEnabled) {
+            return requireNotNull(graph) { "Graph service unavailable" }.recall(assistant, query, boundary)
+        }
         if (query.isBlank()) return MemoryRecallSnapshot(emptyList(), MemoryRecallDiagnostics(MemoryVectorState.NO_QUERY))
         var historyKeywordsFailed = false
         var vectorState = MemoryVectorState.NOT_CONFIGURED

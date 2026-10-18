@@ -18,17 +18,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.memory.MemoryEvidence
 import me.rerere.rikkahub.data.memory.MemoryOrganizationService
+import me.rerere.rikkahub.data.memory.MemoryGraphService
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -38,10 +41,22 @@ import org.koin.compose.koinInject
 @Composable
 internal fun MemoryOrganizationSettings(assistant: Assistant, settings: Settings, onUpdate: (Assistant) -> Unit) {
     val service = koinInject<MemoryOrganizationService>()
+    val graph = koinInject<MemoryGraphService>()
+    val coroutineScope = rememberCoroutineScope()
+    var graphStatus by remember(assistant.id, assistant.useGlobalMemory) { mutableStateOf<Pair<Int, Int>?>(null) }
+    var graphBusy by remember { mutableStateOf(false) }
+    var graphMessage by remember { mutableStateOf<String?>(null) }
+    var confirmGraph by remember { mutableStateOf(false) }
     val latestFlow = remember(assistant.id) { service.latest(assistant.id) }
     val latest by latestFlow.collectAsStateWithLifecycle(initialValue = null)
     val model = assistant.memoryOrganizationModelId?.let(settings::findModelById)
     val configured = model?.type == ModelType.CHAT && model.findProvider(settings.providers)?.enabled == true
+    LaunchedEffect(assistant.id, assistant.memoryGraphEnabled, assistant.useGlobalMemory, latest) {
+        graphStatus = if (assistant.memoryGraphEnabled) try {
+            graph.status(assistant)
+        } catch (cancelled: CancellationException) { throw cancelled
+        } catch (_: Exception) { null } else null
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("自动整理记忆", style = MaterialTheme.typography.titleMedium)
         Text("从开启后的聊天中挑选值得长期记住的事，附上原话出处；不需要先压缩对话。" +
@@ -92,6 +107,52 @@ internal fun MemoryOrganizationSettings(assistant: Assistant, settings: Settings
         latest?.let { batch ->
             Text("最近整理：${batch.detail}", style = MaterialTheme.typography.bodySmall)
         } ?: Text("尚未整理。开启后积累新聊天，达到条数再自动处理。", style = MaterialTheme.typography.bodySmall)
+        CardGroup {
+            item(
+                headlineContent = { Text("图谱筛选召回") },
+                supportingContent = { Text("结合近期双方对话定位实体、主题和别名，沿关系找记忆与原话；最多4条关系。" +
+                    "没有图谱命中就不引用，不回退到宽泛匹配。需同时开启按需召回。") },
+                trailingContent = {
+                    Switch(checked = assistant.memoryGraphEnabled, enabled = !graphBusy,
+                        onCheckedChange = { onUpdate(assistant.copy(memoryGraphEnabled = it)) })
+                },
+            )
+        }
+        if (assistant.memoryGraphEnabled) {
+            Text("新自动记忆在同一次整理请求里提取关系，输出上限由2048提高到4096 token，费用按实际用量。" +
+                "聊天时本地查图谱，不增加嵌入或重排请求。只靠省略句、未覆盖的别名可能漏召回。",
+                style = MaterialTheme.typography.bodySmall)
+            graphStatus?.let { Text("已处理 ${it.first} 条记忆，待建图 ${it.second} 条；无明确关系的记忆不会硬建图。",
+                style = MaterialTheme.typography.bodySmall) }
+            TextButton(enabled = !graphBusy && configured && assistant.enableMemory,
+                onClick = { confirmGraph = true }) { Text(if (graphBusy) "正在建图…" else "为已有记忆建图") }
+            graphMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
+    if (confirmGraph) {
+        AlertDialog(
+            onDismissRequest = { confirmGraph = false },
+            title = { Text("为已有记忆建图") },
+            text = { Text("使用当前整理模型，本次最多处理8条未建图的记忆，调用一次并单独计费。" +
+                "单条超过2000字跳过，不自动继续或重试，不改写记忆。旧记忆只有记忆正文出处，不补造用户原话。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmGraph = false
+                    graphBusy = true
+                    coroutineScope.launch {
+                        try {
+                            val added = graph.build(assistant)
+                            graphMessage = "本次新增 $added 条关系。"
+                            graphStatus = graph.status(assistant)
+                        } catch (cancelled: CancellationException) { throw cancelled
+                        } catch (_: Exception) {
+                            graphMessage = "建图未完成，未保存本批结果；可能已产生模型费用，不自动重试。"
+                        } finally { graphBusy = false }
+                    }
+                }) { Text("确认建图") }
+            },
+            dismissButton = { TextButton(onClick = { confirmGraph = false }) { Text("取消") } },
+        )
     }
 }
 
