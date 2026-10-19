@@ -22,12 +22,12 @@ fun memoryRerankCandidates(query: String, longTerm: List<RankedMemory>, history:
             if (selected.any { it.slice.sourceKey == slice.sourceKey &&
                     it.slice.start < slice.end && slice.start < it.slice.end }) continue
             val text = MemoryTextBudget().excerpt(slice, query, 600)
-            if (text.isBlank() || selected.any { it.text.trim() == text.trim() }) continue
+            if (text.isBlank() || selected.any { it.slice.history?.role == slice.history?.role && it.text.trim() == text.trim() }) continue
             selected += MemoryExcerpt(slice, text)
         }
         return selected
     }
-    return (route(longTerm) + route(history)).distinctBy { it.text.trim() }.take(12)
+    return (route(longTerm) + route(history)).distinctBy { it.slice.history?.role to it.text.trim() }.take(12)
 }
 
 fun selectRerankedMemory(
@@ -41,7 +41,7 @@ fun selectRerankedMemory(
         val candidate = candidates.getOrNull(score.index) ?: continue
         val slice = candidate.slice
         val excerpt = SavedMemoryExcerpt(slice.memoryId, slice.revision, slice.sourceHash, candidate.text, slice.history)
-        if (result.any { it.text == excerpt.text }) continue
+        if (result.any { it.history?.role == excerpt.history?.role && it.text == excerpt.text }) continue
         if (renderMemorySnapshot(result + excerpt).isNotEmpty()) result += excerpt
     }
     return result

@@ -32,4 +32,13 @@ class MemoryRerankTest {
         val duplicate = longTerm.first().copy(slice = longTerm.first().slice.copy(memoryId = 99))
         assertEquals(1, memoryRerankCandidates("记忆", listOf(longTerm.first(), duplicate), emptyList()).size)
     }
+    @Test fun `identical first person text by different speakers retains both roles`() {
+        val user = HistoryMemorySource("chat", "n1", "m1", "owner", "user", "2026-10-19", "我喜欢吃辣", 0)
+        val assistant = user.copy(nodeId = "n2", messageId = "m2", role = "assistant", nodeIndex = 1)
+        val hits = (historyMemorySlices(user) + historyMemorySlices(assistant)).map { RankedMemory(it, 1.0) }
+        val candidates = memoryRerankCandidates("吃辣", emptyList(), hits)
+        assertEquals(setOf("user", "assistant"), candidates.map { it.slice.history?.role }.toSet())
+        assertEquals(2, selectRerankedMemory(candidates, listOf(RerankScore(0, 0.9), RerankScore(1, 0.8)), 0.5, 3).size)
+    }
+
 }

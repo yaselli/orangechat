@@ -67,6 +67,7 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
         val match = terms.joinToString(" || ' OR ' || ") { "jieba_query(?)" }
         val args: List<Any> = terms + listOf<Any>(
             scope, boundary.latestTime, boundary.conversationId, boundary.maxNodeIndex,
+            if (boundary.oldestMillis == null) 0 else 1, (boundary.oldestMillis ?: 0L) / 1000 - 1,
         )
         val ids = mutableListOf<String>()
         database.openHelper.writableDatabase.query(
@@ -79,6 +80,12 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
                 AND json_extract(n.messages, '$[' || n.select_index || '].role') IN ('user','assistant')
                 AND json_extract(n.messages, '$[' || n.select_index || '].createdAt') <= ?
                 AND (n.conversation_id != ? OR n.node_index < ?)
+                AND (? = 0 OR CASE
+                    WHEN substr(json_extract(n.messages, '$[' || n.select_index || '].createdAt'),20) GLOB '*[+-]*'
+                        OR json_extract(n.messages, '$[' || n.select_index || '].createdAt') GLOB '*Z'
+                    THEN CAST(strftime('%s', json_extract(n.messages, '$[' || n.select_index || '].createdAt')) AS INTEGER)
+                    ELSE CAST(strftime('%s', json_extract(n.messages, '$[' || n.select_index || '].createdAt'), 'utc') AS INTEGER)
+                    END >= ?)
                 ORDER BY rank, n.id LIMIT 80""",
             args.toTypedArray<Any>(),
         ).use { while (it.moveToNext()) ids += it.getString(0) }

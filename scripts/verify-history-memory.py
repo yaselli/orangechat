@@ -97,5 +97,21 @@ for n in range(100):
     db.execute('INSERT INTO message_fts VALUES(?,?,?,?,?,?)',('oat milk',key,msg['id'],'private','title','1'))
 fts_sql = re.search(r'"""(SELECT DISTINCT n\.id FROM message_fts.*?)"""', repository, re.S)[1]
 fts_sql = fts_sql.replace('$match', "jieba_query(?)")
-assert db.execute(fts_sql, ('milk','assistant-a','2026','chat',2)).fetchall() == [('visible',)]
+assert db.execute(fts_sql, ('milk','assistant-a','2026','chat',2,0,0)).fetchall() == [('visible',)]
 print('PASS: v31→v33 preserves messages/memories/snapshots; selected text excludes hidden/tool/reasoning/background/attachments; scope/branch/time filters; edit and conversation cascades; bound FTS SQL')
+
+# Expired lexical hits must be removed before LIMIT, not allowed to crowd recent matches out.
+db.execute("UPDATE message_node SET messages=json_set(messages,'$[0].createdAt','2025-01-01T00:00:00Z') WHERE id='visible'")
+for n in range(100):
+    key='expired-'+str(n)
+    msg=message(key+'-message','oat milk')
+    msg['createdAt']='2020-01-01T00:00:00Z'
+    db.execute('INSERT INTO message_node VALUES(?,?,?,?,?)',(key,'chat',0,json.dumps([msg]),0))
+    db.execute('INSERT INTO message_fts VALUES(?,?,?,?,?,?)',('oat milk',key,msg['id'],'chat','title','1'))
+cutoff=int(db.execute("SELECT strftime('%s','2024-01-01T00:00:00Z')").fetchone()[0])
+assert db.execute(fts_sql, ('milk','assistant-a','2026','chat',2,1,cutoff)).fetchall() == [('visible',)]
+db.execute("UPDATE message_node SET messages=json_set(messages,'$[0].createdAt','2025-01-01T08:00:00+08:00') WHERE id='visible'")
+assert db.execute(fts_sql, ('milk','assistant-a','2026','chat',2,1,cutoff)).fetchall() == [('visible',)]
+db.execute("UPDATE message_node SET messages=json_set(messages,'$[0].createdAt','2025-01-01T00:00:00') WHERE id='visible'")
+assert db.execute(fts_sql, ('milk','assistant-a','2026','chat',2,1,cutoff)).fetchall() == [('visible',)]
+print('PASS: short-term keyword expiration is applied before candidate LIMIT, including offset-aware timestamps')
