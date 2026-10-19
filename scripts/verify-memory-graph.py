@@ -71,3 +71,20 @@ db.execute("INSERT INTO memory_index_attempt VALUES('owner','model','slice','bat
 db.execute("INSERT OR IGNORE INTO memory_index_attempt VALUES('owner','model','slice','batch','running','retry',2)")
 assert db.execute('SELECT state FROM memory_index_attempt').fetchone() == ('failed',)
 print('PASS: v35→v36 retires graph only, preserves every other table, exact attempt schema and durable no-retry claims')
+
+# Compare the actual migration with Room's compiler-exported schema, including every retained table.
+expected_schema = json.loads((root / 'app/schemas/me.rerere.rikkahub.data.db.AppDatabase/36.json').read_text())
+expected = sqlite3.connect(':memory:')
+for entity in expected_schema['database']['entities']:
+    table = entity['tableName']
+    expected.execute(entity['createSql'].replace('${TABLE_NAME}', table))
+    for index in entity.get('indices', []):
+        expected.execute(index['createSql'].replace('${TABLE_NAME}', table))
+    def metadata(connection):
+        columns = list(connection.execute('PRAGMA table_info("' + table + '")'))
+        keys = sorted(tuple(row[2:]) for row in connection.execute('PRAGMA foreign_key_list("' + table + '")'))
+        indexes = {row[1]: (row[2], list(connection.execute('PRAGMA index_info("' + row[1] + '")')))
+                   for row in connection.execute('PRAGMA index_list("' + table + '")')}
+        return columns, keys, indexes
+    assert metadata(db) == metadata(expected), table
+print('PASS: all v36 table, foreign key and index metadata matches compiler-exported Room schema')
