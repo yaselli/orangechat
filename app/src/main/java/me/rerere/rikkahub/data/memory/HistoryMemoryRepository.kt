@@ -112,6 +112,7 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
 
     private val lastPrune = mutableMapOf<String, Pair<Long, Long>>()
     private val pruneMutex = kotlinx.coroutines.sync.Mutex()
+    private val pruneCursors = mutableMapOf<String, String>()
 
     override suspend fun pruneExpired(scope: String, oldestMillis: Long) {
         if (!pruneMutex.tryLock()) return
@@ -119,11 +120,16 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
             val now = System.currentTimeMillis()
             val previous = lastPrune[scope]
             if (previous != null && now - previous.first < 3_600_000 && oldestMillis - previous.second < 86_400_000) return
-            var after = ""
-            while (true) {
+            var after = pruneCursors[scope].orEmpty()
+            // At most 256 nodes per query; a large archive must not turn local cleanup into a send-time scan.
+            repeat(4) {
                 currentCoroutineContext().ensureActive()
                 val nodes = dao.indexedNodes(scope, after)
-                if (nodes.isEmpty()) break
+                if (nodes.isEmpty()) {
+                    pruneCursors.remove(scope)
+                    lastPrune[scope] = now to oldestMillis
+                    return
+                }
                 database.withTransaction {
                     val current = sources(scope, nodes).associateBy { it.nodeId }
                     val expired = nodes.filter { node ->
@@ -134,7 +140,7 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
                 }
                 after = nodes.last()
             }
-            lastPrune[scope] = now to oldestMillis
+            pruneCursors[scope] = after
         } finally { pruneMutex.unlock() }
     }
 
