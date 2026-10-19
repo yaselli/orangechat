@@ -30,7 +30,7 @@ class MemoryGraphFailureTest {
     @Test
     fun `parser distinguishes invalid JSON memory ids relation fields and original quote`() {
         fun problem(raw: String, originals: Map<Int, String> = mapOf(7 to "她喜欢炸鸡")): MemoryGraphBuildProblem {
-            val error = assertThrows(MemoryGraphBuildFailure::class.java) { parseMemoryGraphBuild(raw, originals) }
+            val error = assertThrows(MemoryGraphBuildFailure::class.java) { inspectMemoryGraphBuild(raw, originals) }
             assertEquals(MemoryGraphBuildStage.OUTPUT, error.stage)
             return error.problem
         }
@@ -62,7 +62,7 @@ class MemoryGraphFailureTest {
     @Test
     fun `safe diagnostics retain stage and prevent serializer source snippets from leaking`() {
         val error = assertThrows(MemoryGraphBuildFailure::class.java) {
-            parseMemoryGraphBuild("{\"secret-key\":\"private-memory\"}", mapOf(7 to "source"))
+            inspectMemoryGraphBuild("{\"secret-key\":\"private-memory\"}", mapOf(7 to "source"))
         }
         val text = memoryGraphBuildFailureMessage(error)
         assertTrue(text.contains("结果校验阶段"))
@@ -112,7 +112,7 @@ class MemoryGraphFailureTest {
     @Test
     fun `failed statistics refresh never claims a committed graph was unsaved`() = runBlocking {
         var calls = 0
-        val result = memoryGraphBuildFeedback(build = { calls++; 3 }, refresh = { error("secret refresh error") })
+        val result = memoryGraphBuildFeedback(build = { calls++; MemoryGraphBuildResult(3, 3) }, refresh = { error("secret refresh error") })
         assertEquals(1, calls)
         assertTrue(result.message.contains("新增 3 条关系"))
         assertTrue(result.message.contains("统计刷新失败"))
@@ -132,10 +132,25 @@ class MemoryGraphFailureTest {
         assertTrue(failed.message.contains("尚未发起模型请求"))
         assertEquals(1, calls)
         assertEquals(0, refreshes)
-        val success = memoryGraphBuildFeedback(build = { calls++; 0 }, refresh = { refreshes++; 8 to 2 })
+        val success = memoryGraphBuildFeedback(build = { calls++; MemoryGraphBuildResult(0, 8) }, refresh = { refreshes++; 8 to 2 })
         assertEquals(8 to 2, success.status)
         assertTrue(success.message.contains("新增 0 条关系"))
         assertEquals(2, calls)
         assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun `partial feedback reports saved and pending records without claiming whole batch failure`() = runBlocking {
+        var calls = 0
+        val result = memoryGraphBuildFeedback(build = {
+            calls++
+            MemoryGraphBuildResult(1, 2, 1, "#9：status 须为 asserted/negated/past")
+        }, refresh = { 2 to 1 })
+        assertEquals(1, calls)
+        assertEquals(2 to 1, result.status)
+        assertTrue(result.message.contains("新增 1 条关系"))
+        assertTrue(result.message.contains("1 条未保存、仍待建图"))
+        assertTrue(result.message.contains("status"))
+        assertFalse(result.message.contains("本批未写入"))
     }
 }

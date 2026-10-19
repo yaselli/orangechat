@@ -13,6 +13,72 @@ class MemoryGraphTest {
         MemoryGraphCandidate(id, relation(target, topic), id.toLong())
 
     @Test
+    fun `legal single character aliases and cosmetic output differences do not reject a relation`() {
+        val value = relation().copy(subject = MemoryGraphNode(" 渡 ", " ASSISTANT ",
+            listOf(" 渡 ", "渡", "", "沈", "x".repeat(41), "沈渡", "kira", "extra")), status = " ASSERTED ")
+        val normalized = normalizeMemoryGraph(value)
+        validateMemoryGraph(normalized)
+        assertEquals("渡", normalized.subject.name)
+        assertEquals("assistant", normalized.subject.type)
+        assertEquals(listOf("渡", "沈", "沈渡", "kira"), normalized.subject.aliases)
+        assertEquals("asserted", normalized.status)
+        assertEquals(value.predicate, normalized.predicate)
+        val facts = inspectMemoryGraphBuild(JsonInstant.encodeToString(listOf(MemoryGraphBuildFact(7, value, "炸鸡"))),
+            mapOf(7 to "炸鸡"))
+        assertEquals(normalized, facts.valid.single().graph)
+    }
+
+    @Test
+    fun `bad relation does not discard other valid or explicitly null rows and stays pending`() {
+        val values = listOf(MemoryGraphBuildFact(7, relation(), "炸鸡"),
+            MemoryGraphBuildFact(8, relation().copy(status = "private-status"), "炸鸡"),
+            MemoryGraphBuildFact(9, null))
+        val result = inspectMemoryGraphBuild(JsonInstant.encodeToString(values), mapOf(7 to "炸鸡", 8 to "炸鸡", 9 to "闲聊"))
+        assertEquals(listOf(7, 9), result.valid.map { it.memoryId })
+        assertEquals(1, result.warnings.size)
+        assertTrue(result.warnings.single().contains("#8"))
+        assertTrue(result.warnings.single().contains("status"))
+        assertFalse(result.warnings.single().contains("private-status"))
+    }
+
+    @Test
+    fun `quote mismatch is not repaired or accepted during partial processing`() {
+        val values = listOf(MemoryGraphBuildFact(7, relation(), "炸鸡"), MemoryGraphBuildFact(8, relation(), "编造的引文"))
+        val result = inspectMemoryGraphBuild(JsonInstant.encodeToString(values), mapOf(7 to "炸鸡", 8 to "原始内容"))
+        assertEquals(listOf(7), result.valid.map { it.memoryId })
+        assertEquals(1, result.warnings.size)
+        assertFalse(result.warnings.single().contains("编造的引文"))
+        assertThrows(MemoryGraphBuildFailure::class.java) {
+            inspectMemoryGraphBuild(JsonInstant.encodeToString(values.takeLast(1)), mapOf(8 to "原始内容"))
+        }
+    }
+
+    @Test
+    fun `unknown semantic types are not guessed and all invalid output gives exact safe field`() {
+        val value = relation().copy(target = MemoryGraphNode("private-name", "unknown-type"))
+        val error = assertThrows(MemoryGraphBuildFailure::class.java) {
+            inspectMemoryGraphBuild(JsonInstant.encodeToString(listOf(MemoryGraphBuildFact(7, value, "炸鸡"))), mapOf(7 to "炸鸡"))
+        }
+        assertEquals(MemoryGraphBuildProblem.RELATION_FIELDS, error.problem)
+        assertEquals(MemoryGraphField.TARGET_TYPE, (error.cause as MemoryGraphFieldFailure).field)
+        val message = memoryGraphBuildFailureMessage(error)
+        assertTrue(message.contains("target.type"))
+        assertFalse(message.contains("private-name"))
+        assertFalse(message.contains("unknown-type"))
+    }
+
+    @Test
+    fun `missing duplicate or foreign ids still reject before any partial result is accepted`() {
+        val good = MemoryGraphBuildFact(7, relation(), "炸鸡")
+        for (values in listOf(listOf(good), listOf(good, good), listOf(good, good.copy(memoryId = 99)))) {
+            val error = assertThrows(MemoryGraphBuildFailure::class.java) {
+                inspectMemoryGraphBuild(JsonInstant.encodeToString(values), mapOf(7 to "炸鸡", 8 to "炸鸡"))
+            }
+            assertEquals(MemoryGraphBuildProblem.MEMORY_IDS, error.problem)
+        }
+    }
+
+    @Test
     fun `unrelated shared conversation wording cannot seed graph recall`() {
         val graph = listOf(candidate(1), candidate(2, "睡衣", "衣着"))
         assertTrue(selectMemoryGraph("你猜呀～\n嘿嘿嘿", graph).isEmpty())
@@ -65,11 +131,11 @@ class MemoryGraphTest {
     fun `graph parser requires exact source quote complete ids and bounded valid relation schema`() {
         val fact = MemoryGraphBuildFact(7, relation(), "喜欢炸鸡")
         val raw = JsonInstant.encodeToString(listOf(fact))
-        assertEquals(listOf(fact), parseMemoryGraphBuild(raw, mapOf(7 to "她喜欢炸鸡")))
-        assertThrows(Exception::class.java) { parseMemoryGraphBuild(raw, mapOf(8 to "她喜欢炸鸡")) }
-        assertThrows(Exception::class.java) { parseMemoryGraphBuild(raw, mapOf(7 to "她喜欢奶茶")) }
-        assertThrows(Exception::class.java) { parseMemoryGraphBuild("[]", mapOf(7 to "她喜欢炸鸡")) }
+        assertEquals(listOf(fact), inspectMemoryGraphBuild(raw, mapOf(7 to "她喜欢炸鸡")).valid)
+        assertThrows(Exception::class.java) { inspectMemoryGraphBuild(raw, mapOf(8 to "她喜欢炸鸡")) }
+        assertThrows(Exception::class.java) { inspectMemoryGraphBuild(raw, mapOf(7 to "她喜欢奶茶")) }
+        assertThrows(Exception::class.java) { inspectMemoryGraphBuild("[]", mapOf(7 to "她喜欢炸鸡")) }
         assertThrows(Exception::class.java) { validateMemoryGraph(relation().copy(status = "guess")) }
-        assertEquals(1, parseMemoryGraphBuild("""[{"memoryId":7,"graph":null}]""", mapOf(7 to "闲聊")).size)
+        assertEquals(1, inspectMemoryGraphBuild("""[{"memoryId":7,"graph":null}]""", mapOf(7 to "闲聊")).valid.size)
     }
 }

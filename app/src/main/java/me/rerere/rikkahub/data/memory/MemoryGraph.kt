@@ -22,17 +22,46 @@ data class MemoryGraphRelation(
         time.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
 }
 
+internal enum class MemoryGraphField(val explanation: String) {
+    SUBJECT_NAME("subject.name 不能为空且最多40字"), SUBJECT_TYPE("subject.type 须为 user/assistant/person/thing/event/topic/place"),
+    SUBJECT_ALIASES("subject.aliases 最多4个非空别名，每个最多40字"),
+    TARGET_NAME("target.name 不能为空且最多40字"), TARGET_TYPE("target.type 须为 user/assistant/person/thing/event/topic/place"),
+    TARGET_ALIASES("target.aliases 最多4个非空别名，每个最多40字"),
+    TOPIC_NAME("topic.name 不能为空且最多40字"), TOPIC_TYPE("topic.type 必须为 topic"),
+    TOPIC_ALIASES("topic.aliases 最多4个非空别名，每个最多40字"),
+    PREDICATE("predicate 不能为空且最多30字"), KIND("kind 须为 preference/event/relationship/promise/fact"),
+    STATUS("status 须为 asserted/negated/past"), TIME("time 最多80字"),
+}
+
+internal class MemoryGraphFieldFailure(val field: MemoryGraphField) : IllegalArgumentException(field.name)
+
+/** Formatting only: never invent a type, relation, status, quote or substitute an unknown enum. */
+internal fun normalizeMemoryGraph(relation: MemoryGraphRelation): MemoryGraphRelation {
+    fun node(value: MemoryGraphNode) = value.copy(name = value.name.trim(), type = value.type.trim().lowercase(Locale.ROOT),
+        aliases = value.aliases.map { it.trim() }.filter { it.isNotEmpty() && it.length <= 40 }.distinct().take(4))
+    return relation.copy(subject = node(relation.subject), target = node(relation.target), topic = node(relation.topic),
+        predicate = relation.predicate.trim(), kind = relation.kind.trim().lowercase(Locale.ROOT),
+        status = relation.status.trim().lowercase(Locale.ROOT), time = relation.time.trim())
+}
+
 internal fun validateMemoryGraph(relation: MemoryGraphRelation) {
+    fun field(condition: Boolean, name: MemoryGraphField) { if (!condition) throw MemoryGraphFieldFailure(name) }
     val types = setOf("user", "assistant", "person", "thing", "event", "topic", "place")
-    listOf(relation.subject, relation.target, relation.topic).forEach { node ->
-        require(node.name.isNotBlank() && node.name.length <= 40 && node.type in types)
-        require(node.aliases.size <= 4 && node.aliases.all { it.length in 2..40 })
+    val fields = listOf(
+        Triple(MemoryGraphField.SUBJECT_NAME, MemoryGraphField.SUBJECT_TYPE, MemoryGraphField.SUBJECT_ALIASES),
+        Triple(MemoryGraphField.TARGET_NAME, MemoryGraphField.TARGET_TYPE, MemoryGraphField.TARGET_ALIASES),
+        Triple(MemoryGraphField.TOPIC_NAME, MemoryGraphField.TOPIC_TYPE, MemoryGraphField.TOPIC_ALIASES),
+    )
+    listOf(relation.subject, relation.target, relation.topic).forEachIndexed { index, node ->
+        field(node.name.isNotBlank() && node.name.length <= 40, fields[index].first)
+        field(node.type in types, fields[index].second)
+        field(node.aliases.size <= 4 && node.aliases.all { it.isNotBlank() && it.length <= 40 }, fields[index].third)
     }
-    require(relation.topic.type == "topic")
-    require(relation.predicate.isNotBlank() && relation.predicate.length <= 30)
-    require(relation.kind in setOf("preference", "event", "relationship", "promise", "fact"))
-    require(relation.status in setOf("asserted", "negated", "past"))
-    require(relation.time.length <= 80)
+    field(relation.topic.type == "topic", MemoryGraphField.TOPIC_TYPE)
+    field(relation.predicate.isNotBlank() && relation.predicate.length <= 30, MemoryGraphField.PREDICATE)
+    field(relation.kind in setOf("preference", "event", "relationship", "promise", "fact"), MemoryGraphField.KIND)
+    field(relation.status in setOf("asserted", "negated", "past"), MemoryGraphField.STATUS)
+    field(relation.time.length <= 80, MemoryGraphField.TIME)
 }
 
 /** One graph record is one evidenced relation, never a model-created replacement for source text. */
@@ -45,7 +74,7 @@ data class MemoryGraphCandidate(
 @Serializable
 internal data class MemoryGraphBuildFact(val memoryId: Int, val graph: MemoryGraphRelation?, val quote: String = "")
 
-internal fun parseMemoryGraphBuild(raw: String, originals: Map<Int, String>): List<MemoryGraphBuildFact> {
+private fun decodeMemoryGraphBuild(raw: String, originals: Map<Int, String>): List<MemoryGraphBuildFact> {
     requireMemoryGraphBuild(raw.isNotBlank(), MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.EMPTY_OUTPUT)
     requireMemoryGraphBuild(raw.length <= 30000, MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.OVERSIZED)
     require(originals.size in 1..8)
@@ -56,18 +85,45 @@ internal fun parseMemoryGraphBuild(raw: String, originals: Map<Int, String>): Li
     }
     requireMemoryGraphBuild(facts.size == originals.size && facts.map { it.memoryId }.toSet() == originals.keys,
         MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.MEMORY_IDS)
-    facts.forEach { fact ->
-        requireMemoryGraphBuild(fact.quote.length <= 400, MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.QUOTE)
-        fact.graph?.let {
-            try { validateMemoryGraph(it)
-            } catch (failure: IllegalArgumentException) {
-                throw MemoryGraphBuildFailure(MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.RELATION_FIELDS, failure)
-            }
-            requireMemoryGraphBuild(fact.quote.isNotBlank() && originals.getValue(fact.memoryId).contains(fact.quote),
-                MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.QUOTE)
+    return facts
+}
+
+private fun checkedMemoryGraphFact(fact: MemoryGraphBuildFact, originals: Map<Int, String>): MemoryGraphBuildFact {
+    requireMemoryGraphBuild(fact.quote.length <= 400, MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.QUOTE)
+    val normalized = fact.graph?.let(::normalizeMemoryGraph)
+    normalized?.let {
+        try { validateMemoryGraph(it)
+        } catch (failure: MemoryGraphFieldFailure) {
+            throw MemoryGraphBuildFailure(MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.RELATION_FIELDS, failure)
+        }
+        requireMemoryGraphBuild(fact.quote.isNotBlank() && originals.getValue(fact.memoryId).contains(fact.quote),
+            MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.QUOTE)
+    }
+    return fact.copy(graph = normalized)
+}
+
+internal data class MemoryGraphBuildInspection(
+    val valid: List<MemoryGraphBuildFact>, val warnings: List<String>,
+)
+
+/** Protocol/id failures remain atomic; a bad relation cannot discard unrelated valid rows or be marked processed. */
+internal fun inspectMemoryGraphBuild(raw: String, originals: Map<Int, String>): MemoryGraphBuildInspection {
+    val facts = decodeMemoryGraphBuild(raw, originals)
+    val valid = mutableListOf<MemoryGraphBuildFact>()
+    val warnings = mutableListOf<String>()
+    var firstFailure: MemoryGraphBuildFailure? = null
+    for (fact in facts) {
+        try { valid += checkedMemoryGraphFact(fact, originals)
+        } catch (failure: MemoryGraphBuildFailure) {
+            if (failure.problem !in setOf(MemoryGraphBuildProblem.RELATION_FIELDS, MemoryGraphBuildProblem.QUOTE)) throw failure
+            if (firstFailure == null) firstFailure = failure
+            val field = (failure.cause as? MemoryGraphFieldFailure)?.field?.explanation
+                ?: "依据摘录为空、过长或与原文不一致"
+            warnings += "#${fact.memoryId}：$field"
         }
     }
-    return facts
+    if (valid.isEmpty()) throw requireNotNull(firstFailure)
+    return MemoryGraphBuildInspection(valid, warnings)
 }
 
 private fun graphKey(node: MemoryGraphNode) = node.type + ":" + node.name.trim().lowercase(Locale.ROOT)
@@ -112,7 +168,7 @@ fun selectMemoryGraph(query: String, candidates: List<MemoryGraphCandidate>): Li
 internal const val MEMORY_GRAPH_INSTRUCTIONS = """为每条明确记忆同时提取至多一条 graph 关系；没有可靠关系时 graph=null。
 graph 格式：{"subject":{"name":"她","type":"user","aliases":[]},"predicate":"喜欢","target":{"name":"炸鸡","type":"thing","aliases":["香脆鸡块"]},"topic":{"name":"饮食","type":"topic","aliases":["吃饭","吃什么"]},"kind":"preference","status":"asserted","time":""}。
 节点 type 只能是 user/assistant/person/thing/event/topic/place；我和她分别用 assistant/user，其他人物用 person。
-name 最多40字；aliases 最多4个，每个2到40字，是确切同义称呼或具体话题表达，不能填“你猜、嘿嘿、聊天”等通用话术。
+name 最多40字；aliases 最多4个，每个1到40字，单字姓名合法；只写确切同义称呼或具体话题表达，不能填“你猜、嘿嘿、聊天”等通用话术。
 predicate 最多30字；kind 只能是 preference/event/relationship/promise/fact；status 只能是 asserted/negated/past。
 topic 必须是 type=topic 的具体主题。time 只写原文明确的时间，最多80字；未明确时留空，不能猜今天。
 关系必须被该记忆及其引文支持，不把临时事件推成长期偏好，不把助手猜测当用户事实；不得推断额外关系。"""

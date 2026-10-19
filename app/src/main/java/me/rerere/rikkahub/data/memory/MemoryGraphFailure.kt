@@ -62,7 +62,8 @@ internal fun memoryGraphBuildFailureMessage(failure: Exception): String {
         MemoryGraphBuildProblem.OVERSIZED -> "模型返回的建图结果超过本地校验上限"
         MemoryGraphBuildProblem.JSON_STRUCTURE -> "模型结果不是要求的完整 JSON 结构，或必需字段缺失"
         MemoryGraphBuildProblem.MEMORY_IDS -> "模型返回的记忆编号缺失、重复或不属于本批"
-        MemoryGraphBuildProblem.RELATION_FIELDS -> "关系字段不符合要求（实体类型、状态、别名数量或长度等）"
+        MemoryGraphBuildProblem.RELATION_FIELDS -> "关系字段不符合要求：" +
+            ((local?.cause as? MemoryGraphFieldFailure)?.field?.explanation ?: "实体类型、状态、别名数量或长度等")
         MemoryGraphBuildProblem.QUOTE -> "依据摘录为空、过长或与对应记忆原文不一致"
         else -> {
             val http = if (stage == MemoryGraphBuildStage.REQUEST) causes.firstNotNullOfOrNull {
@@ -106,17 +107,22 @@ internal fun memoryGraphBuildFailureMessage(failure: Exception): String {
 
 internal data class MemoryGraphBuildFeedback(val message: String, val status: Pair<Int, Int>? = null)
 
+data class MemoryGraphBuildResult(
+    val added: Int, val processed: Int, val skipped: Int = 0, val detail: String = "",
+)
+
 /** A failed statistics refresh cannot reclassify a successfully committed graph as an unsaved batch. */
 internal suspend fun memoryGraphBuildFeedback(
-    build: suspend () -> Int, refresh: suspend () -> Pair<Int, Int>,
+    build: suspend () -> MemoryGraphBuildResult, refresh: suspend () -> Pair<Int, Int>,
 ): MemoryGraphBuildFeedback {
-    val added = try {
+    val result = try {
         build()
     } catch (cancelled: CancellationException) { throw cancelled
     } catch (failure: Exception) {
         return MemoryGraphBuildFeedback(memoryGraphBuildFailureMessage(failure))
     }
-    val success = "本次处理完成，新增 $added 条关系。"
+    val success = "本次处理 ${result.processed} 条记忆，新增 ${result.added} 条关系。" +
+        if (result.skipped > 0) "${result.skipped} 条未保存、仍待建图：${result.detail}。不自动重试。" else ""
     return try {
         MemoryGraphBuildFeedback(success, refresh())
     } catch (cancelled: CancellationException) { throw cancelled
