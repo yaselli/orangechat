@@ -25,6 +25,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.memory.MemoryRecallState
 import me.rerere.rikkahub.data.memory.MemoryRecallTrace
 import me.rerere.rikkahub.data.memory.MemoryVectorState
+import me.rerere.rikkahub.data.memory.MemoryRerankState
 import me.rerere.rikkahub.data.memory.memoryRecallTrace
 import java.time.Instant
 import java.time.ZoneId
@@ -80,8 +81,8 @@ private fun MemoryRecallReferenceDialog(trace: MemoryRecallTrace, onDismiss: () 
                             trace.diagnostics.graph ?: when (trace.diagnostics.vector) {
                                 MemoryVectorState.NOT_CONFIGURED -> "未配置可用嵌入模型，使用关键词检索。"
                                 MemoryVectorState.NO_INDEX -> "没有可用向量索引，使用关键词检索。"
-                                MemoryVectorState.SUCCESS -> "向量查询成功，已与关键词结果融合。"
-                                MemoryVectorState.CACHED -> "复用了本地查询向量缓存，已与关键词结果融合。"
+                                MemoryVectorState.SUCCESS -> "向量查询成功，已与关键词结果融合；最终引用见下方。"
+                                MemoryVectorState.CACHED -> "复用了查询向量缓存，并与关键词候选融合；最终引用见下方。"
                                 MemoryVectorState.TIMEOUT -> "向量检索超时，使用可用的关键词结果；未自动重试。"
                                 MemoryVectorState.FAILED -> "向量检索失败，使用可用的关键词结果；未自动重试。"
                                 MemoryVectorState.NO_QUERY -> "没有可用于搜索的文字。"
@@ -92,6 +93,24 @@ private fun MemoryRecallReferenceDialog(trace: MemoryRecallTrace, onDismiss: () 
                             Text("历史关键词查询失败，仅使用其他可用结果。", style = MaterialTheme.typography.bodySmall)
                         }
                     }
+                    if (trace.diagnostics.rerank != MemoryRerankState.DISABLED) {
+                        Text("长期候选 ${trace.diagnostics.longTermCandidates} · 短期候选 ${trace.diagnostics.historyCandidates} · 合并送审 ${trace.diagnostics.candidates.size}")
+                        Text(when (trace.diagnostics.rerank) {
+                            MemoryRerankState.NOT_CONFIGURED -> "未配置可用重排模型，本轮未附带候选。"
+                            MemoryRerankState.NO_CANDIDATES -> "两路都没有可送审候选，未请求重排。"
+                            MemoryRerankState.SUCCESS -> "重排完成；达到门槛的片段还需通过数量、长度和来源校验。"
+                            MemoryRerankState.TIMEOUT -> "重排超过8秒，未自动重试，本轮未附带候选。"
+                            MemoryRerankState.FAILED -> "重排失败或返回数据无效，未自动重试，本轮未附带候选。"
+                            MemoryRerankState.DISABLED -> "重排未开启。"
+                        }, style = MaterialTheme.typography.bodySmall)
+                        trace.diagnostics.candidates.forEachIndexed { index, hit ->
+                            Text("候选 ${index + 1} · " + (if (hit.history == null) "长期 #${hit.memoryId}" else "短期 ${hit.history.role}") +
+                                " · 分数 ${hit.score?.let { String.format(java.util.Locale.ROOT, "%.3f", it) } ?: "未返回"}" +
+                                if (hit.kept) " · 筛选保留" else " · 未保留", style = MaterialTheme.typography.labelSmall)
+                            Text(hit.text, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    trace.diagnostics.retention?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     trace.excerpts.forEachIndexed { index, excerpt ->
                         HorizontalDivider()
                         val history = excerpt.history

@@ -55,6 +55,12 @@ interface HistoryMemoryDAO {
     @Query("SELECT sliceId FROM history_memory_vector WHERE scope = :scope AND namespace = :namespace")
     suspend fun indexedIds(scope: String, namespace: String): List<String>
 
+    @Query("SELECT DISTINCT nodeId FROM history_memory_vector WHERE scope=:scope AND nodeId>:after ORDER BY nodeId LIMIT 64")
+    suspend fun indexedNodes(scope: String, after: String): List<String>
+
+    @Query("DELETE FROM history_memory_vector WHERE scope=:scope AND nodeId IN (:nodeIds)")
+    suspend fun removeNodes(scope: String, nodeIds: List<String>)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun put(vectors: List<HistoryMemoryVector>)
 

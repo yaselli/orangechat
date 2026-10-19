@@ -198,6 +198,32 @@ class OpenAIProvider(
         )
     }
 
+    /** SiliconFlow/Jina-style /rerank contract; callers own timeouts and one-call budgets. */
+    suspend fun rerank(
+        providerSetting: ProviderSetting.OpenAI, model: Model, query: String, documents: List<String>,
+    ): List<me.rerere.ai.provider.providers.openai.RerankScore> = withContext(Dispatchers.IO) {
+        require(query.isNotBlank() && documents.size in 1..12)
+        require(model.customBodies.none { it.key in setOf("model", "query", "documents", "top_n", "return_documents") })
+        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val payload = buildJsonObject {
+            put("model", model.modelId)
+            put("query", query)
+            putJsonArray("documents") { documents.forEach { add(JsonPrimitive(it)) } }
+            put("top_n", documents.size)
+            put("return_documents", false)
+        }.mergeCustomBody(model.customBodies)
+        val request = Request.Builder().url("${providerSetting.baseUrl.trimEnd('/')}/rerank")
+            .headers(model.customHeaders.toHeaders()).header("Authorization", "Bearer $key")
+            .header("Content-Type", "application/json")
+            .post(json.encodeToString(payload).toRequestBody("application/json".toMediaType())).build()
+        client.newCall(request).await().use { response ->
+            check(response.isSuccessful) { "Rerank HTTP ${response.code}" }
+            val source = requireNotNull(response.body).source()
+            check(!source.request(65_537)) { "Rerank response too large" }
+            me.rerere.ai.provider.providers.openai.parseRerankScores(source.readUtf8(), documents.size)
+        }
+    }
+
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams

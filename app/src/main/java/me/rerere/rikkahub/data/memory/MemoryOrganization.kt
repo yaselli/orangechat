@@ -22,7 +22,6 @@ internal fun organizationSourceMillis(createdAt: String): Long? = runCatching {
 @Serializable
 internal data class OrganizedFact(
     val content: String, val sourceMessageId: String, val quote: String,
-    val graph: MemoryGraphRelation? = null,
 )
 
 internal data class OrganizationPlan(
@@ -76,7 +75,6 @@ internal fun parseOrganizedFacts(raw: String, sources: List<HistoryMemorySource>
     require(facts.size <= 8) { "整理条目过多" }
     val byId = sources.associateBy { it.messageId }
     facts.forEach { fact ->
-        fact.graph?.let(::validateMemoryGraph)
         require(fact.content.isNotBlank() && fact.content.length <= 400) { "记忆内容无效" }
         val source = byId[fact.sourceMessageId] ?: error("记忆引用不属于本批对话")
         require(fact.quote.isNotBlank() && fact.quote.length <= 600 && source.text.contains(fact.quote)) {
@@ -96,4 +94,4 @@ internal const val MEMORY_ORGANIZATION_PROMPT = """你是聊天助手的长期�
 参考已有相关记忆，语义相同的不重复保存；明确发生变化的事实保留变化时间及新旧关系，不把矛盾抹平。
 每条必须引用本批某条消息的 sourceMessageId，并在 quote 中逐字摘录能支持该条记忆的原话（600 字内）。
 只返回 JSON 数组，格式：[{"content":"她喜欢……","sourceMessageId":"原消息 id","quote":"原话"}]。
-不得返回工具调用、解释或 Markdown；graph 字段仅在开启图谱的额外要求下返回。"""
+不得返回工具调用、解释或 Markdown。"""

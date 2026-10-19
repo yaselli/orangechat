@@ -32,8 +32,11 @@ data class HistoryRecallBoundary(
     val maxNodeIndex: Int,
     val latestTime: String,
     val visibleMessageIds: Set<String>,
+    val oldestMillis: Long? = null,
 ) {
-    fun allows(source: HistoryMemorySource): Boolean = source.messageId !in visibleMessageIds &&
+    fun allows(source: HistoryMemorySource): Boolean =
+        (oldestMillis == null || (organizationSourceMillis(source.createdAt) ?: Long.MIN_VALUE) >= oldestMillis) &&
+        source.messageId !in visibleMessageIds &&
         source.createdAt <= latestTime &&
         (source.conversationId != conversationId || source.nodeIndex < maxNodeIndex)
 }

@@ -114,6 +114,7 @@ import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.memory.MemoryOrganizationService
+import me.rerere.rikkahub.data.memory.MemoryAutoIndexService
 import me.rerere.rikkahub.data.memory.OrganizationMessageReference
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.web.BadRequestException
@@ -170,6 +171,7 @@ class ChatService(
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
     private val memoryOrganization: MemoryOrganizationService,
+    private val memoryAutoIndex: MemoryAutoIndexService,
     private val generationHandler: GenerationHandler,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
@@ -1234,7 +1236,8 @@ class ChatService(
                 )
             ) return@onSuccess
 
-            if (applicationReceipt == null && assistant.enableMemory && assistant.memoryAutoOrganizeEnabled &&
+            if (applicationReceipt == null && assistant.enableMemory &&
+                (assistant.memoryAutoOrganizeEnabled || assistant.memoryAutoIndexEnabled) &&
                 finalConversation.currentMessages.lastOrNull()?.let {
                     it.role == MessageRole.ASSISTANT && it.id !in initialConversation.currentMessages.map { msg -> msg.id }
                 } == true
@@ -1254,6 +1257,13 @@ class ChatService(
                         throw cancelled
                     } catch (_: Exception) {
                         Log.w(TAG, "Automatic memory organization unavailable; chat preserved")
+                    }
+                    try {
+                        memoryAutoIndex.afterReply(assistant.id,
+                            finalConversation.messageNodes.map { it.id.toString() })
+                    } catch (cancelled: CancellationException) { throw cancelled
+                    } catch (_: Exception) {
+                        Log.w(TAG, "Automatic memory indexing unavailable; chat preserved")
                     }
                 }
             }

@@ -65,7 +65,8 @@ class MemoryRecallTurn(
                 sent.isNotEmpty() -> MemoryRecallState.USED
                 valid.isNotEmpty() -> MemoryRecallState.FAILED // A corrupt/oversized snapshot was not sent.
                 excerpts.isNotEmpty() -> MemoryRecallState.STALE
-                diagnostics.historyKeywordsFailed || diagnostics.vector in setOf(
+                diagnostics.rerank in setOf(MemoryRerankState.FAILED, MemoryRerankState.TIMEOUT,
+                    MemoryRerankState.NOT_CONFIGURED) || diagnostics.historyKeywordsFailed || diagnostics.vector in setOf(
                     MemoryVectorState.TIMEOUT, MemoryVectorState.FAILED,
                 ) -> MemoryRecallState.FAILED
                 else -> MemoryRecallState.NO_MATCH

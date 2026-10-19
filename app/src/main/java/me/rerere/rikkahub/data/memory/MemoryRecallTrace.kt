@@ -21,7 +21,12 @@ enum class MemoryVectorState { NOT_CONFIGURED, NO_INDEX, SUCCESS, CACHED, TIMEOU
 data class MemoryRecallDiagnostics(
     val vector: MemoryVectorState = MemoryVectorState.UNKNOWN,
     val historyKeywordsFailed: Boolean = false,
-    val graph: String? = null,
+    val graph: String? = null, // Historical replies only; the graph feature has been retired.
+    val rerank: MemoryRerankState = MemoryRerankState.DISABLED,
+    val candidates: List<MemoryCandidateTrace> = emptyList(),
+    val longTermCandidates: Int = 0,
+    val historyCandidates: Int = 0,
+    val retention: String? = null,
 )
 
 @Serializable
@@ -36,7 +41,8 @@ data class MemoryRecallTrace(
     val excerpts: List<SavedMemoryExcerpt> = emptyList(),
     val diagnostics: MemoryRecallDiagnostics = MemoryRecallDiagnostics(),
 ) {
-    val degraded: Boolean get() = diagnostics.historyKeywordsFailed ||
+    val degraded: Boolean get() = diagnostics.rerank in setOf(MemoryRerankState.FAILED, MemoryRerankState.TIMEOUT) ||
+        diagnostics.historyKeywordsFailed ||
         diagnostics.vector in setOf(MemoryVectorState.TIMEOUT, MemoryVectorState.FAILED)
 }
 
@@ -57,10 +63,12 @@ internal fun UIMessage.attachMemoryRecallTrace(value: JsonElement): UIMessage =
 /** Only recorded replies have an entry. Missing/invalid old data must never imply a successful search. */
 fun UIMessage.memoryRecallTrace(): MemoryRecallTrace? {
     val raw = localMetadata?.get(RECALL_TRACE_KEY)?.toString() ?: return null
-    if (raw.length > 16_000) return null
+    if (raw.length > 40_000) return null
     return try {
         JsonInstant.decodeFromString<MemoryRecallTrace>(raw).takeIf { trace ->
-            trace.excerpts.size <= 6 &&
+            trace.excerpts.size <= 6 && trace.diagnostics.candidates.size <= 12 &&
+                trace.diagnostics.candidates.all { it.text.toByteArray(Charsets.UTF_8).size <= 600 &&
+                    (it.score == null || (it.score.isFinite() && it.score in 0.0..1.0)) } &&
                 (trace.excerpts.isEmpty() || renderMemorySnapshot(trace.excerpts).isNotBlank()) &&
                 ((trace.state == MemoryRecallState.USED) == trace.excerpts.isNotEmpty())
         }

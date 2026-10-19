@@ -38,8 +38,8 @@ assert {r[1] for r in db.execute('PRAGMA index_list(memory_graph)')} == {
     'sqlite_autoindex_memory_graph_1', 'index_memory_graph_memoryId', 'index_memory_graph_owner_scope'}
 db.execute("INSERT INTO memory_graph VALUES(7,'owner','scope',1,'hash','null','',1)")
 db.execute("INSERT INTO memory_graph VALUES(7,'other','scope',1,'hash','null','',1)")
-dao = (source / 'memory/MemoryGraphStorage.kt').read_text()
-query = re.search(r'@Query\("""(SELECT g\.\*.*?)"""\)', dao, re.S)[1]
+query = """SELECT g.* FROM memory_graph g JOIN MemoryEntity m ON m.id=g.memoryId
+    WHERE g.owner=:owner AND g.scope=:scope AND m.assistant_id=g.scope AND m.revision=g.revision"""
 assert len(db.execute(query, dict(owner='owner', scope='scope')).fetchall()) == 1
 assert len(db.execute(query, dict(owner='other', scope='scope')).fetchall()) == 1
 assert not db.execute(query, dict(owner='owner', scope='wrong')).fetchall()
@@ -55,3 +55,19 @@ try:
 except sqlite3.IntegrityError:
     pass
 print('PASS: v34→v35 exact Room graph metadata, preserved chat/branches/summary/memory, owner/scope isolation, revision invalidation, delete cascade')
+
+# Upgrade the historical graph schema, retaining all source/evidence/vector tables byte-for-byte.
+db.execute("INSERT INTO MemoryEntity(id,assistant_id,content) VALUES(8,'scope','retained long-term fact')")
+db.execute("INSERT INTO memory_graph VALUES(8,'owner','scope',1,'hash','null','',1)")
+tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'") if r[0] != 'memory_graph']
+source_rows = {table:list(db.execute('SELECT * FROM "' + table + '"')) for table in tables}
+migrate('Migration_35_36.kt')
+assert not db.execute("SELECT name FROM sqlite_master WHERE name='memory_graph'").fetchall()
+assert source_rows == {table:list(db.execute('SELECT * FROM "' + table + '"')) for table in tables}
+assert [(r[1],r[2],r[3],r[5]) for r in db.execute('PRAGMA table_info(memory_index_attempt)')] == [
+    ('owner','TEXT',1,1),('namespace','TEXT',1,2),('sliceId','TEXT',1,3),('batchId','TEXT',1,0),
+    ('state','TEXT',1,0),('detail','TEXT',1,0),('createdAt','INTEGER',1,0)]
+db.execute("INSERT INTO memory_index_attempt VALUES('owner','model','slice','batch','failed','safe',1)")
+db.execute("INSERT OR IGNORE INTO memory_index_attempt VALUES('owner','model','slice','batch','running','retry',2)")
+assert db.execute('SELECT state FROM memory_index_attempt').fetchone() == ('failed',)
+print('PASS: v35→v36 retires graph only, preserves every other table, exact attempt schema and durable no-retry claims')

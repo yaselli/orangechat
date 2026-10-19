@@ -77,7 +77,7 @@ jobs:
       - name: Verify automatic memory claims and evidence
         run: python3 scripts/verify-memory-organization.py
 
-      - name: Verify memory graph migration and isolation
+      - name: Verify graph retirement and incremental index claims
         run: python3 scripts/verify-memory-graph.py
 
       - name: Compile memory device tests
@@ -110,6 +110,7 @@ jobs:
             app/schemas/**/30.json
             app/schemas/**/31.json
             app/schemas/**/33.json
+            app/schemas/**/36.json
           if-no-files-found: warn
 
       - name: Build APK

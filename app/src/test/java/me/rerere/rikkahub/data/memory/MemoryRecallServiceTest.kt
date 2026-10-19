@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.memory
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -24,137 +25,6 @@ import java.io.IOException
 import java.lang.reflect.Proxy
 
 class MemoryRecallServiceTest {
-    @Test
-    fun `graph mode uses recent dialogue and does not call embedding or broad fallback`() = runBlocking {
-        val f = Fixture()
-        var queries = 0
-        val graph = object : MemoryGraphRecall {
-            override suspend fun recall(
-                assistant: Assistant, query: String, boundary: HistoryRecallBoundary?, semanticSeeds: List<RankedMemory>,
-            ): MemoryRecallSnapshot {
-                queries++
-                assertTrue(query.contains("穿什么"))
-                return MemoryRecallSnapshot(emptyList(), MemoryRecallDiagnostics(graph = "图谱没有命中"))
-            }
-        }
-        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
-        val user = UIMessage.user("你猜呀")
-        val messages = listOf(UIMessage.assistant("你今天穿什么"), user)
-        val turn = service.prepare(f.assistant.copy(memoryGraphEnabled = true), f.settings, "chat", messages)
-        assertEquals(messages, service.apply(turn, messages))
-        assertEquals(1, queries)
-        assertEquals(0, f.calls)
-        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertEquals(MemoryRecallState.NO_MATCH, trace.state)
-        assertTrue(trace.diagnostics.graph.orEmpty().contains("图谱没有命中"))
-    }
-    @Test
-    fun `local graph hit remains free even when embeddings and an index are configured`() = runBlocking {
-        val f = Fixture()
-        f.service.buildIndex(f.assistant, f.settings)
-        val graph = object : MemoryGraphRecall {
-            override suspend fun recall(
-                assistant: Assistant, query: String, boundary: HistoryRecallBoundary?, semanticSeeds: List<RankedMemory>,
-            ) = MemoryRecallSnapshot(listOf(SavedMemoryExcerpt(f.source.id, f.source.revision,
-                memoryHash(f.source.content), f.source.content, graphRelation = "本地图谱")))
-            override suspend fun eligibleMemoryIds(assistant: Assistant): Set<Int> = error("Local hit needs no semantic search")
-        }
-        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
-        val messages = listOf(UIMessage.user("炸鸡"))
-        val turn = service.prepare(f.assistant.copy(memoryGraphEnabled = true), f.settings, "chat", messages)
-        service.apply(turn, messages)
-        assertEquals(MemoryRecallState.USED, turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace()?.state)
-        assertEquals(1, f.calls) // Only the explicit index build, no query request.
-    }
-
-    private class SemanticGraph(private val f: Fixture) : MemoryGraphRecall {
-        val received = mutableListOf<List<RankedMemory>>()
-        override suspend fun eligibleMemoryIds(assistant: Assistant) = setOf(f.source.id)
-        override suspend fun recall(
-            assistant: Assistant, query: String, boundary: HistoryRecallBoundary?, semanticSeeds: List<RankedMemory>,
-        ): MemoryRecallSnapshot {
-            received += semanticSeeds
-            val hits = semanticSeeds.filter { seed -> f.rows.any {
-                it.id == seed.slice.memoryId && it.revision == seed.slice.revision && memoryHash(it.content) == seed.slice.sourceHash
-            } }.map { SavedMemoryExcerpt(it.slice.memoryId, it.slice.revision, it.slice.sourceHash, it.slice.text,
-                graphRelation = "语义图谱入口") }
-            return MemoryRecallSnapshot(hits, MemoryRecallDiagnostics(graph = "图谱结果"))
-        }
-    }
-
-    @Test
-    fun `graph miss uses indexed semantic entry without lexical overlap and reuses request snapshot`() = runBlocking {
-        val f = Fixture()
-        // An equally strong but ungraphed memory must never be a semantic graph entry.
-        f.rows += f.source.copy(id = 8, content = "不相关的睡衣记忆")
-        f.service.buildIndex(f.assistant, f.settings)
-        val graph = SemanticGraph(f)
-        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
-        val assistant = f.assistant.copy(memoryGraphEnabled = true)
-        val user = UIMessage.user("酥酥脆脆的那个")
-        val messages = listOf(user)
-        val turn = service.prepare(assistant, f.settings, "chat", messages)
-        service.apply(turn, messages)
-        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertEquals(MemoryRecallState.USED, trace.state)
-        assertEquals(listOf(7), trace.excerpts.map { it.memoryId })
-        assertEquals(listOf(7), graph.received.last().map { it.slice.memoryId })
-        assertEquals(MemoryVectorState.SUCCESS, trace.diagnostics.vector)
-        assertEquals(2, f.calls) // One manual indexing request, one query embedding.
-        val reused = service.prepare(assistant, f.settings, "chat", messages)
-        service.apply(reused, messages)
-        assertEquals(trace, reused.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertEquals(2, f.calls)
-        assertEquals(2, graph.received.size)
-    }
-
-    @Test
-    fun `graph without index explains missing semantic path and makes no paid call`() = runBlocking {
-        val f = Fixture()
-        val graph = SemanticGraph(f)
-        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
-        val messages = listOf(UIMessage.user("酥酥脆脆的那个"))
-        val turn = service.prepare(f.assistant.copy(memoryGraphEnabled = true), f.settings, "chat", messages)
-        service.apply(turn, messages)
-        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertEquals(MemoryRecallState.NO_MATCH, trace.state)
-        assertEquals(MemoryVectorState.NO_INDEX, trace.diagnostics.vector)
-        assertTrue(trace.diagnostics.graph.orEmpty().contains("更新向量索引"))
-        assertEquals(0, f.calls)
-    }
-
-    @Test
-    fun `failed semantic graph query does not retry or inject unlinked keyword memories`() = runBlocking {
-        val f = Fixture()
-        f.service.buildIndex(f.assistant, f.settings)
-        f.failTransport = true
-        val graph = SemanticGraph(f)
-        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
-        val messages = listOf(UIMessage.user("炸鸡"))
-        val turn = service.prepare(f.assistant.copy(memoryGraphEnabled = true), f.settings, "chat", messages)
-        assertEquals(messages, service.apply(turn, messages))
-        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertEquals(MemoryRecallState.FAILED, trace.state)
-        assertEquals(MemoryVectorState.FAILED, trace.diagnostics.vector)
-        assertEquals(2, f.calls)
-        assertEquals(1, graph.received.size)
-    }
-
-    @Test
-    fun `semantic graph entry is revalidated after embedding returns`() = runBlocking {
-        val f = Fixture()
-        f.service.buildIndex(f.assistant, f.settings)
-        f.duringEmbedding = { f.rows[0] = f.source.copy(content = "新内容", revision = 2) }
-        val graph = SemanticGraph(f)
-        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
-        val messages = listOf(UIMessage.user("酥酥脆脆的那个"))
-        val turn = service.prepare(f.assistant.copy(memoryGraphEnabled = true), f.settings, "chat", messages)
-        assertEquals(messages, service.apply(turn, messages))
-        assertEquals(MemoryRecallState.NO_MATCH,
-            turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace()?.state)
-        assertEquals(2, f.calls)
-    }
-
     private class Store : MemoryIndexDAO {
         val vectors = mutableListOf<MemoryVectorEntity>()
         val snapshots = mutableMapOf<String, MemoryRecallSnapshotEntity>()
@@ -215,9 +85,10 @@ class MemoryRecallServiceTest {
 
     private class Fixture {
         val model = Model(modelId = "test-embedding", type = ModelType.EMBEDDING)
-        val assistant = Assistant(enableMemory = true, memoryRecallEnabled = true, memoryEmbeddingModelId = model.id)
+        val assistant = Assistant(enableMemory = true, memoryRecallEnabled = true, memoryEmbeddingModelId = model.id, memoryRetentionEnabled = false)
+        val rerankModel = Model(modelId = "test-rerank", type = ModelType.RERANK)
         val settings = Settings(providers = listOf(ProviderSetting.OpenAI(
-            baseUrl = "https://embedding.test/v1", apiKey = "test", models = listOf(model),
+            baseUrl = "https://embedding.test/v1", apiKey = "test", models = listOf(model, rerankModel),
         )))
         val source = MemoryEntity(id = 7, assistantId = assistant.id.toString(), content = "我喜欢吃炸鸡，因为脆脆的")
         val rows = mutableListOf(source)
@@ -225,6 +96,11 @@ class MemoryRecallServiceTest {
         val history = HistoryStore()
         var duringEmbedding: (() -> Unit)? = null
         var calls = 0
+        var rerankCalls = 0
+        var rerankBody = """{"results":[{"index":0,"relevance_score":0.9}]}"""
+        var rerankStatus = 200
+        var onRerank: (() -> Unit)? = null
+        var capturedDocuments = emptyList<String>()
         var httpStatus = 200
         val callTimeouts = mutableListOf<Long>()
         var failTransport = false
@@ -238,6 +114,18 @@ class MemoryRecallServiceTest {
             }
         } as MemoryDAO
         val client = OkHttpClient.Builder().addInterceptor { chain ->
+            if (chain.request().url.encodedPath.endsWith("/rerank")) {
+                rerankCalls++
+                val buffer = Buffer()
+                chain.request().body!!.writeTo(buffer)
+                val payload = Json.parseToJsonElement(buffer.readUtf8()).jsonObject
+                capturedDocuments = payload.getValue("documents").jsonArray.map { it.toString() }
+                assertEquals(capturedDocuments.size.toString(), payload.getValue("top_n").toString())
+                assertTrue(capturedDocuments.size <= 12)
+                onRerank?.invoke()
+                return@addInterceptor Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                    .code(rerankStatus).message("rerank").body(rerankBody.toResponseBody("application/json".toMediaType())).build()
+            }
             calls++
             callTimeouts += chain.call().timeout().timeoutNanos()
             if (failTransport) throw IOException("offline")
@@ -461,6 +349,148 @@ class MemoryRecallServiceTest {
         val other = f.service.prepare(assistant.copy(id = kotlin.uuid.Uuid.random()), f.settings, "chat", listOf(user))
         assertEquals(user, f.service.apply(other, listOf(user)).single())
         assertEquals(0, f.calls)
+    }
+
+    private fun rerankAssistant(f: Fixture) = f.assistant.copy(memoryRerankEnabled = true,
+        memoryRerankModelId = f.rerankModel.id, memoryHistoryRecallEnabled = true)
+
+    @Test
+    fun `two independent routes send both roles through one rerank and reuse the paid snapshot`() = runBlocking {
+        val f = Fixture()
+        val assistant = rerankAssistant(f)
+        f.history.rows += HistoryMemorySource("old", "n1", "m1", assistant.id.toString(), "user", "2026-01-01T00:00", "我想吃辣火锅", 0)
+        f.history.rows += HistoryMemorySource("old", "n2", "m2", assistant.id.toString(), "assistant", "2026-01-01T00:01", "我记得你说想吃辣火锅", 1)
+        f.rerankBody = """{"results":[{"index":0,"relevance_score":0.9},{"index":1,"relevance_score":0.8},{"index":2,"relevance_score":0.1}]}"""
+        val messages = listOf(UIMessage.user("炸鸡辣火锅"))
+        val turn = f.service.prepare(assistant, f.settings, "chat", messages)
+        f.service.apply(turn, messages)
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryRecallState.USED, trace.state)
+        assertEquals(MemoryRerankState.SUCCESS, trace.diagnostics.rerank)
+        assertEquals(3, trace.diagnostics.candidates.size)
+        assertEquals(2, trace.diagnostics.candidates.count { it.kept })
+        assertTrue(f.capturedDocuments.any { it.contains("长期记忆") })
+        assertTrue(f.capturedDocuments.any { it.contains("role=user") })
+        assertTrue(f.capturedDocuments.any { it.contains("role=assistant") })
+        assertEquals(1, f.rerankCalls)
+        f.service.prepare(assistant, f.settings, "chat", messages)
+        assertEquals(1, f.rerankCalls)
+        assertEquals(0, f.calls) // No vector index, keywords still provide rerank candidates.
+    }
+
+    @Test
+    fun `all low rerank scores produce no forced reference and no unfiltered fallback`() = runBlocking {
+        val f = Fixture()
+        f.rerankBody = """{"results":[{"index":0,"relevance_score":0.1}]}"""
+        val messages = listOf(UIMessage.user("炸鸡"))
+        val turn = f.service.prepare(rerankAssistant(f), f.settings, "chat", messages)
+        assertEquals(messages, f.service.apply(turn, messages))
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryRecallState.NO_MATCH, trace.state)
+        assertEquals(MemoryRerankState.SUCCESS, trace.diagnostics.rerank)
+        assertFalse(trace.diagnostics.candidates.single().kept)
+        assertEquals(1, f.rerankCalls)
+    }
+
+    @Test
+    fun `rerank failure invalid indices and missing configuration stay visible and never retry`() = runBlocking {
+        for (body in listOf("bad response", """{"results":[{"index":99,"relevance_score":0.9}]}""")) {
+            val f = Fixture()
+            f.rerankBody = body
+            val messages = listOf(UIMessage.user("炸鸡"))
+            val turn = f.service.prepare(rerankAssistant(f), f.settings, "chat", messages)
+            assertEquals(messages, f.service.apply(turn, messages))
+            val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+            assertEquals(MemoryRecallState.FAILED, trace.state)
+            assertEquals(MemoryRerankState.FAILED, trace.diagnostics.rerank)
+            f.service.prepare(rerankAssistant(f), f.settings, "chat", messages)
+            assertEquals(1, f.rerankCalls)
+        }
+        val f = Fixture()
+        val messages = listOf(UIMessage.user("炸鸡"))
+        val turn = f.service.prepare(rerankAssistant(f).copy(memoryRerankModelId = null), f.settings, "chat", messages)
+        f.service.apply(turn, messages)
+        assertEquals(MemoryRerankState.NOT_CONFIGURED,
+            turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace()?.diagnostics?.rerank)
+        assertEquals(0, f.rerankCalls)
+    }
+
+    @Test
+    fun `forgetting excludes old keywords and vectors while long term memory remains available`() = runBlocking {
+        val f = Fixture()
+        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true, memoryRetentionEnabled = true)
+        f.history.rows += HistoryMemorySource("old", "n1", "m1", assistant.id.toString(), "user", "2020-01-01T00:00", "炸鸡", 0)
+        assertEquals(1, f.service.buildIndex(assistant, f.settings)) // The expired history is not embedded.
+        val messages = listOf(UIMessage.user("炸鸡"))
+        val turn = f.service.prepare(assistant, f.settings, "chat", messages)
+        f.service.apply(turn, messages)
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertTrue(trace.excerpts.isNotEmpty())
+        assertTrue(trace.excerpts.all { it.history == null })
+        assertEquals(0, trace.diagnostics.historyCandidates)
+    }
+
+    private class Journal : MemoryAutoIndexDAO {
+        val rows = mutableListOf<MemoryIndexAttempt>()
+        val latestValue = MutableStateFlow<MemoryIndexAttempt?>(null)
+        override suspend fun attempted(owner: String, namespace: String) = rows.filter {
+            it.owner == owner && it.namespace == namespace }.map { it.sliceId }
+        override suspend fun batchesSince(owner: String, since: Long) = rows.filter {
+            it.owner == owner && it.createdAt >= since }.map { it.batchId }.distinct().size
+        override suspend fun claim(rows: List<MemoryIndexAttempt>) = rows.map { row ->
+            if (this.rows.any { it.owner == row.owner && it.namespace == row.namespace && it.sliceId == row.sliceId }) -1L
+            else { this.rows += row; latestValue.value = row; this.rows.size.toLong() }
+        }
+        override suspend fun finish(owner: String, batchId: String, state: String, detail: String) {
+            rows.replaceAll { if (it.owner == owner && it.batchId == batchId) it.copy(state = state, detail = detail) else it }
+            latestValue.value = rows.lastOrNull()
+        }
+        override fun latest(owner: String) = latestValue
+    }
+
+    @Test
+    fun `automatic indexing is incremental does not backfill old rows and failed batches count toward daily cap`() = runBlocking {
+        val f = Fixture()
+        val journal = Journal()
+        val assistant = f.assistant.copy(memoryAutoIndexEnabled = true, memoryAutoIndexSinceMillis = 1,
+            memoryAutoIndexDailyLimit = 1)
+        val settings = f.settings.copy(assistants = listOf(assistant))
+        val auto = MemoryAutoIndexService(journal, { settings }, f.service)
+        auto.afterReply(assistant.id, emptyList()) // Legacy rows have no new creation/update timestamp.
+        assertEquals(0, f.calls)
+        f.rows[0] = f.source.copy(updatedAt = System.currentTimeMillis())
+        f.failTransport = true
+        auto.afterReply(assistant.id, emptyList())
+        assertEquals(1, f.calls)
+        assertTrue(journal.rows.all { it.state == "failed" })
+        f.failTransport = false
+        f.rows += f.source.copy(id = 8, content = "新记忆", createdAt = System.currentTimeMillis())
+        auto.afterReply(assistant.id, emptyList())
+        assertEquals(1, f.calls) // A failed request consumes the day's one automatic batch.
+        assertTrue(f.store.vectors.isEmpty())
+    }
+
+    @Test
+    fun `automatic indexing includes both roles once and respects settings changes during request`() = runBlocking {
+        val f = Fixture()
+        val journal = Journal()
+        val assistant = f.assistant.copy(memoryAutoIndexEnabled = true, memoryAutoIndexSinceMillis = 1,
+            memoryHistoryRecallEnabled = true)
+        val now = java.time.LocalDateTime.now().toString()
+        f.history.rows += HistoryMemorySource("chat", "n1", "m1", assistant.id.toString(), "user", now, "她说的话", 0)
+        f.history.rows += HistoryMemorySource("chat", "n2", "m2", assistant.id.toString(), "assistant", now, "我说的话", 1)
+        var settings = f.settings.copy(assistants = listOf(assistant))
+        val auto = MemoryAutoIndexService(journal, { settings }, f.service)
+        auto.afterReply(assistant.id, listOf("n1", "n2"))
+        auto.afterReply(assistant.id, listOf("n1", "n2"))
+        assertEquals(1, f.calls)
+        assertEquals(2, f.history.stored.size)
+        f.rows[0] = f.source.copy(updatedAt = System.currentTimeMillis())
+        f.duringEmbedding = { settings = settings.copy(assistants = listOf(assistant.copy(memoryAutoIndexEnabled = false))) }
+        auto.afterReply(assistant.id, listOf("n1", "n2"))
+        assertEquals(2, f.calls)
+        assertTrue(f.store.vectors.isEmpty())
+        assertEquals("failed", journal.rows.last().state)
     }
 
 }

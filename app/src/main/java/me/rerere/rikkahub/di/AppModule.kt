@@ -140,6 +140,7 @@ val appModule = module {
             conversationRepo = get(),
             memoryRepository = get(),
             memoryOrganization = get(),
+            memoryAutoIndex = get(),
             generationHandler = get(),
             templateTransformer = get(),
             providerManager = get(),

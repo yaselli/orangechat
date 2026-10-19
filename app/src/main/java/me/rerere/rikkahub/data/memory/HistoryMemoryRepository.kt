@@ -21,6 +21,7 @@ interface HistoryMemoryStorage {
     ): List<HistoryMemoryVector>
     suspend fun removeOtherModels(scope: String, namespace: String)
     suspend fun putValid(vectors: List<HistoryMemoryVector>)
+    suspend fun pruneExpired(scope: String, oldestMillis: Long) {}
     suspend fun refreshKeywords(scope: String): Int
 }
 
@@ -100,6 +101,34 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
             slice != null && slice.sourceHash == record.sourceHash &&
                 slice.start == record.start && slice.end == record.end
         })
+    }
+
+    private val lastPrune = mutableMapOf<String, Pair<Long, Long>>()
+    private val pruneMutex = kotlinx.coroutines.sync.Mutex()
+
+    override suspend fun pruneExpired(scope: String, oldestMillis: Long) {
+        if (!pruneMutex.tryLock()) return
+        try {
+            val now = System.currentTimeMillis()
+            val previous = lastPrune[scope]
+            if (previous != null && now - previous.first < 3_600_000 && oldestMillis - previous.second < 86_400_000) return
+            var after = ""
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val nodes = dao.indexedNodes(scope, after)
+                if (nodes.isEmpty()) break
+                database.withTransaction {
+                    val current = sources(scope, nodes).associateBy { it.nodeId }
+                    val expired = nodes.filter { node ->
+                        val time = current[node]?.createdAt?.let(::organizationSourceMillis)
+                        time == null || time < oldestMillis
+                    }
+                    if (expired.isNotEmpty()) dao.removeNodes(scope, expired)
+                }
+                after = nodes.last()
+            }
+            lastPrune[scope] = now to oldestMillis
+        } finally { pruneMutex.unlock() }
     }
 
     /** Repairs old truncated FTS rows locally; no embedding calls and no changes to message content. */

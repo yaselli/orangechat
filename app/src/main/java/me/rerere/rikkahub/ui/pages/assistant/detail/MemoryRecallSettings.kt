@@ -50,7 +50,7 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
         CardGroup {
             item(
                 headlineContent = { Text("按需召回记忆（测试）") },
-                supportingContent = { Text("只发送相关片段，最多 6 条；默认关闭。开启后不再整库注入。") },
+                supportingContent = { Text("长期记忆与历史原文分别检索；重排可筛选少量相关片段。默认关闭，开启后不再整库注入。") },
                 trailingContent = {
                     Switch(
                         checked = assistant.memoryRecallEnabled,
@@ -65,7 +65,7 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
                 item(
                     headlineContent = { Text("同时检索当前助手的聊天历史") },
                     supportingContent = {
-                        Text("只查当前选中的分支和普通文字，与长期记忆共用 6 个片段及总预算；默认关闭。")
+                        Text("保留用户和 AI 双方普通文字，只查当前助手与所选分支；与长期记忆合并筛选，默认关闭。")
                     },
                     trailingContent = {
                         Switch(
@@ -124,6 +124,7 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
                     if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall)
                 }
             }
+            MemoryRecallAdvancedSettings(assistant, settings, onUpdate)
         }
     }
     plan?.let { currentPlan ->
