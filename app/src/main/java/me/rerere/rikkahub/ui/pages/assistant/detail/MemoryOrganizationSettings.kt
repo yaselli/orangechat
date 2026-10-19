@@ -112,7 +112,7 @@ internal fun MemoryOrganizationSettings(assistant: Assistant, settings: Settings
             item(
                 headlineContent = { Text("图谱筛选召回") },
                 supportingContent = { Text("结合近期双方对话定位实体、主题和别名，沿关系找记忆与原话；最多4条关系。" +
-                    "没有图谱命中就不引用，不回退到宽泛匹配。需同时开启按需召回。") },
+                    "本地未定位到时，以向量语义相似度寻找图谱入口。需同时开启按需召回。") },
                 trailingContent = {
                     Switch(checked = assistant.memoryGraphEnabled, enabled = !graphBusy,
                         onCheckedChange = { onUpdate(assistant.copy(memoryGraphEnabled = it)) })
@@ -121,12 +121,14 @@ internal fun MemoryOrganizationSettings(assistant: Assistant, settings: Settings
         }
         if (assistant.memoryGraphEnabled) {
             Text("新自动记忆在同一次整理请求里提取关系，输出上限由2048提高到4096 token，费用按实际用量。" +
-                "聊天时本地查图谱，不增加嵌入或重排请求。只靠省略句、未覆盖的别名可能漏召回。",
+                "聊天优先本地定位；未命中且有可用向量索引时，最多一次查询嵌入，会增加费用与等待，不调用重排。" +
+                "语义入口暂用最高分且余弦相似度≥0.55的一条记忆，沿实体最多取两条关系；分数不是置信概率，效果随嵌入模型变化。",
                 style = MaterialTheme.typography.bodySmall)
             graphStatus?.let { Text("已处理 ${it.first} 条记忆，待建图 ${it.second} 条；无明确关系的记忆不会硬建图。",
                 style = MaterialTheme.typography.bodySmall) }
             TextButton(enabled = !graphBusy && configured && assistant.enableMemory,
                 onClick = { confirmGraph = true }) { Text(if (graphBusy) "正在建图…" else "为已有记忆建图") }
+            MemoryGraphInspectorButton(assistant)
             graphMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
     }

@@ -139,11 +139,30 @@ private fun mentionsGraphNode(query: String, node: MemoryGraphNode): Boolean {
     }
 }
 
-/** Entity/topic linking, then at most one edge of expansion. No shared-pronoun or unbounded topic walk.
- * Query lines are ordered current-user first, then recent dialogue; the newest identifiable topic wins.
- * This is explicit-name/alias linking, not an extra language-model intent classification request.
- */
-fun selectMemoryGraph(query: String, candidates: List<MemoryGraphCandidate>): List<MemoryGraphCandidate> {
+/** One strong semantic entry is enough; similarity is a model-dependent score, not a confidence probability. */
+internal fun memoryGraphSemanticSeeds(hits: List<RankedMemory>): List<RankedMemory> = hits
+    .filter { it.slice.history == null && it.score.isFinite() && it.score >= 0.55 }
+    .sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id })
+    .distinctBy { it.slice.memoryId }.take(1)
+
+/** Expand only named entities, never the participants or a broad topic; one hop and a shared result cap. */
+private fun expandMemoryGraph(
+    direct: List<MemoryGraphCandidate>, ordered: List<MemoryGraphCandidate>, limit: Int,
+): List<MemoryGraphCandidate> {
+    val seeds = direct.flatMap { listOf(it.relation.subject, it.relation.target) }
+        .filterNot { it.type in setOf("user", "assistant", "topic") }.mapTo(hashSetOf(), ::graphKey)
+    val neighbours = ordered.filter { candidate ->
+        listOf(candidate.relation.subject, candidate.relation.target).any { graphKey(it) in seeds }
+    }
+    return (direct + neighbours).distinctBy { it.memoryId }
+        .distinctBy { listOf(graphKey(it.relation.subject), it.relation.predicate, graphKey(it.relation.target),
+            it.relation.kind, it.relation.status, it.relation.time) }.take(limit)
+}
+
+/** Current-user line first, then recent dialogue. Semantic seeds are used only if no explicit link exists. */
+fun selectMemoryGraph(
+    query: String, candidates: List<MemoryGraphCandidate>, semanticMemoryIds: List<Int> = emptyList(),
+): List<MemoryGraphCandidate> {
     val ordered = candidates.sortedWith(compareByDescending<MemoryGraphCandidate> { it.createdAt }.thenBy { it.memoryId })
     val lines = query.lowercase(Locale.ROOT).lines().filter { it.isNotBlank() }
     for (line in lines) {
@@ -152,17 +171,10 @@ fun selectMemoryGraph(query: String, candidates: List<MemoryGraphCandidate>): Li
                 (if (mentionsGraphNode(line, candidate.relation.subject)) 3 else 0) +
                 (if (mentionsGraphNode(line, candidate.relation.topic)) 1 else 0)
         val direct = ordered.filter { relevance(it) > 0 }.sortedByDescending(::relevance).take(4)
-        if (direct.isEmpty()) continue
-        val seeds = direct.flatMap { listOf(it.relation.subject, it.relation.target) }
-            .filterNot { it.type in setOf("user", "assistant", "topic") }.mapTo(hashSetOf(), ::graphKey)
-        val neighbours = ordered.filter { candidate ->
-            listOf(candidate.relation.subject, candidate.relation.target).any { graphKey(it) in seeds }
-        }
-        return (direct + neighbours).distinctBy { it.memoryId }
-            .distinctBy { listOf(graphKey(it.relation.subject), it.relation.predicate, graphKey(it.relation.target),
-                it.relation.kind, it.relation.status, it.relation.time) }.take(4)
+        if (direct.isNotEmpty()) return expandMemoryGraph(direct, ordered, 4)
     }
-    return emptyList()
+    val direct = semanticMemoryIds.take(1).mapNotNull { id -> ordered.firstOrNull { it.memoryId == id } }
+    return if (direct.isEmpty()) emptyList() else expandMemoryGraph(direct, ordered, 2)
 }
 
 internal const val MEMORY_GRAPH_INSTRUCTIONS = """为每条明确记忆同时提取至多一条 graph 关系；没有可靠关系时 graph=null。

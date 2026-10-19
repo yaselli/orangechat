@@ -29,7 +29,9 @@ class MemoryRecallServiceTest {
         val f = Fixture()
         var queries = 0
         val graph = object : MemoryGraphRecall {
-            override suspend fun recall(assistant: Assistant, query: String, boundary: HistoryRecallBoundary?): MemoryRecallSnapshot {
+            override suspend fun recall(
+                assistant: Assistant, query: String, boundary: HistoryRecallBoundary?, semanticSeeds: List<RankedMemory>,
+            ): MemoryRecallSnapshot {
                 queries++
                 assertTrue(query.contains("穿什么"))
                 return MemoryRecallSnapshot(emptyList(), MemoryRecallDiagnostics(graph = "图谱没有命中"))
@@ -44,8 +46,115 @@ class MemoryRecallServiceTest {
         assertEquals(0, f.calls)
         val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
         assertEquals(MemoryRecallState.NO_MATCH, trace.state)
-        assertEquals("图谱没有命中", trace.diagnostics.graph)
+        assertTrue(trace.diagnostics.graph.orEmpty().contains("图谱没有命中"))
     }
+    @Test
+    fun `local graph hit remains free even when embeddings and an index are configured`() = runBlocking {
+        val f = Fixture()
+        f.service.buildIndex(f.assistant, f.settings)
+        val graph = object : MemoryGraphRecall {
+            override suspend fun recall(
+                assistant: Assistant, query: String, boundary: HistoryRecallBoundary?, semanticSeeds: List<RankedMemory>,
+            ) = MemoryRecallSnapshot(listOf(SavedMemoryExcerpt(f.source.id, f.source.revision,
+                memoryHash(f.source.content), f.source.content, graphRelation = "本地图谱")))
+            override suspend fun eligibleMemoryIds(assistant: Assistant): Set<Int> = error("Local hit needs no semantic search")
+        }
+        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
+        val messages = listOf(UIMessage.user("炸鸡"))
+        val turn = service.prepare(f.assistant.copy(memoryGraphEnabled = true), f.settings, "chat", messages)
+        service.apply(turn, messages)
+        assertEquals(MemoryRecallState.USED, turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace()?.state)
+        assertEquals(1, f.calls) // Only the explicit index build, no query request.
+    }
+
+    private class SemanticGraph(private val f: Fixture) : MemoryGraphRecall {
+        val received = mutableListOf<List<RankedMemory>>()
+        override suspend fun eligibleMemoryIds(assistant: Assistant) = setOf(f.source.id)
+        override suspend fun recall(
+            assistant: Assistant, query: String, boundary: HistoryRecallBoundary?, semanticSeeds: List<RankedMemory>,
+        ): MemoryRecallSnapshot {
+            received += semanticSeeds
+            val hits = semanticSeeds.filter { seed -> f.rows.any {
+                it.id == seed.slice.memoryId && it.revision == seed.slice.revision && memoryHash(it.content) == seed.slice.sourceHash
+            } }.map { SavedMemoryExcerpt(it.slice.memoryId, it.slice.revision, it.slice.sourceHash, it.slice.text,
+                graphRelation = "语义图谱入口") }
+            return MemoryRecallSnapshot(hits, MemoryRecallDiagnostics(graph = "图谱结果"))
+        }
+    }
+
+    @Test
+    fun `graph miss uses indexed semantic entry without lexical overlap and reuses request snapshot`() = runBlocking {
+        val f = Fixture()
+        // An equally strong but ungraphed memory must never be a semantic graph entry.
+        f.rows += f.source.copy(id = 8, content = "不相关的睡衣记忆")
+        f.service.buildIndex(f.assistant, f.settings)
+        val graph = SemanticGraph(f)
+        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
+        val assistant = f.assistant.copy(memoryGraphEnabled = true)
+        val user = UIMessage.user("酥酥脆脆的那个")
+        val messages = listOf(user)
+        val turn = service.prepare(assistant, f.settings, "chat", messages)
+        service.apply(turn, messages)
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryRecallState.USED, trace.state)
+        assertEquals(listOf(7), trace.excerpts.map { it.memoryId })
+        assertEquals(listOf(7), graph.received.last().map { it.slice.memoryId })
+        assertEquals(MemoryVectorState.SUCCESS, trace.diagnostics.vector)
+        assertEquals(2, f.calls) // One manual indexing request, one query embedding.
+        val reused = service.prepare(assistant, f.settings, "chat", messages)
+        service.apply(reused, messages)
+        assertEquals(trace, reused.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(2, f.calls)
+        assertEquals(2, graph.received.size)
+    }
+
+    @Test
+    fun `graph without index explains missing semantic path and makes no paid call`() = runBlocking {
+        val f = Fixture()
+        val graph = SemanticGraph(f)
+        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
+        val messages = listOf(UIMessage.user("酥酥脆脆的那个"))
+        val turn = service.prepare(f.assistant.copy(memoryGraphEnabled = true), f.settings, "chat", messages)
+        service.apply(turn, messages)
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryRecallState.NO_MATCH, trace.state)
+        assertEquals(MemoryVectorState.NO_INDEX, trace.diagnostics.vector)
+        assertTrue(trace.diagnostics.graph.orEmpty().contains("更新向量索引"))
+        assertEquals(0, f.calls)
+    }
+
+    @Test
+    fun `failed semantic graph query does not retry or inject unlinked keyword memories`() = runBlocking {
+        val f = Fixture()
+        f.service.buildIndex(f.assistant, f.settings)
+        f.failTransport = true
+        val graph = SemanticGraph(f)
+        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
+        val messages = listOf(UIMessage.user("炸鸡"))
+        val turn = service.prepare(f.assistant.copy(memoryGraphEnabled = true), f.settings, "chat", messages)
+        assertEquals(messages, service.apply(turn, messages))
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryRecallState.FAILED, trace.state)
+        assertEquals(MemoryVectorState.FAILED, trace.diagnostics.vector)
+        assertEquals(2, f.calls)
+        assertEquals(1, graph.received.size)
+    }
+
+    @Test
+    fun `semantic graph entry is revalidated after embedding returns`() = runBlocking {
+        val f = Fixture()
+        f.service.buildIndex(f.assistant, f.settings)
+        f.duringEmbedding = { f.rows[0] = f.source.copy(content = "新内容", revision = 2) }
+        val graph = SemanticGraph(f)
+        val service = MemoryRecallService(f.dao, f.store, f.client, history = f.history, graph = graph)
+        val messages = listOf(UIMessage.user("酥酥脆脆的那个"))
+        val turn = service.prepare(f.assistant.copy(memoryGraphEnabled = true), f.settings, "chat", messages)
+        assertEquals(messages, service.apply(turn, messages))
+        assertEquals(MemoryRecallState.NO_MATCH,
+            turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace()?.state)
+        assertEquals(2, f.calls)
+    }
+
     private class Store : MemoryIndexDAO {
         val vectors = mutableListOf<MemoryVectorEntity>()
         val snapshots = mutableMapOf<String, MemoryRecallSnapshotEntity>()

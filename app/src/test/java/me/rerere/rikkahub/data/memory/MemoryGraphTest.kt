@@ -128,6 +128,34 @@ class MemoryGraphTest {
     }
 
     @Test
+    fun `semantic entry recovers paraphrase without a shared name and is bounded to one hop and two relations`() {
+        val first = candidate(1)
+        val neighbour = candidate(2).copy(relation = relation().copy(
+            subject = MemoryGraphNode("炸鸡", "thing"), target = MemoryGraphNode("小店", "place")))
+        val far = candidate(3).copy(relation = relation().copy(
+            subject = MemoryGraphNode("小店", "place"), target = MemoryGraphNode("老板", "person")))
+        val unrelated = candidate(4, "睡衣", "衣着").copy(relation = relation().copy(
+            target = MemoryGraphNode("睡衣", "thing"), topic = MemoryGraphNode("衣着", "topic")))
+        val graph = listOf(first, neighbour, far, unrelated)
+        assertTrue(selectMemoryGraph("酥酥脆脆的那个", graph).isEmpty())
+        assertEquals(listOf(1, 2), selectMemoryGraph("酥酥脆脆的那个", graph, listOf(1)).map { it.memoryId })
+        assertTrue(selectMemoryGraph("酥酥脆脆的那个", graph, listOf(99)).isEmpty())
+        assertEquals(listOf(4), selectMemoryGraph("衣着", graph, listOf(1)).map { it.memoryId })
+    }
+
+    @Test
+    fun `semantic entry takes only strongest finite non history memory and never forces weak hits`() {
+        val slices = MemoryTextBudget().slices("owner", 7, 1, "她喜欢炸鸡")
+        val one = RankedMemory(slices.single(), 0.8)
+        val other = one.copy(slice = one.slice.copy(memoryId = 8), score = 0.7)
+        assertEquals(listOf(one), memoryGraphSemanticSeeds(listOf(other, one, one.copy(score = 0.6))))
+        assertTrue(memoryGraphSemanticSeeds(listOf(one.copy(score = 0.54), one.copy(score = Double.NaN),
+            one.copy(score = Double.POSITIVE_INFINITY), one.copy(score = -1.0))).isEmpty())
+        val ref = HistoryReference("chat", "node", "message", "user", "date")
+        assertTrue(memoryGraphSemanticSeeds(listOf(one.copy(slice = one.slice.copy(history = ref)))).isEmpty())
+    }
+
+    @Test
     fun `graph parser requires exact source quote complete ids and bounded valid relation schema`() {
         val fact = MemoryGraphBuildFact(7, relation(), "喜欢炸鸡")
         val raw = JsonInstant.encodeToString(listOf(fact))

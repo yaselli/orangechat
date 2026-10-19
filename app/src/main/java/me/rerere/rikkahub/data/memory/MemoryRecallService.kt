@@ -199,7 +199,7 @@ class MemoryRecallService(
                 history.boundary(historyScope, conversationId, messages)
             } else null
             val retrievalVersion = (config(assistant, settings)?.key ?: "keyword-v1") +
-                ":history-v1:${assistant.memoryHistoryRecallEnabled}:$historyScope:graph-v1:${assistant.memoryGraphEnabled}"
+                ":history-v1:${assistant.memoryHistoryRecallEnabled}:$historyScope:graph-v2:${assistant.memoryGraphEnabled}"
             val key = memoryHash("$conversationId\u0000$scope\u0000${latest.id}\u0000$hash" +
                 "\u0000${memoryHash(query)}\u0000$retrievalVersion")
             var snapshot = index.snapshot(key)
@@ -248,14 +248,17 @@ class MemoryRecallService(
         assistant: Assistant, settings: Settings, scope: String, query: String, sources: List<MemoryEntity>,
         boundary: HistoryRecallBoundary?,
     ): MemoryRecallSnapshot {
-        if (assistant.memoryGraphEnabled) {
-            return requireNotNull(graph) { "Graph service unavailable" }.recall(assistant, query, boundary)
-        }
+        val graphService = if (assistant.memoryGraphEnabled) requireNotNull(graph) { "Graph service unavailable" } else null
+        val localGraph = graphService?.recall(assistant, query, boundary)
+        if (localGraph != null && localGraph.excerpts.isNotEmpty()) return localGraph
+        val eligible = graphService?.eligibleMemoryIds(assistant)
+        if (localGraph != null && eligible.isNullOrEmpty()) return localGraph.copy(diagnostics =
+            localGraph.diagnostics.copy(graph = localGraph.diagnostics.graph + " 没有可用图谱关系，请在查看图谱中检查原因。"))
         if (query.isBlank()) return MemoryRecallSnapshot(emptyList(), MemoryRecallDiagnostics(MemoryVectorState.NO_QUERY))
         var historyKeywordsFailed = false
         var vectorState = MemoryVectorState.NOT_CONFIGURED
-        val slices = slices(sources)
-        val historySlices = if (boundary == null) emptyList() else try {
+        val slices = slices(sources).filter { eligible == null || it.memoryId in eligible }
+        val historySlices = if (graphService != null || boundary == null) emptyList() else try {
             history.keywords(assistant.id.toString(), query, boundary)
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -263,7 +266,7 @@ class MemoryRecallService(
             historyKeywordsFailed = true
             emptyList()
         }
-        val keywords = rankKeywordMemories(query, slices + historySlices)
+        val keywords = if (graphService != null) emptyList() else rankKeywordMemories(query, slices + historySlices)
         val vectors = withTimeoutOrNull(8000) {
             try {
                 val config = config(assistant, settings) ?: return@withTimeoutOrNull emptyList()
@@ -273,7 +276,7 @@ class MemoryRecallService(
                     slice != null && slice.revision == record.revision && slice.sourceHash == record.sourceHash
                 }
                 val historyScope = assistant.id.toString()
-                val firstHistoryPage = if (boundary == null) emptyList() else {
+                val firstHistoryPage = if (graphService != null || boundary == null) emptyList() else {
                     history.vectors(historyScope, config.key, "", boundary)
                 }
                 if (indexed.isEmpty() && firstHistoryPage.isEmpty()) {
@@ -295,7 +298,7 @@ class MemoryRecallService(
                     }
                     memoryCosine(queryVector, vector)?.let { RankedMemory(byId.getValue(record.sliceId), it) }
                 }.sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id }).take(20)
-                val historyHits = if (boundary == null) emptyList() else historyVectorHits(
+                val historyHits = if (graphService != null || boundary == null) emptyList() else historyVectorHits(
                     historyScope, config.key, queryVector, firstHistoryPage, boundary,
                 )
                 vectorState = if (cached) MemoryVectorState.CACHED else MemoryVectorState.SUCCESS
@@ -309,6 +312,24 @@ class MemoryRecallService(
             }
         }
         if (vectors == null) vectorState = MemoryVectorState.TIMEOUT
+        if (graphService != null) {
+            val seeds = memoryGraphSemanticSeeds(vectors.orEmpty())
+            val result = if (seeds.isEmpty()) requireNotNull(localGraph) else
+                graphService.recall(assistant, query, boundary, seeds)
+            val detail = when (vectorState) {
+                MemoryVectorState.NOT_CONFIGURED -> "未配置可用嵌入模型，无法对换说法做语义定位。"
+                MemoryVectorState.NO_INDEX -> "可用图谱记忆没有当前模型的向量索引，请更新向量索引；本次未请求嵌入。"
+                MemoryVectorState.TIMEOUT -> "语义检索超过8秒，未自动重试。"
+                MemoryVectorState.FAILED -> "语义检索失败，未自动重试。"
+                MemoryVectorState.SUCCESS, MemoryVectorState.CACHED ->
+                    (if (vectorState == MemoryVectorState.CACHED) "复用查询向量缓存。" else "已完成一次查询嵌入。") +
+                        if (seeds.isEmpty()) "语义候选未达到余弦相似度0.55，未强行引用。" else
+                            "以最高分的一条记忆为入口，最多附带两条关系。"
+                else -> "没有可用的语义查询。"
+            }
+            return result.copy(diagnostics = result.diagnostics.copy(vector = vectorState,
+                graph = result.diagnostics.graph + " " + detail))
+        }
         val selected = selectMemoryExcerpts(query, fuseMemoryRanks(keywords, vectors.orEmpty())).map {
             SavedMemoryExcerpt(it.slice.memoryId, it.slice.revision, it.slice.sourceHash, it.text, it.slice.history)
         }

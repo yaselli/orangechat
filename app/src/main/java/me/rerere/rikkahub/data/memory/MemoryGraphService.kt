@@ -27,10 +27,19 @@ import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 interface MemoryGraphRecall {
-    suspend fun recall(assistant: Assistant, query: String, boundary: HistoryRecallBoundary?): MemoryRecallSnapshot
+    suspend fun eligibleMemoryIds(assistant: Assistant): Set<Int> = emptySet()
+    suspend fun recall(
+        assistant: Assistant, query: String, boundary: HistoryRecallBoundary?,
+        semanticSeeds: List<RankedMemory> = emptyList(),
+    ): MemoryRecallSnapshot
 }
 
-/** Graph construction is explicit or piggybacks on organization; reading the graph makes no paid calls. */
+data class MemoryGraphInspectionEntry(
+    val memoryId: Int, val content: String, val relation: MemoryGraphRelation?, val reason: String,
+    val usable: Boolean, val quote: String, val createdAt: Long,
+)
+
+/** Graph construction is explicit or piggybacks on organization; graph reads make no paid calls. */
 class MemoryGraphService(
     private val database: AppDatabase,
     private val settingsStore: SettingsStore,
@@ -125,9 +134,14 @@ class MemoryGraphService(
         }
     }
 
-    override suspend fun recall(
-        assistant: Assistant, query: String, boundary: HistoryRecallBoundary?,
-    ): MemoryRecallSnapshot = withContext(Dispatchers.IO) {
+    private data class LoadedGraph(
+        val rows: Map<Int, MemoryEntity>, val records: List<MemoryGraphRecord>,
+        val evidence: Map<Int, MemoryEvidence>, val originals: Map<Int, HistoryMemorySource>,
+        val candidates: List<MemoryGraphCandidate>, val entries: List<MemoryGraphInspectionEntry>,
+    )
+
+    /** Inspection, semantic eligibility and final recall share the same source validation. */
+    private suspend fun load(assistant: Assistant): LoadedGraph {
         val rows = memories(assistant).associateBy { it.id }
         val graph = database.memoryGraphDao().records(assistant.id.toString(), scope(assistant)).filter { record ->
             rows[record.memoryId]?.let { it.revision == record.revision && memoryHash(it.content) == record.sourceHash } == true
@@ -137,32 +151,76 @@ class MemoryGraphService(
             .map { it.nodeId }.distinct().chunked(64)
             .flatMap { history.sources(assistant.id.toString(), it) }.associateBy { it.reference.key }
         val originals = mutableMapOf<Int, HistoryMemorySource>()
-        val candidates = graph.mapNotNull { record ->
-            try {
-                val relation = JsonInstant.decodeFromString<MemoryGraphRelation?>(record.relation) ?: return@mapNotNull null
-                validateMemoryGraph(relation)
-                val memory = rows.getValue(record.memoryId)
-                if (memory.sourceKind == "automatic") {
-                    // A later source edit or branch switch invalidates its graph, not merely its visible quote.
-                    val evidence = evidenceById[memory.id] ?: return@mapNotNull null
-                    if (evidence.owner == assistant.id.toString()) {
-                        val source = sourceByKey["${evidence.conversationId}/${evidence.nodeId}/${evidence.messageId}"]
-                            ?.takeIf { it.hash == evidence.sourceHash } ?: return@mapNotNull null
-                        originals[memory.id] = source
+        val entries = mutableListOf<MemoryGraphInspectionEntry>()
+        val candidates = mutableListOf<MemoryGraphCandidate>()
+        val records = graph.associateBy { it.memoryId }
+        for (memory in rows.values) {
+            val record = records[memory.id]
+            var relation: MemoryGraphRelation? = null
+            var reason = "待建图：没有与当前记忆版本一致的图谱记录"
+            var usable = false
+            if (record != null) {
+                try {
+                    relation = JsonInstant.decodeFromString<MemoryGraphRelation?>(record.relation)
+                    if (relation == null) {
+                        reason = "已处理，但模型没有提取出明确关系（graph=null）"
                     } else {
-                        // Explicitly shared long-term memory stays usable; never read another assistant's chat.
-                        if (!assistant.useGlobalMemory || record.quote.isBlank() || !memory.content.contains(record.quote)) {
-                            return@mapNotNull null
+                        validateMemoryGraph(relation)
+                        reason = "可参与召回"
+                        usable = true
+                        if (memory.sourceKind == "automatic") {
+                            val evidence = evidenceById[memory.id]
+                            if (evidence == null) {
+                                usable = false
+                                reason = "自动记忆缺少当前版本的原话依据"
+                            } else if (evidence.owner == assistant.id.toString()) {
+                                val source = sourceByKey["${evidence.conversationId}/${evidence.nodeId}/${evidence.messageId}"]
+                                    ?.takeIf { it.hash == evidence.sourceHash }
+                                if (source == null) {
+                                    usable = false
+                                    reason = "原消息已修改、删除或切换分支，关系已停用"
+                                } else originals[memory.id] = source
+                            } else if (!assistant.useGlobalMemory || record.quote.isBlank() || !memory.content.contains(record.quote)) {
+                                usable = false
+                                reason = "共享记忆缺少可验证的记忆正文摘录"
+                            }
                         }
+                        if (usable) candidates += MemoryGraphCandidate(memory.id, relation,
+                            memory.updatedAt.takeIf { it > 0 } ?: memory.createdAt.takeIf { it > 0 } ?: record.createdAt)
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    usable = false
+                    reason = "图谱记录格式无效，未参与召回"
                 }
-                MemoryGraphCandidate(record.memoryId, relation, memory.updatedAt.takeIf { it > 0 }
-                    ?: memory.createdAt.takeIf { it > 0 } ?: record.createdAt)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) { null }
+            }
+            entries += MemoryGraphInspectionEntry(memory.id, memory.content, relation, reason, usable, record?.quote.orEmpty(),
+                memory.updatedAt.takeIf { it > 0 } ?: memory.createdAt.takeIf { it > 0 } ?: record?.createdAt ?: 0)
         }
-        val selected = selectMemoryGraph(query, candidates)
+        return LoadedGraph(rows, graph, evidenceById, originals, candidates, entries.sortedBy { it.memoryId })
+    }
+
+    suspend fun inspect(assistant: Assistant): List<MemoryGraphInspectionEntry> = withContext(Dispatchers.IO) {
+        load(assistant).entries
+    }
+
+    override suspend fun eligibleMemoryIds(assistant: Assistant): Set<Int> = withContext(Dispatchers.IO) {
+        load(assistant).candidates.mapTo(hashSetOf()) { it.memoryId }
+    }
+
+    override suspend fun recall(
+        assistant: Assistant, query: String, boundary: HistoryRecallBoundary?, semanticSeeds: List<RankedMemory>,
+    ): MemoryRecallSnapshot = withContext(Dispatchers.IO) {
+        val loaded = load(assistant)
+        val (rows, graph, evidenceById, originals, candidates) = loaded
+        // The network await may have changed a memory. A seed must match the version actually embedded.
+        val seedIds = memoryGraphSemanticSeeds(semanticSeeds).filter { hit ->
+            rows[hit.slice.memoryId]?.let {
+                it.revision == hit.slice.revision && memoryHash(it.content) == hit.slice.sourceHash
+            } == true
+        }.map { it.slice.memoryId }
+        val selected = selectMemoryGraph(query, candidates, seedIds)
         val excerpts = mutableListOf<SavedMemoryExcerpt>()
         for (hit in selected) {
             val memory = rows.getValue(hit.memoryId)
@@ -172,7 +230,8 @@ class MemoryGraphService(
             val original = originals[memory.id]
             val relationLabel = hit.relation.label() + original?.let { " · 原话时间 ${it.createdAt}" }.orEmpty()
             val excerpt = SavedMemoryExcerpt(memory.id, memory.revision, memoryHash(memory.content), body,
-                graphRelation = relationLabel, graphEvidence = original?.reference, graphEvidenceHash = original?.hash)
+                createdAtMillis = hit.createdAt, graphRelation = relationLabel,
+                graphEvidence = original?.reference, graphEvidenceHash = original?.hash)
             fun fits(value: SavedMemoryExcerpt) = renderMemorySnapshot(excerpts + value).isNotEmpty()
             if (!fits(excerpt)) continue
             excerpts += excerpt
@@ -186,6 +245,10 @@ class MemoryGraphService(
             }
         }
         MemoryRecallSnapshot(excerpts, MemoryRecallDiagnostics(graph =
-            "图谱筛选：${candidates.size} 条有效关系，命中 ${selected.size} 条；实体/主题别名定位、一跳扩展，未调用嵌入或重排接口。"))
+            "图谱筛选：${candidates.size} 条可用关系，选中 ${selected.size} 条，实际附带 ${excerpts.size} 个片段。" +
+                if (semanticSeeds.isEmpty()) {
+                    if (selected.isEmpty()) "本地名称/别名没有定位到入口。" else "本次本地名称/别名定位，未调用嵌入或重排。"
+                } else
+                    "语义向量定位后沿实体扩展一跳；不经过共同的用户、助手或宽泛主题扩散，未调用重排。"))
     }
 }
