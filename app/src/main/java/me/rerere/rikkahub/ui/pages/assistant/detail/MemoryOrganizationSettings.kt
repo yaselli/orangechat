@@ -32,6 +32,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.memory.MemoryEvidence
 import me.rerere.rikkahub.data.memory.MemoryOrganizationService
 import me.rerere.rikkahub.data.memory.MemoryGraphService
+import me.rerere.rikkahub.data.memory.memoryGraphBuildFeedback
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -141,12 +142,11 @@ internal fun MemoryOrganizationSettings(assistant: Assistant, settings: Settings
                     graphBusy = true
                     coroutineScope.launch {
                         try {
-                            val added = graph.build(assistant)
-                            graphMessage = "本次新增 $added 条关系。"
-                            graphStatus = graph.status(assistant)
-                        } catch (cancelled: CancellationException) { throw cancelled
-                        } catch (_: Exception) {
-                            graphMessage = "建图未完成，未保存本批结果；可能已产生模型费用，不自动重试。"
+                            val feedback = memoryGraphBuildFeedback(
+                                build = { graph.build(assistant) }, refresh = { graph.status(assistant) },
+                            )
+                            graphMessage = feedback.message
+                            graphStatus = feedback.status
                         } finally { graphBusy = false }
                     }
                 }) { Text("确认建图") }

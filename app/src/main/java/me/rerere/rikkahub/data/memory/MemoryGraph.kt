@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.memory
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import me.rerere.rikkahub.utils.JsonInstant
 import java.util.Locale
 
@@ -45,15 +46,25 @@ data class MemoryGraphCandidate(
 internal data class MemoryGraphBuildFact(val memoryId: Int, val graph: MemoryGraphRelation?, val quote: String = "")
 
 internal fun parseMemoryGraphBuild(raw: String, originals: Map<Int, String>): List<MemoryGraphBuildFact> {
-    require(raw.length <= 30000 && originals.size in 1..8)
+    requireMemoryGraphBuild(raw.isNotBlank(), MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.EMPTY_OUTPUT)
+    requireMemoryGraphBuild(raw.length <= 30000, MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.OVERSIZED)
+    require(originals.size in 1..8)
     val text = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-    val facts = JsonInstant.decodeFromString<List<MemoryGraphBuildFact>>(text)
-    require(facts.size == originals.size && facts.map { it.memoryId }.toSet() == originals.keys)
+    val facts = try { JsonInstant.decodeFromString<List<MemoryGraphBuildFact>>(text)
+    } catch (failure: SerializationException) {
+        throw MemoryGraphBuildFailure(MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.JSON_STRUCTURE, failure)
+    }
+    requireMemoryGraphBuild(facts.size == originals.size && facts.map { it.memoryId }.toSet() == originals.keys,
+        MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.MEMORY_IDS)
     facts.forEach { fact ->
-        require(fact.quote.length <= 400)
+        requireMemoryGraphBuild(fact.quote.length <= 400, MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.QUOTE)
         fact.graph?.let {
-            validateMemoryGraph(it)
-            require(fact.quote.isNotBlank() && fact.quote.length <= 400 && originals.getValue(fact.memoryId).contains(fact.quote))
+            try { validateMemoryGraph(it)
+            } catch (failure: IllegalArgumentException) {
+                throw MemoryGraphBuildFailure(MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.RELATION_FIELDS, failure)
+            }
+            requireMemoryGraphBuild(fact.quote.isNotBlank() && originals.getValue(fact.memoryId).contains(fact.quote),
+                MemoryGraphBuildStage.OUTPUT, MemoryGraphBuildProblem.QUOTE)
         }
     }
     return facts
