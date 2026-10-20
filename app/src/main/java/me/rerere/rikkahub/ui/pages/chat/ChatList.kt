@@ -65,6 +65,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -90,6 +91,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceAtLeast
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.interaction.MessageReaction
@@ -103,6 +106,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ContextCompaction
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.message.ChatMessage
@@ -149,6 +153,7 @@ fun ChatList(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
+    onSaveSummary: (suspend (ContextCompaction, String) -> Result<Unit>)? = null,
     reactions: List<MessageReaction> = emptyList(),
     onReact: ((UIMessage, String, String) -> Unit)? = null,
     onAvatarInteraction: ((UIMessage) -> Unit)? = null,
@@ -192,6 +197,7 @@ fun ChatList(
                 onToolAnswer = onToolAnswer,
                 onToggleFavorite = onToggleFavorite,
                 onConversationSystemPromptChange = onConversationSystemPromptChange,
+                onSaveSummary = onSaveSummary,
                 reactions = reactions,
                 onReact = onReact,
                 onAvatarInteraction = onAvatarInteraction,
@@ -224,6 +230,7 @@ private fun ChatListNormal(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
+    onSaveSummary: (suspend (ContextCompaction, String) -> Result<Unit>)? = null,
     reactions: List<MessageReaction> = emptyList(),
     onReact: ((UIMessage, String, String) -> Unit)? = null,
     onAvatarInteraction: ((UIMessage) -> Unit)? = null,
@@ -321,6 +328,27 @@ private fun ChatListNormal(
             }
         }
 
+        val compaction = conversation.contextCompaction
+        // Memoize on the covered prefix: streaming new replies must not repeatedly hash old history.
+        val coveredNodes = remember(conversation.messageNodes, compaction?.coveredMessageCount) {
+            conversation.messageNodes.take((compaction?.coveredMessageCount ?: 0).coerceAtLeast(0))
+        }
+        val coveredMessages = remember(coveredNodes) { coveredNodes.map { it.currentMessage } }
+        val summaryValid by produceState<Boolean?>(null, compaction, coveredMessages) {
+            value = null
+            value = withContext(Dispatchers.Default) { compaction?.matches(coveredMessages) == true }
+        }
+        val coveredIds = remember(coveredNodes) { coveredNodes.map { it.id }.toSet() }
+        val summaryAnchor = remember(displayNodes, coveredIds) { displayNodes.lastOrNull { it.id in coveredIds }?.id }
+        var openedSummary by remember(conversation.id) { mutableStateOf<ContextCompaction?>(null) }
+        openedSummary?.let { opened ->
+            ConversationSummaryDialog(
+                summary = opened,
+                canEdit = if (compaction == opened && onSaveSummary != null) summaryValid else false,
+                onDismiss = { openedSummary = null },
+                onSave = { text -> requireNotNull(onSaveSummary).invoke(opened, text) },
+            )
+        }
         val interaction = conversation.currentMessages.lastOrNull { it.avatarInteraction() != null }
         val targetRole = if (interaction?.avatarInteraction()?.target == "user") MessageRole.USER else MessageRole.ASSISTANT
         val targetAvatar = interaction?.avatarInteraction()?.targetMessageId ?: displayNodes.lastOrNull {
@@ -342,6 +370,9 @@ private fun ChatListNormal(
                 key = { index, item -> item.id },
             ) { index, node ->
                 Column {
+                    if (compaction != null && summaryAnchor == null && index == 0) {
+                        ConversationSummaryDivider(summaryValid) { openedSummary = compaction }
+                    }
                     ListSelectableItem(
                         key = node.id,
                         onSelectChange = {
@@ -401,6 +432,15 @@ private fun ChatListNormal(
                             lastMessage = index == displayNodes.lastIndex,
                         )
                     }
+                    // Keep the divider in its source message's list item; jump/search indices stay unchanged.
+                    if (compaction != null && node.id == summaryAnchor) {
+                        ConversationSummaryDivider(summaryValid) { openedSummary = compaction }
+                    }
+                }
+            }
+            if (compaction != null && displayNodes.isEmpty()) {
+                item(key = "ConversationSummary") {
+                    ConversationSummaryDivider(summaryValid) { openedSummary = compaction }
                 }
             }
 

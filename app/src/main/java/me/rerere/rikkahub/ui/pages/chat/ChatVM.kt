@@ -38,6 +38,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ContextCompaction
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -251,6 +252,9 @@ class ChatVM(
             chatService.editMessage(_conversationId, messageId, parts)
         }
     }
+
+    suspend fun handleSummaryEdit(expected: ContextCompaction, text: String): Result<Unit> =
+        chatService.editConversationSummary(_conversationId, expected, text)
 
     fun handleCompressContext(additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int): Job {
         return viewModelScope.launch {

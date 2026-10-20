@@ -584,6 +584,7 @@ private fun ChatPageContent(
                     onToggleFavorite = { node ->
                         vm.toggleMessageFavorite(node)
                     },
+                    onSaveSummary = vm::handleSummaryEdit,
                     onConversationSystemPromptChange = { newPrompt ->
                         vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
                         vm.saveConversationAsync()

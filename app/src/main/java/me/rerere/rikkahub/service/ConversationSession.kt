@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ContextCompaction
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
@@ -60,6 +61,32 @@ class ConversationSession(
      * 避免辅助任务（标题/建议/语音反馈）因为长时间持锁而互相卡住。
      */
     val saveMutex = Mutex()
+    val compactionMutex = Mutex()
+
+    internal suspend fun saveCompaction(
+        previous: ContextCompaction?,
+        value: ContextCompaction,
+        persist: suspend () -> Boolean,
+    ): Boolean = withRefSuspend {
+        saveMutex.withLock {
+            val latest = state.value
+            if (latest.contextCompaction != previous || !value.matches(latest.currentMessages)) {
+                return@withLock false
+            }
+            if (!persist()) return@withLock false
+            // Some UI metadata writes do not acquire saveMutex. Patch the latest state via CAS;
+            // never publish the pre-transaction snapshot over an edit that arrived during suspension.
+            var applied = false
+            while (!applied) {
+                val current = state.value
+                if (current.contextCompaction != previous || !value.matches(current.currentMessages)) {
+                    return@withLock false
+                }
+                applied = state.compareAndSet(current, current.copy(contextCompaction = value))
+            }
+            true
+        }
+    }
 
     /** Persist only the title, then patch the live state without replacing in-flight messages. */
     internal suspend fun saveGeneratedTitle(title: String, persist: suspend () -> Boolean) {
