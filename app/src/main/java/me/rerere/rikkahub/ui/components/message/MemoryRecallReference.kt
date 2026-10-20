@@ -67,6 +67,9 @@ private fun MemoryRecallReferenceDialog(trace: MemoryRecallTrace, onDismiss: () 
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(recallLabel(trace), style = MaterialTheme.typography.titleSmall)
+                    if (trace.diagnostics.deadlineExceeded) {
+                        Text("记忆准备达到4秒总预算，已取消本轮检索；本轮未附带召回记忆，也未自动重试。")
+                    }
                     when (trace.state) {
                         MemoryRecallState.DISABLED -> Text("该请求没有开启内置记忆功能。")
                         MemoryRecallState.LEGACY -> Text("该请求使用旧的整库记忆模式，未记录按需召回片段。")

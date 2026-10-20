@@ -16,6 +16,9 @@ class MemoryAutoIndexService(
     private val dao: MemoryAutoIndexDAO, private val settings: () -> Settings, private val recall: MemoryRecallService,
 ) {
     private val mutex = Mutex()
+    suspend fun maintainAfterReply(owner: Uuid) {
+        settings().getAssistantById(owner)?.let { recall.maintainAfterReply(it) }
+    }
     fun latest(owner: Uuid) = dao.latest(owner.toString())
     suspend fun dailyUsed(owner: Uuid): Int = dao.batchesSince(owner.toString(),
         LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())

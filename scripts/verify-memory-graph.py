@@ -88,3 +88,44 @@ for entity in expected_schema['database']['entities']:
         return columns, keys, indexes
     assert metadata(db) == metadata(expected), table
 print('PASS: all v36 table, foreign key and index metadata matches compiler-exported Room schema')
+
+# Additive float32 storage upgrade: preserve legacy vector bytes and every original row.
+db.execute("INSERT INTO memory_vector VALUES('legacy','long','scope',8,1,'hash','[1,0]')")
+db.execute("INSERT INTO history_memory_vector VALUES('legacy','short','scope','chat','node','message','hash',0,8,'[1,0]')")
+db.execute("INSERT INTO memory_recall_snapshot VALUES('retry','chat','scope','message','hash','[]',1)")
+tables = [row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+prior = {table: list(db.execute('SELECT * FROM "' + table + '"')) for table in tables}
+migrate('Migration_36_37.kt')
+for table, rows in prior.items():
+    current = list(db.execute('SELECT * FROM "' + table + '"'))
+    if table in ('memory_vector', 'history_memory_vector'):
+        assert [row[:-1] for row in current] == rows and all(row[-1] is None for row in current)
+        assert list(db.execute('PRAGMA table_info("' + table + '")'))[-1][1:3] == ('vectorBytes', 'BLOB')
+    else:
+        assert current == rows, table
+assert any(row[1] == 'index_history_memory_vector_scope_namespace_sliceId'
+           for row in db.execute('PRAGMA index_list(history_memory_vector)'))
+new_schema = root / 'app/schemas/me.rerere.rikkahub.data.db.AppDatabase/37.json'
+if new_schema.exists():
+    expected37 = sqlite3.connect(':memory:')
+    for entity in json.loads(new_schema.read_text())['database']['entities']:
+        table = entity['tableName']
+        expected37.execute(entity['createSql'].replace('${TABLE_NAME}', table))
+        for idx in entity.get('indices', []):
+            expected37.execute(idx['createSql'].replace('${TABLE_NAME}', table))
+        assert metadata(db) == metadata(expected37), table
+    print('PASS: v37 migration matches compiler-exported columns, foreign keys and indexes')
+else:
+    print('NOTE: v37 compiler schema will be checked after Room compilation')
+print('PASS: v36→v37 adds nullable BLOB columns and scoped paging index without touching original or legacy data')
+
+# Conversion is conditional: a deleted or concurrently changed row is never recreated/overwritten.
+packed = bytes.fromhex('0000803f00000000')
+sql = "UPDATE memory_vector SET vector='',vectorBytes=? WHERE namespace=? AND sliceId=? AND vector=? AND vectorBytes IS NULL"
+assert db.execute(sql,(packed,'legacy','long','[0,1]')).rowcount == 0
+assert db.execute(sql,(packed,'legacy','long','[1,0]')).rowcount == 1
+assert db.execute('SELECT vector,vectorBytes FROM memory_vector WHERE sliceId="long"').fetchone() == ('',packed)
+db.execute("DELETE FROM memory_vector WHERE sliceId='long'")
+assert db.execute(sql,(packed,'legacy','long','[1,0]')).rowcount == 0
+assert db.execute('PRAGMA foreign_key_check').fetchall() == []
+print('PASS: conditional encoding conversion preserves concurrent updates and cannot resurrect deleted vectors')

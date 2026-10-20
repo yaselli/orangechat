@@ -24,8 +24,17 @@ data class RankedMemory(val slice: MemorySlice, val score: Double)
 
 data class MemoryExcerpt(val slice: MemorySlice, val text: String)
 
-fun memoryHash(text: String): String = MessageDigest.getInstance("SHA-256")
-    .digest(text.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+fun memoryHash(text: String): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
+    val hex = "0123456789abcdef"
+    val result = CharArray(digest.size * 2)
+    for (i in digest.indices) {
+        val byte = digest[i].toInt() and 255
+        result[i * 2] = hex[byte ushr 4]
+        result[i * 2 + 1] = hex[byte and 15]
+    }
+    return String(result)
+}
 
 /**
  * Conservative byte allowance, not a model-specific tokenizer. Byte-level tokenizers cannot produce

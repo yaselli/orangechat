@@ -74,7 +74,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         SshHostEntity::class,
         SecurityAuditEntity::class,
     ],
-    version = 36,
+    version = 37,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),

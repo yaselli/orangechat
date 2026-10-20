@@ -115,3 +115,20 @@ assert db.execute(fts_sql, ('milk','assistant-a','2026','chat',2,1,cutoff)).fetc
 db.execute("UPDATE message_node SET messages=json_set(messages,'$[0].createdAt','2025-01-01T00:00:00') WHERE id='visible'")
 assert db.execute(fts_sql, ('milk','assistant-a','2026','chat',2,1,cutoff)).fetchall() == [('visible',)]
 print('PASS: short-term keyword expiration is applied before candidate LIMIT, including offset-aware timestamps')
+
+# Execute the lightweight candidate query against the exact selected-node fixtures.
+projection_sql = re.search(r'@Query\("""(SELECT v\.\*,.*?)"""\)', dao, re.S)[1]
+# This fixture uses the historical schema, so add the new nullable field exactly as the migration does.
+db.execute('ALTER TABLE history_memory_vector ADD COLUMN vectorBytes BLOB')
+db.execute('CREATE INDEX index_history_memory_vector_scope_namespace_sliceId ON history_memory_vector(scope,namespace,sliceId)')
+msg = message('projection-message', 'source text must not be selected')
+db.execute('INSERT INTO message_node VALUES(?,?,?,?,?)', ('projection-node','chat',0,json.dumps([msg]),0))
+db.execute("INSERT INTO history_memory_vector(namespace,sliceId,scope,conversationId,nodeId,messageId,sourceHash,start,end,vector,vectorBytes) VALUES('model','projection-slice','assistant-a','chat','projection-node','projection-message','hash',0,5,'',?)", (b'\x00\x00\x80\x3f',))
+projection_rows = db.execute(projection_sql, params).fetchall()
+assert len(projection_rows) == 1
+assert projection_rows[0][-3:] == ('user', '2020-01-01T00:00', 0)
+assert 'source text must not be selected' not in str(projection_rows)
+plan = ' '.join(row[-1] for row in db.execute('EXPLAIN QUERY PLAN ' + projection_sql, params))
+assert 'index_history_memory_vector_scope_namespace_sliceId' in plan, plan
+assert not db.execute(projection_sql, {**params, 'scope':'assistant-b'}).fetchall()
+print('PASS: lightweight projections omit original text, preserve scope/branch filters and use the scoped paging index')

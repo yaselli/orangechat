@@ -9,7 +9,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.SerializationException
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.Model
@@ -51,10 +50,12 @@ class MemoryRecallService(
     )
     private val reranking = OpenAIProvider(client.newBuilder().retryOnConnectionFailure(false)
         .followRedirects(false).followSslRedirects(false).callTimeout(4, TimeUnit.SECONDS).build(), context)
+    private val parsedVectors = MemoryParsedVectorCache()
     private val budget = MemoryTextBudget()
     private val queries = MemoryQueryCache()
     private val queryMutex = Mutex()
     private val indexMutex = Mutex()
+    private val maintenanceMutex = Mutex()
 
     private data class EmbeddingConfig(val model: Model, val provider: ProviderSetting.OpenAI, val key: String)
 
@@ -147,13 +148,13 @@ class MemoryRecallService(
             if (slice.history != null || source?.assistantId != scope(assistant) || source.revision != slice.revision ||
                 memoryHash(source.content) != slice.sourceHash) null
             else MemoryVectorEntity(config.key, slice.id, scope(assistant), slice.memoryId, slice.revision,
-                slice.sourceHash, JsonInstant.encodeToString(vector))
+                slice.sourceHash, "", MemoryVectorCodec.encode(vector))
         }
         index.putVectors(facts)
         if (assistant.memoryHistoryRecallEnabled) history.putValid(batch.zip(vectors).mapNotNull { (slice, vector) ->
             val ref = slice.history ?: return@mapNotNull null
             HistoryMemoryVector(config.key, slice.id, assistant.id.toString(), ref.conversationId, ref.nodeId,
-                ref.messageId, slice.sourceHash, slice.start, slice.end, JsonInstant.encodeToString(vector))
+                ref.messageId, slice.sourceHash, slice.start, slice.end, "", MemoryVectorCodec.encode(vector))
         })
         batch.size
     }
@@ -191,7 +192,7 @@ class MemoryRecallService(
                         memoryHash(source.content) != slice.sourceHash) null
                     else MemoryVectorEntity(
                         config.key, slice.id, scope, slice.memoryId, slice.revision, slice.sourceHash,
-                        JsonInstant.encodeToString(vector),
+                        "", MemoryVectorCodec.encode(vector),
                     )
                 })
                 if (assistant.memoryHistoryRecallEnabled) {
@@ -199,7 +200,7 @@ class MemoryRecallService(
                         val ref = slice.history ?: return@mapNotNull null
                         HistoryMemoryVector(
                             config.key, slice.id, assistant.id.toString(), ref.conversationId, ref.nodeId, ref.messageId,
-                            slice.sourceHash, slice.start, slice.end, JsonInstant.encodeToString(vector),
+                            slice.sourceHash, slice.start, slice.end, "", MemoryVectorCodec.encode(vector),
                         )
                     })
                 }
@@ -230,6 +231,16 @@ class MemoryRecallService(
 
     /** Prepare once for a whole tool loop; subsequent provider calls reuse the same immutable snapshots. */
     suspend fun prepare(
+        assistant: Assistant, settings: Settings, conversationId: String?, messages: List<UIMessage>,
+    ): MemoryRecallTurn = withContext(Dispatchers.IO) {
+        val started = System.nanoTime()
+        withTimeoutOrNull(4_000) { prepareWithinBudget(assistant, settings, conversationId, messages) }
+            ?: MemoryRecallTurn(diagnostics = MemoryRecallDiagnostics(
+                timings = MemoryRecallTimings(totalMillis = elapsedMillis(started)), deadlineExceeded = true,
+            ), initialState = MemoryRecallState.FAILED)
+    }
+
+    private suspend fun prepareWithinBudget(
         assistant: Assistant,
         settings: Settings,
         conversationId: String?,
@@ -250,18 +261,13 @@ class MemoryRecallService(
             val boundary = if (assistant.memoryHistoryRecallEnabled) {
                 history.boundary(historyScope, conversationId, messages).copy(oldestMillis = retention.cutoffMillis)
             } else null
-            if (boundary != null && retention.cutoffMillis != null) {
-                try { history.pruneExpired(historyScope, retention.cutoffMillis!!)
-                } catch (cancelled: CancellationException) { throw cancelled
-                } catch (_: Exception) { /* Optional local cleanup cannot disable otherwise valid recall. */ }
-            }
             val rerankModel = assistant.memoryRerankModelId?.let(settings::findModelById)
             val rerankIdentity = rerankModel?.let { model ->
                 val provider = model.findProvider(settings.providers) as? ProviderSetting.OpenAI
                 memoryHash(JsonInstant.encodeToString(model.copy(providerOverwrite = null)) + provider?.id + provider?.baseUrl)
             }.orEmpty()
             val retrievalVersion = (config(assistant, settings)?.key ?: "keyword-v1") +
-                ":dual-v3:${assistant.memoryHistoryRecallEnabled}:$historyScope" +
+                ":dual-v4:${assistant.memoryHistoryRecallEnabled}:$historyScope" +
                 ":rerank:${assistant.memoryRerankEnabled}:$rerankIdentity:${assistant.memoryRerankThreshold}:${assistant.memoryRerankLimit}" +
                 ":retention:${assistant.memoryRetentionEnabled}:${assistant.memoryRetentionDays}:${assistant.memoryDecayHalfLifeDays}"
             val key = memoryHash("$conversationId\u0000$scope\u0000${latest.id}\u0000$hash" +
@@ -347,19 +353,23 @@ class MemoryRecallService(
                 }
                 val historyScope = assistant.id.toString()
                 var firstHistoryPage = if (boundary == null) emptyList() else {
-                    history.vectors(historyScope, config.key, "", boundary)
+                    history.vectorPage(historyScope, config.key, "", boundary)
                 }
                 // Do not bill for a query when every indexed historical source is already expired or stale.
-                if (boundary != null) {
+                if (boundary != null && indexed.isEmpty()) {
                     while (firstHistoryPage.isNotEmpty()) {
                         val page = firstHistoryPage
-                        val originals = history.sources(historyScope, page.map { it.nodeId }.distinct())
-                            .filter(boundary::allows).associateBy { it.reference.key }
-                        firstHistoryPage = page.filter { record ->
-                            originals["${record.conversationId}/${record.nodeId}/${record.messageId}"]?.hash == record.sourceHash
+                        var usable = false
+                        for (nodes in page.map { it.record.nodeId }.distinct().chunked(8)) {
+                            val originals = history.sources(historyScope, nodes).filter(boundary::allows)
+                                .associateBy { it.reference.key }
+                            if (page.any { projection ->
+                                val record = projection.record
+                                originals["${record.conversationId}/${record.nodeId}/${record.messageId}"]?.hash == record.sourceHash
+                            }) { usable = true; break }
                         }
-                        if (firstHistoryPage.isNotEmpty()) break
-                        firstHistoryPage = history.vectors(historyScope, config.key, page.last().sliceId, boundary)
+                        if (usable) break
+                        firstHistoryPage = history.vectorPage(historyScope, config.key, page.last().record.sliceId, boundary)
                     }
                 }
                 if (indexed.isEmpty() && firstHistoryPage.isEmpty()) {
@@ -381,17 +391,15 @@ class MemoryRecallService(
                     }
                 }
                 vectorPhase = "本地向量匹配"
+                val scoringQuery = ScoringVector(queryVector.toFloatArray())
                 val memoryHits = indexed.mapNotNull { record ->
                     currentCoroutineContext().ensureActive()
-                    val vector = try {
-                        JsonInstant.decodeFromString<List<Float>>(record.vector)
-                    } catch (_: SerializationException) {
-                        return@mapNotNull null
-                    }
-                    memoryCosine(queryVector, vector)?.let { RankedMemory(byId.getValue(record.sliceId), it) }
+                    val vector = parsedVectors.get("m/$scope/${config.key}/${record.sliceId}", record.vector, record.vectorBytes)
+                        ?: return@mapNotNull null
+                    scoringQuery.similarity(vector)?.let { RankedMemory(byId.getValue(record.sliceId), it) }
                 }.sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id }).take(20)
                 val historyHits = if (boundary == null) emptyList() else historyVectorHits(
-                    historyScope, config.key, queryVector, firstHistoryPage, boundary, retention,
+                    historyScope, config.key, scoringQuery, firstHistoryPage, boundary, retention,
                 )
                 vectorState = if (cached) MemoryVectorState.CACHED else MemoryVectorState.SUCCESS
                 (memoryHits + historyHits)
@@ -473,40 +481,77 @@ class MemoryRecallService(
 
     private data class HistoryScore(val record: HistoryMemoryVector, val score: Double)
 
-    /** Read vector pages and retain only 80 lightweight candidates, not the entire archive's vectors. */
+    /** Scan metadata/vectors, then batch-read original text only for the best candidates.
+     * Stale high-scoring records are discarded and the next candidate batch is considered rather than hiding valid hits.
+     */
     private suspend fun historyVectorHits(
-        scope: String, namespace: String, query: List<Float>, firstPage: List<HistoryMemoryVector>,
+        scope: String, namespace: String, query: ScoringVector, firstPage: List<HistoryVectorProjection>,
         boundary: HistoryRecallBoundary, retention: MemoryRetentionPolicy,
     ): List<RankedMemory> {
-        val best = java.util.PriorityQueue<HistoryScore>(
-            compareBy<HistoryScore> { it.score }.thenByDescending { it.record.sliceId },
-        )
-        var page = firstPage
-        while (page.isNotEmpty()) {
-            val originals = history.sources(scope, page.map { it.nodeId }.distinct())
-                .filter(boundary::allows).associateBy { it.reference.key }
-            for (record in page) {
-                val original = originals["${record.conversationId}/${record.nodeId}/${record.messageId}"] ?: continue
-                if (original.hash != record.sourceHash) continue
-                currentCoroutineContext().ensureActive()
-                val vector = try { JsonInstant.decodeFromString<List<Float>>(record.vector) }
-                    catch (_: SerializationException) { continue }
-                val score = (memoryCosine(query, vector) ?: continue) * retention.weight(original.createdAt)
-                if (score <= 0) continue
-                best += HistoryScore(record.copy(vector = ""), score)
-                if (best.size > 80) best.poll()
+        val examined = hashSetOf<String>()
+        val selected = mutableListOf<RankedMemory>()
+        val weights = mutableMapOf<String, Double>()
+        while (selected.size < 20) {
+            currentCoroutineContext().ensureActive()
+            val best = java.util.PriorityQueue<HistoryScore>(
+                compareBy<HistoryScore> { it.score }.thenByDescending { it.record.sliceId },
+            )
+            var page = firstPage
+            while (page.isNotEmpty()) {
+                for (projection in page) {
+                    currentCoroutineContext().ensureActive()
+                    val record = projection.record
+                    if (record.sliceId in examined || (projection.selectedRole != "user" && projection.selectedRole != "assistant") ||
+                        record.messageId in boundary.visibleMessageIds ||
+                        projection.selectedCreatedAt > boundary.latestTime ||
+                        (record.conversationId == boundary.conversationId && projection.selectedNodeIndex >= boundary.maxNodeIndex)) continue
+                    val weight = weights.getOrPut(projection.selectedCreatedAt) { retention.weight(projection.selectedCreatedAt) }
+                    if (weight <= 0) continue
+                    val vector = parsedVectors.get("h/$scope/$namespace/${record.sliceId}", record.vector, record.vectorBytes) ?: continue
+                    val score = (query.similarity(vector) ?: continue) * weight
+                    best += HistoryScore(record.copy(vector = "", vectorBytes = null), score)
+                    if (best.size > 80) best.poll()
+                }
+                page = history.vectorPage(scope, namespace, page.last().record.sliceId, boundary)
             }
-            page = history.vectors(scope, namespace, page.last().sliceId, boundary)
+            if (best.isEmpty()) break
+            val candidates = best.sortedWith(compareByDescending<HistoryScore> { it.score }.thenBy { it.record.sliceId })
+            val originals = candidates.map { it.record.nodeId }.distinct().chunked(64)
+                .flatMap { history.sources(scope, it) }.filter(boundary::allows).associateBy { it.reference.key }
+            val hashes = originals.mapValues { it.value.hash }
+            val slices = mutableMapOf<String, Map<String, MemorySlice>>()
+            for (hit in candidates) {
+                examined += hit.record.sliceId
+                val record = hit.record
+                val key = "${record.conversationId}/${record.nodeId}/${record.messageId}"
+                val original = originals[key] ?: continue
+                if (hashes[key] != record.sourceHash) continue
+                val sourceSlices = slices.getOrPut(key) { historyMemorySlices(original).associateBy { it.id } }
+                val slice = sourceSlices[record.sliceId] ?: continue
+                if (slice.start != record.start || slice.end != record.end) continue
+                selected += RankedMemory(slice, hit.score)
+                if (selected.size == 20) break
+            }
+            if (candidates.size < 80) break
         }
-        val sources = history.sources(scope, best.map { it.record.nodeId }.distinct())
-            .filter(boundary::allows).associateBy { it.reference.key }
-        val slices = sources.mapValues { historyMemorySlices(it.value).associateBy { slice -> slice.id } }
-        return best.mapNotNull { hit ->
-            val record = hit.record
-            val key = "${record.conversationId}/${record.nodeId}/${record.messageId}"
-            val slice = slices[key]?.get(record.sliceId) ?: return@mapNotNull null
-            if (slice.sourceHash != record.sourceHash) null else RankedMemory(slice, hit.score)
-        }.sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id }).take(20)
+        return selected.sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id }).take(20)
     }
 
+    /** Local derived-index maintenance runs after a reply, never before sending chat. */
+    suspend fun maintainAfterReply(assistant: Assistant) {
+        if (!assistant.enableMemory || !assistant.memoryRecallEnabled) return
+        if (!maintenanceMutex.tryLock()) return
+        try { withTimeoutOrNull(1_000) {
+            for (record in index.legacyVectors(scope(assistant))) {
+                currentCoroutineContext().ensureActive()
+                val decoded = MemoryVectorCodec.decode(record.vector, null)
+                val packed = decoded?.let { MemoryVectorCodec.encode(it.toList()) } ?: byteArrayOf()
+                index.packLegacy(record.namespace, record.sliceId, record.vector, packed)
+            }
+            if (assistant.memoryHistoryRecallEnabled) {
+                history.packLegacy(assistant.id.toString())
+                retention(assistant).cutoffMillis?.let { history.pruneExpired(assistant.id.toString(), it) }
+            }
+        } } finally { maintenanceMutex.unlock() }
+    }
 }

@@ -19,9 +19,20 @@ interface HistoryMemoryStorage {
     suspend fun vectors(
         scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary,
     ): List<HistoryMemoryVector>
+    suspend fun vectorPage(
+        scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary,
+    ): List<HistoryVectorProjection> {
+        val records = vectors(scope, namespace, after, boundary)
+        val current = sources(scope, records.map { it.nodeId }.distinct()).associateBy { it.reference.key }
+        return records.map { record ->
+            val source = current["${record.conversationId}/${record.nodeId}/${record.messageId}"]
+            HistoryVectorProjection(record, source?.role.orEmpty(), source?.createdAt.orEmpty(), source?.nodeIndex ?: -1)
+        }
+    }
     suspend fun removeOtherModels(scope: String, namespace: String)
     suspend fun putValid(vectors: List<HistoryMemoryVector>)
     suspend fun pruneExpired(scope: String, oldestMillis: Long) {}
+    suspend fun packLegacy(scope: String) {}
     suspend fun refreshKeywords(scope: String): Int
 }
 
@@ -95,6 +106,8 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
     override suspend fun indexedIds(scope: String, namespace: String) = dao.indexedIds(scope, namespace).toHashSet()
     override suspend fun vectors(scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary) =
         dao.vectors(scope, namespace, after, boundary.conversationId, boundary.maxNodeIndex, boundary.latestTime)
+    override suspend fun vectorPage(scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary) =
+        dao.vectorPage(scope, namespace, after, boundary.conversationId, boundary.maxNodeIndex, boundary.latestTime)
     override suspend fun removeOtherModels(scope: String, namespace: String) = dao.removeOtherModels(scope, namespace)
 
     /** Source checks and inserts share the write transaction: network awaits cannot resurrect stale vectors. */
@@ -113,6 +126,16 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
     private val lastPrune = mutableMapOf<String, Pair<Long, Long>>()
     private val pruneMutex = kotlinx.coroutines.sync.Mutex()
     private val pruneCursors = mutableMapOf<String, String>()
+
+    override suspend fun packLegacy(scope: String) {
+        for (record in dao.legacyVectors(scope)) {
+            currentCoroutineContext().ensureActive()
+            val decoded = MemoryVectorCodec.decode(record.vector, null)
+            // Invalid derived vectors remain invalid, but cannot block conversion of later batches.
+            val packed = decoded?.let { MemoryVectorCodec.encode(it.toList()) } ?: byteArrayOf()
+            dao.packLegacy(record.namespace, record.sliceId, record.vector, packed)
+        }
+    }
 
     override suspend fun pruneExpired(scope: String, oldestMillis: Long) {
         if (!pruneMutex.tryLock()) return

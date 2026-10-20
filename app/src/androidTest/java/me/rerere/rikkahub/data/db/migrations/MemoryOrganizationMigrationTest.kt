@@ -29,7 +29,7 @@ class MemoryOrganizationMigrationTest {
             execSQL("INSERT INTO message_node VALUES('node','chat',0,'original history',0)")
             close()
         }
-        val db = helper.runMigrationsAndValidate(name, 36, true, Migration_31_33_HistoryMemory, Migration_33_34, Migration_34_35, Migration_35_36)
+        val db = helper.runMigrationsAndValidate(name, 37, true, Migration_31_33_HistoryMemory, Migration_33_34, Migration_34_35, Migration_35_36, Migration_36_37)
         try {
             db.query("SELECT COUNT(*) FROM sqlite_master WHERE name='memory_graph'").use {
                 assertTrue(it.moveToFirst())

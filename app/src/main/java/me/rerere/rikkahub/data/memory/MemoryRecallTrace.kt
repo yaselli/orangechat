@@ -38,6 +38,7 @@ data class MemoryRecallDiagnostics(
     val retention: String? = null,
     val timings: MemoryRecallTimings = MemoryRecallTimings(),
     val vectorPhase: String? = null,
+    val deadlineExceeded: Boolean = false,
 )
 
 @Serializable
@@ -52,7 +53,8 @@ data class MemoryRecallTrace(
     val excerpts: List<SavedMemoryExcerpt> = emptyList(),
     val diagnostics: MemoryRecallDiagnostics = MemoryRecallDiagnostics(),
 ) {
-    val degraded: Boolean get() = diagnostics.rerank in setOf(MemoryRerankState.FAILED, MemoryRerankState.TIMEOUT) ||
+    val degraded: Boolean get() = diagnostics.deadlineExceeded ||
+        diagnostics.rerank in setOf(MemoryRerankState.FAILED, MemoryRerankState.TIMEOUT) ||
         diagnostics.historyKeywordsFailed ||
         diagnostics.vector in setOf(MemoryVectorState.TIMEOUT, MemoryVectorState.FAILED)
 }
