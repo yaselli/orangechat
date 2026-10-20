@@ -61,18 +61,6 @@ db.execute("INSERT INTO message_node VALUES('negative','past',7,?,-1)", (json.du
 db.execute("INSERT INTO message_node VALUES('oversized','past',8,?,0)",
            (json.dumps([message('oversized-message', 'x' * 64001)]),))
 assert len(db.execute(source_sql, ('assistant-a',)).fetchall()) == 3
-# Boundaries only need selected IDs and node indexes, including textless messages (e.g. images).
-boundary_sql = re.search(r'internal val BOUNDARY_SQL = """(.*?)"""', repository, re.S)[1]
-assert 'json_each' not in boundary_sql and 'group_concat' not in boundary_sql
-query_boundary = boundary_sql.replace('%IDS%', '?,?')
-assert db.execute(query_boundary, ('assistant-a','chat','visible-message','future-message')).fetchall() == [(1,'visible-message'),(4,'future-message')]
-assert not db.execute(query_boundary, ('assistant-b','chat','visible-message','future-message')).fetchall()
-assert not db.execute(query_boundary, ('assistant-a','past','hidden','tool-message')).fetchall()
-image_only = dict(id='image-message', role='user', createdAt='2020-01-01T00:00', parts=[dict(type='image',url='image')])
-db.execute('INSERT INTO message_node VALUES(?,?,?,?,?)', ('image-only','chat',2,json.dumps([image_only]),0))
-assert db.execute(query_boundary, ('assistant-a','chat','image-message','visible-message')).fetchall() == [(1,'visible-message'),(2,'image-message')]
-print('PASS: context boundaries query IDs without text aggregation; preserve conversation, assistant and selected-branch isolation')
-
 # Room's node REPLACE is already the source-write path: it must cascade every old derived vector.
 insert_vector = "INSERT INTO history_memory_vector VALUES('model','slice','assistant-a','past','node','selected','hash',0,8,'[1,0]')"
 db.execute(insert_vector)
@@ -127,20 +115,3 @@ assert db.execute(fts_sql, ('milk','assistant-a','2026','chat',2,1,cutoff)).fetc
 db.execute("UPDATE message_node SET messages=json_set(messages,'$[0].createdAt','2025-01-01T00:00:00') WHERE id='visible'")
 assert db.execute(fts_sql, ('milk','assistant-a','2026','chat',2,1,cutoff)).fetchall() == [('visible',)]
 print('PASS: short-term keyword expiration is applied before candidate LIMIT, including offset-aware timestamps')
-
-# Execute the lightweight candidate query against the exact selected-node fixtures.
-projection_sql = re.search(r'@Query\("""(SELECT v\.\*,.*?)"""\)', dao, re.S)[1]
-# This fixture uses the historical schema, so add the new nullable field exactly as the migration does.
-db.execute('ALTER TABLE history_memory_vector ADD COLUMN vectorBytes BLOB')
-db.execute('CREATE INDEX index_history_memory_vector_scope_namespace_sliceId ON history_memory_vector(scope,namespace,sliceId)')
-msg = message('projection-message', 'source text must not be selected')
-db.execute('INSERT INTO message_node VALUES(?,?,?,?,?)', ('projection-node','chat',0,json.dumps([msg]),0))
-db.execute("INSERT INTO history_memory_vector(namespace,sliceId,scope,conversationId,nodeId,messageId,sourceHash,start,end,vector,vectorBytes) VALUES('model','projection-slice','assistant-a','chat','projection-node','projection-message','hash',0,5,'',?)", (b'\x00\x00\x80\x3f',))
-projection_rows = db.execute(projection_sql, params).fetchall()
-assert len(projection_rows) == 1
-assert projection_rows[0][-3:] == ('user', '2020-01-01T00:00', 0)
-assert 'source text must not be selected' not in str(projection_rows)
-plan = ' '.join(row[-1] for row in db.execute('EXPLAIN QUERY PLAN ' + projection_sql, params))
-assert 'index_history_memory_vector_scope_namespace_sliceId' in plan, plan
-assert not db.execute(projection_sql, {**params, 'scope':'assistant-b'}).fetchall()
-print('PASS: lightweight projections omit original text, preserve scope/branch filters and use the scoped paging index')

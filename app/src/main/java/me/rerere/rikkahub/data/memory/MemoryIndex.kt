@@ -51,12 +51,6 @@ data class MemoryRecallSnapshotEntity(
 
 @Dao
 interface MemoryIndexDAO {
-    @Query("SELECT * FROM memory_vector WHERE scope=:scope AND vectorBytes IS NULL AND vector!='' ORDER BY namespace,sliceId LIMIT 32")
-    suspend fun legacyVectors(scope: String): List<MemoryVectorEntity>
-
-    @Query("UPDATE memory_vector SET vector='',vectorBytes=:packed WHERE namespace=:namespace AND sliceId=:sliceId AND vector=:legacy AND vectorBytes IS NULL")
-    suspend fun packLegacy(namespace: String, sliceId: String, legacy: String, packed: ByteArray)
-
     @Query("SELECT * FROM memory_vector WHERE scope = :scope AND namespace = :namespace")
     suspend fun vectors(scope: String, namespace: String): List<MemoryVectorEntity>
 

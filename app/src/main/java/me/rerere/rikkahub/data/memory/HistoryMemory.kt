@@ -41,16 +41,13 @@ data class HistoryRecallBoundary(
         (source.conversationId != conversationId || source.nodeIndex < maxNodeIndex)
 }
 
-fun historyMemorySlices(source: HistoryMemorySource, budget: MemoryTextBudget = MemoryTextBudget()): List<MemorySlice> {
-    val sourceHash = source.hash
-    val reference = source.reference
-    return budget.slices(source.scope, 0, 0, source.text).map { slice ->
+fun historyMemorySlices(source: HistoryMemorySource, budget: MemoryTextBudget = MemoryTextBudget()): List<MemorySlice> =
+    budget.slices(source.scope, 0, 0, source.text).map { slice ->
         slice.copy(
-            id = memoryHash("history-v1\u0000${reference.key}\u0000$sourceHash\u0000${slice.id}"),
-            sourceHash = sourceHash, history = reference,
+            id = memoryHash("history-v1\u0000${source.reference.key}\u0000${source.hash}\u0000${slice.id}"),
+            sourceHash = source.hash, history = source.reference,
         )
     }
-}
 
 /** Prefer meaningful words and Chinese bigrams over single-character OR matches. Bound SQL parameters. */
 internal fun historyQueryTerms(query: String): List<String> = memoryTerms(query).filter {

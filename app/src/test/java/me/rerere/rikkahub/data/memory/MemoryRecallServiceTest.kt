@@ -26,11 +26,6 @@ import java.lang.reflect.Proxy
 
 class MemoryRecallServiceTest {
     private class Store : MemoryIndexDAO {
-        override suspend fun legacyVectors(scope: String) = vectors.filter { it.scope == scope && it.vectorBytes == null && it.vector.isNotEmpty() }.take(32)
-        override suspend fun packLegacy(namespace: String, sliceId: String, legacy: String, packed: ByteArray) {
-            val position = vectors.indexOfFirst { it.namespace == namespace && it.sliceId == sliceId && it.vector == legacy && it.vectorBytes == null }
-            if (position >= 0) vectors[position] = vectors[position].copy(vector = "", vectorBytes = packed)
-        }
         val vectors = mutableListOf<MemoryVectorEntity>()
         val snapshots = mutableMapOf<String, MemoryRecallSnapshotEntity>()
         override suspend fun vectors(scope: String, namespace: String) = vectors.filter {
@@ -57,21 +52,11 @@ class MemoryRecallServiceTest {
     }
 
     private class HistoryStore : HistoryMemoryStorage {
+        var firstPageDelayMillis = 0L
         val rows = mutableListOf<HistoryMemorySource>()
         val stored = mutableListOf<HistoryMemoryVector>()
-        var vectorDelayMillis = 0L
-        var originalNodesRead = 0
-        var pruneCalls = 0
-        var keywordsEnabled = true
-        override suspend fun pruneExpired(scope: String, oldestMillis: Long) { pruneCalls++ }
-        override suspend fun vectorPage(scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary): List<HistoryVectorProjection> =
-            vectors(scope, namespace, after, boundary).map { record ->
-                val source = rows.firstOrNull { it.scope == scope && it.nodeId == record.nodeId && it.messageId == record.messageId }
-                HistoryVectorProjection(record, source?.role.orEmpty(), source?.createdAt.orEmpty(), source?.nodeIndex ?: -1)
-            }
-        override suspend fun sources(scope: String, nodeIds: List<String>): List<HistoryMemorySource> {
-            originalNodesRead += nodeIds.size
-            return rows.filter { it.scope == scope && it.nodeId in nodeIds }
+        override suspend fun sources(scope: String, nodeIds: List<String>) = rows.filter {
+            it.scope == scope && it.nodeId in nodeIds
         }
         override suspend fun page(scope: String, after: String) = rows.filter { it.scope == scope && it.nodeId > after }
             .sortedBy { it.nodeId }.take(64)
@@ -79,14 +64,14 @@ class MemoryRecallServiceTest {
             HistoryRecallBoundary(conversationId, 0, messages.last().createdAt.toString(),
                 messages.mapTo(hashSetOf()) { it.id.toString() })
         override suspend fun keywords(scope: String, query: String, boundary: HistoryRecallBoundary) =
-            rows.filter { keywordsEnabled && it.scope == scope && boundary.allows(it) }.flatMap { historyMemorySlices(it) }
+            rows.filter { it.scope == scope && boundary.allows(it) }.flatMap { historyMemorySlices(it) }
         override suspend fun indexedIds(scope: String, namespace: String) = stored.filter {
             it.scope == scope && it.namespace == namespace
         }.mapTo(hashSetOf()) { it.sliceId }
         override suspend fun vectors(
             scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary,
         ): List<HistoryMemoryVector> {
-            kotlinx.coroutines.delay(vectorDelayMillis)
+            if (after.isEmpty()) kotlinx.coroutines.delay(firstPageDelayMillis)
             return stored.filter { it.scope == scope && it.namespace == namespace && it.sliceId > after }
                 .sortedBy { it.sliceId }.take(64)
         }
@@ -196,123 +181,46 @@ class MemoryRecallServiceTest {
     }
 
     @Test
-    fun `manual batch indexing has longer deadline while chat retrieval is bounded at four seconds`() = runBlocking {
+    fun `rollback reads packed and JSON indexes for both roles beyond the removed four second cutoff`() = runBlocking {
+        val f = Fixture()
+        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true, memoryRerankEnabled = true,
+            memoryRerankModelId = f.rerankModel.id)
+        for ((n, role) in listOf("user", "assistant").withIndex()) {
+            f.history.rows += HistoryMemorySource("past", "node-$n", "message-$n", assistant.id.toString(),
+                role, "2025-01-01T00:00:00", "喜欢吃辣火锅 $n", n)
+        }
+        assertEquals(3, f.service.buildIndex(assistant, f.settings))
+        assertTrue(f.store.vectors.all { it.vector.isNotEmpty() && it.vectorBytes == null })
+        assertTrue(f.history.stored.all { it.vector.isNotEmpty() && it.vectorBytes == null })
+        // Simulate indexes already converted by v162/v163 without rebuilding or touching sources.
+        f.store.vectors.replaceAll { it.copy(vector = "", vectorBytes = MemoryVectorCodec.encode(listOf(1f, 0f))) }
+        f.history.stored[0] = f.history.stored[0].copy(vector = "", vectorBytes = MemoryVectorCodec.encode(listOf(1f, 0f)))
+        f.history.firstPageDelayMillis = 5_000
+        f.rerankBody = """{"results":[{"index":0,"relevance_score":0.9},{"index":1,"relevance_score":0.8},{"index":2,"relevance_score":0.7}]}"""
+        val user = UIMessage.user("饮食偏好")
+        val started = System.nanoTime()
+        val turn = f.service.prepare(assistant, f.settings, "new-chat", listOf(user))
+        f.service.apply(turn, listOf(user))
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertTrue((System.nanoTime() - started) / 1_000_000 >= 4_500)
+        assertEquals(MemoryRecallState.USED, trace.state)
+        assertEquals(MemoryVectorState.SUCCESS, trace.diagnostics.vector)
+        assertEquals(MemoryRerankState.SUCCESS, trace.diagnostics.rerank)
+        assertTrue(trace.excerpts.any { it.history == null })
+        assertEquals(setOf("user", "assistant"), trace.excerpts.mapNotNull { it.history?.role }.toSet())
+        assertEquals(listOf(60_000_000_000L, 8_000_000_000L), f.callTimeouts)
+        assertEquals(1, f.rerankCalls)
+        assertEquals(2, f.calls)
+        assertFalse(trace.diagnostics.deadlineExceeded)
+        assertEquals(f.source, f.rows.single())
+    }
+
+    @Test
+    fun `manual batch indexing has longer deadline while chat retrieval remains eight seconds`() = runBlocking {
         val f = Fixture()
         assertEquals(1, f.service.buildIndex(f.assistant, f.settings))
         f.service.prepare(f.assistant, f.settings, "chat", listOf(UIMessage.user("炸鸡")))
-        assertEquals(listOf(60_000_000_000L, 4_000_000_000L), f.callTimeouts)
-    }
-
-    @Test
-    fun `history timeout preserves completed long term matches and reranks them`() = runBlocking {
-        val f = Fixture()
-        f.service.buildIndex(f.assistant, f.settings)
-        f.history.vectorDelayMillis = 10_000
-        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true, memoryRerankEnabled = true,
-            memoryRerankModelId = f.rerankModel.id)
-        val user = UIMessage.user("饮食偏好")
-        val turn = f.service.prepare(assistant, f.settings, "timeout-chat", listOf(user))
-        assertNotEquals(listOf(user), f.service.apply(turn, listOf(user)))
-        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertFalse(trace.diagnostics.deadlineExceeded)
-        assertEquals(MemoryVectorState.TIMEOUT, trace.diagnostics.vector)
-        assertEquals(MemoryRecallState.USED, trace.state)
-        assertEquals(MemoryRerankState.SUCCESS, trace.diagnostics.rerank)
-        assertTrue(trace.excerpts.isNotEmpty())
-        assertEquals(2, f.calls)
-        assertEquals(1, f.rerankCalls)
-        assertTrue(requireNotNull(trace.diagnostics.timings.vectorMillis) >= 3_500L)
-        assertNotNull(trace.diagnostics.timings.rerankMillis)
-    }
-
-    @Test
-    fun `large vector scan reads original bodies only for preflight and ranked candidates and accepts legacy data`() = runBlocking {
-        val f = Fixture()
-        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true)
-        repeat(512) { n -> f.history.rows += HistoryMemorySource("old", "node-%04d".format(n), "message-$n",
-            assistant.id.toString(), if (n % 2 == 0) "user" else "assistant", "2025-01-01T00:00:00", "我喜欢吃脆脆的炸鸡 $n", n) }
-        f.service.buildIndex(assistant, f.settings)
-        assertTrue(f.history.stored.all { it.vectorBytes != null && it.vector.isEmpty() })
-        f.history.stored[0] = f.history.stored[0].copy(vector = "[1,0]", vectorBytes = null)
-        f.history.keywordsEnabled = false
-        f.history.originalNodesRead = 0
-        val user = UIMessage.user("喜欢吃什么")
-        val turn = f.service.prepare(assistant, f.settings, "new", listOf(user))
-        f.service.apply(turn, listOf(user))
-        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertEquals(MemoryVectorState.SUCCESS, trace.diagnostics.vector)
-        assertTrue(trace.excerpts.any { it.history != null })
-        assertTrue("Read ${f.history.originalNodesRead} original nodes", f.history.originalNodesRead < 256)
-    }
-
-    @Test
-    fun `more than eighty stale high scoring vectors cannot hide a valid lower scored source`() = runBlocking {
-        val f = Fixture()
-        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true)
-        val scope = assistant.id.toString()
-        val valid = HistoryMemorySource("old", "valid-node", "valid-message", scope, "user", "2025-01-01T00:00:00", "真实来源", 0)
-        f.history.rows += valid
-        f.service.buildIndex(assistant, f.settings)
-        val namespace = f.history.stored.single().namespace
-        f.history.stored[0] = f.history.stored[0].copy(vectorBytes = MemoryVectorCodec.encode(listOf(1f, 1f)))
-        repeat(130) { n ->
-            f.history.rows += HistoryMemorySource("old", "stale-node-$n", "stale-message-$n", scope, "user", "2025-01-01T00:00:00", "已修改的来源 $n", n)
-            f.history.stored += HistoryMemoryVector(namespace, "zz-stale-$n", scope, "old", "stale-node-$n", "stale-message-$n",
-                "obsolete-hash", 0, 10, "[1,0]")
-        }
-        f.history.keywordsEnabled = false
-        val user = UIMessage.user("记得之前的事吗")
-        val turn = f.service.prepare(assistant, f.settings, "new", listOf(user))
-        f.service.apply(turn, listOf(user))
-        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertEquals(MemoryVectorState.SUCCESS, trace.diagnostics.vector)
-        assertTrue(trace.excerpts.any { it.history?.nodeId == valid.nodeId })
-        assertFalse(trace.excerpts.any { it.sourceHash == "obsolete-hash" })
-    }
-
-    @Test
-    fun `expired index cleanup happens after reply instead of blocking prepare`() = runBlocking {
-        val f = Fixture()
-        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true, memoryRetentionEnabled = true)
-        f.service.prepare(assistant, f.settings, "new", listOf(UIMessage.user("炸鸡")))
-        assertEquals(0, f.history.pruneCalls)
-        f.service.maintainAfterReply(assistant)
-        assertEquals(1, f.history.pruneCalls)
-    }
-
-    @Test
-    fun `after reply converts legacy encoding locally without rebuilding or modifying source memory`() = runBlocking {
-        val f = Fixture()
-        f.service.buildIndex(f.assistant, f.settings)
-        val original = f.store.vectors.single()
-        f.store.vectors[0] = original.copy(vector = "[1,0]", vectorBytes = null)
-        val calls = f.calls
-        f.service.maintainAfterReply(f.assistant)
-        val converted = f.store.vectors.single()
-        assertEquals(original.sliceId, converted.sliceId)
-        assertEquals(original.sourceHash, converted.sourceHash)
-        assertEquals("", converted.vector)
-        assertEquals(listOf(1f, 0f), MemoryVectorCodec.decode(converted.vector, converted.vectorBytes)!!.toList())
-        assertEquals(calls, f.calls)
-        assertEquals(listOf(f.source), f.rows)
-    }
-
-    @Test
-    fun `transport rerank timeout records timing and never injects unfiltered fallback`() = runBlocking {
-        val f = Fixture()
-        f.onRerank = { throw java.net.SocketTimeoutException("private provider detail") }
-        val assistant = f.assistant.copy(memoryRerankEnabled = true, memoryRerankModelId = f.rerankModel.id)
-        val user = UIMessage.user("炸鸡")
-        val turn = f.service.prepare(assistant, f.settings, "rerank-timeout", listOf(user))
-        assertEquals(listOf(user), f.service.apply(turn, listOf(user)))
-        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertEquals(MemoryRerankState.TIMEOUT, trace.diagnostics.rerank)
-        assertEquals(MemoryRecallState.FAILED, trace.state)
-        assertTrue(trace.excerpts.isEmpty())
-        assertEquals(1, f.rerankCalls)
-        assertNotNull(trace.diagnostics.timings.totalMillis)
-        assertNotNull(trace.diagnostics.timings.rerankMillis)
-        assertFalse(trace.toString().contains("private provider detail"))
+        assertEquals(listOf(60_000_000_000L, 8_000_000_000L), f.callTimeouts)
     }
 
     @Test

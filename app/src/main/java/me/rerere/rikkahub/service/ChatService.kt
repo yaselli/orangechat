@@ -1237,20 +1237,13 @@ class ChatService(
             ) return@onSuccess
 
             if (applicationReceipt == null && assistant.enableMemory &&
-                (assistant.memoryAutoOrganizeEnabled || assistant.memoryAutoIndexEnabled ||
-                    assistant.memoryRecallEnabled) &&
+                (assistant.memoryAutoOrganizeEnabled || assistant.memoryAutoIndexEnabled) &&
                 finalConversation.currentMessages.lastOrNull()?.let {
                     it.role == MessageRole.ASSISTANT && it.id !in initialConversation.currentMessages.map { msg -> msg.id }
                 } == true
             ) {
                 // App scope outlives this generation job. A new send cannot cancel or duplicate paid work.
                 appScope.launch(Dispatchers.IO) {
-                    try {
-                        memoryAutoIndex.maintainAfterReply(assistant.id)
-                    } catch (cancelled: CancellationException) { throw cancelled
-                    } catch (_: Exception) {
-                        Log.w(TAG, "Local memory maintenance unavailable; chat preserved")
-                    }
                     try {
                         memoryOrganization.afterReply(
                             assistant.id, conversationId.toString(), finalConversation.messageNodes.map { node ->

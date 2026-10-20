@@ -19,20 +19,9 @@ interface HistoryMemoryStorage {
     suspend fun vectors(
         scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary,
     ): List<HistoryMemoryVector>
-    suspend fun vectorPage(
-        scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary,
-    ): List<HistoryVectorProjection> {
-        val records = vectors(scope, namespace, after, boundary)
-        val current = sources(scope, records.map { it.nodeId }.distinct()).associateBy { it.reference.key }
-        return records.map { record ->
-            val source = current["${record.conversationId}/${record.nodeId}/${record.messageId}"]
-            HistoryVectorProjection(record, source?.role.orEmpty(), source?.createdAt.orEmpty(), source?.nodeIndex ?: -1)
-        }
-    }
     suspend fun removeOtherModels(scope: String, namespace: String)
     suspend fun putValid(vectors: List<HistoryMemoryVector>)
     suspend fun pruneExpired(scope: String, oldestMillis: Long) {}
-    suspend fun packLegacy(scope: String) {}
     suspend fun refreshKeywords(scope: String): Int
 }
 
@@ -56,26 +45,18 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
         scope: String, conversationId: String, messages: List<UIMessage>,
     ): HistoryRecallBoundary {
         val latest = messages.last { it.role == MessageRole.USER }
+        val row = dao.sources(SimpleSQLiteQuery(
+            "$SOURCE_SQL AND conversationId = ? AND messageId = ? LIMIT 1",
+            arrayOf(scope, conversationId, latest.id.toString()),
+        )).firstOrNull()
         val firstVisible = messages.filter { it.role == MessageRole.USER || it.role == MessageRole.ASSISTANT }
-            .take(16).mapTo(hashSetOf()) { it.id.toString() }
-        val ids = (firstVisible + latest.id.toString()).toList()
-        var latestIndex: Int? = null
-        var firstIndex: Int? = null
-        // Establish context boundaries from IDs only; never aggregate message parts or load original text.
-        val placeholders = ids.joinToString(",") { "?" }
-        database.openHelper.writableDatabase.query(
-            BOUNDARY_SQL.replace("%IDS%", placeholders),
-            (listOf(scope, conversationId) + ids).toTypedArray<Any>(),
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val nodeIndex = cursor.getInt(0)
-                val messageId = cursor.getString(1)
-                if (messageId == latest.id.toString()) latestIndex = nodeIndex
-                if (messageId in firstVisible) firstIndex = minOf(firstIndex ?: nodeIndex, nodeIndex)
-            }
-        }
+            .take(16).map { it.id.toString() }
+        val firstIndex = if (row == null || firstVisible.isEmpty()) 0 else dao.sources(SimpleSQLiteQuery(
+            "$SOURCE_SQL AND conversationId = ? AND messageId IN (${firstVisible.joinToString(",") { "?" }})",
+            (listOf(scope, conversationId) + firstVisible).toTypedArray(),
+        )).minOfOrNull { it.nodeIndex } ?: row.nodeIndex
         return HistoryRecallBoundary(
-            conversationId, if (latestIndex == null) 0 else firstIndex ?: latestIndex ?: 0, latest.createdAt.toString(),
+            conversationId, firstIndex, latest.createdAt.toString(),
             messages.mapTo(hashSetOf()) { it.id.toString() },
         )
     }
@@ -114,8 +95,6 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
     override suspend fun indexedIds(scope: String, namespace: String) = dao.indexedIds(scope, namespace).toHashSet()
     override suspend fun vectors(scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary) =
         dao.vectors(scope, namespace, after, boundary.conversationId, boundary.maxNodeIndex, boundary.latestTime)
-    override suspend fun vectorPage(scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary) =
-        dao.vectorPage(scope, namespace, after, boundary.conversationId, boundary.maxNodeIndex, boundary.latestTime)
     override suspend fun removeOtherModels(scope: String, namespace: String) = dao.removeOtherModels(scope, namespace)
 
     /** Source checks and inserts share the write transaction: network awaits cannot resurrect stale vectors. */
@@ -134,16 +113,6 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
     private val lastPrune = mutableMapOf<String, Pair<Long, Long>>()
     private val pruneMutex = kotlinx.coroutines.sync.Mutex()
     private val pruneCursors = mutableMapOf<String, String>()
-
-    override suspend fun packLegacy(scope: String) {
-        for (record in dao.legacyVectors(scope)) {
-            currentCoroutineContext().ensureActive()
-            val decoded = MemoryVectorCodec.decode(record.vector, null)
-            // Invalid derived vectors remain invalid, but cannot block conversion of later batches.
-            val packed = decoded?.let { MemoryVectorCodec.encode(it.toList()) } ?: byteArrayOf()
-            dao.packLegacy(record.namespace, record.sliceId, record.vector, packed)
-        }
-    }
 
     override suspend fun pruneExpired(scope: String, oldestMillis: Long) {
         if (!pruneMutex.tryLock()) return
@@ -206,14 +175,6 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
     }
 
     companion object {
-        internal val BOUNDARY_SQL = """SELECT n.node_index,
-            json_extract(n.messages, '$[' || n.select_index || '].id') AS messageId
-            FROM message_node n JOIN conversationentity c ON c.id = n.conversation_id
-            WHERE c.assistant_id = ? AND n.conversation_id = ?
-            AND json_valid(n.messages) AND n.select_index >= 0
-            AND json_extract(n.messages, '$[' || n.select_index || '].role') IN ('user','assistant')
-            AND json_extract(n.messages, '$[' || n.select_index || '].id') IN (%IDS%)"""
-
         // SQLite extracts text only: base64 images, tool payloads and hidden background never enter RAM or embeddings.
         internal val SOURCE_SQL = """SELECT * FROM (
             SELECT n.id AS nodeId, n.conversation_id AS conversationId, n.node_index AS nodeIndex,
