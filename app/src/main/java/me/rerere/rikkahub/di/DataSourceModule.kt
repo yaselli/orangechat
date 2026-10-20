@@ -6,11 +6,24 @@
 
 package me.rerere.rikkahub.di
 
-import me.rerere.rikkahub.data.db.migrations.Migration_32_33_StableMemory
-import me.rerere.rikkahub.data.db.migrations.Migration_37_38
+import me.rerere.rikkahub.data.db.migrations.Migration_29_30
+
+import me.rerere.rikkahub.data.db.migrations.Migration_36_37
+
+import me.rerere.rikkahub.data.db.migrations.Migration_35_36
+
+import me.rerere.rikkahub.data.db.migrations.Migration_34_35
+
+import me.rerere.rikkahub.data.db.migrations.Migration_33_34
+
+import me.rerere.rikkahub.data.db.migrations.Migration_30_31
+
 import me.rerere.rikkahub.data.db.migrations.Migration_31_33_HistoryMemory
-import me.rerere.rikkahub.data.memory.HistoryMemoryStorage
-import me.rerere.rikkahub.data.memory.HistoryMemoryRepository
+
+import me.rerere.rikkahub.data.db.migrations.Migration_37_38
+
+import me.rerere.rikkahub.data.db.migrations.Migration_32_33_StableMemory
+
 import me.rerere.rikkahub.data.db.migrations.Migration_29_32_ChatInteractions
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import androidx.room.Room
@@ -53,15 +66,6 @@ import me.rerere.rikkahub.data.db.migrations.Migration_21_22
 import me.rerere.rikkahub.data.db.migrations.Migration_23_24
 import me.rerere.rikkahub.data.db.migrations.Migration_24_25
 import me.rerere.rikkahub.data.db.migrations.Migration_25_26
-import me.rerere.rikkahub.data.db.migrations.Migration_30_31
-import me.rerere.rikkahub.data.memory.MemoryOrganizationService
-import me.rerere.rikkahub.data.db.migrations.Migration_33_34
-import me.rerere.rikkahub.data.db.migrations.Migration_34_35
-import me.rerere.rikkahub.data.memory.MemoryAutoIndexService
-import me.rerere.rikkahub.data.db.migrations.Migration_35_36
-import me.rerere.rikkahub.data.db.migrations.Migration_36_37
-import me.rerere.rikkahub.data.memory.MemoryRecallService
-import me.rerere.rikkahub.data.db.migrations.Migration_29_30
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
@@ -143,14 +147,6 @@ val dataSourceModule = module {
             .build()
     }
 
-    single { get<AppDatabase>().memoryIndexDao() }
-
-    single<HistoryMemoryStorage> { HistoryMemoryRepository(get()) }
-    single { MemoryRecallService(get(), get(), get(), get<Context>(), get()) }
-    single { get<AppDatabase>().memoryAutoIndexDao() }
-    single { MemoryAutoIndexService(get(), { get<SettingsStore>().settingsFlow.value }, get()) }
-    single { MemoryOrganizationService(get(), get(), get(), get(), get()) }
-
     single {
         AssistantTemplateLoader(settingsStore = get())
     }
@@ -226,7 +222,6 @@ val dataSourceModule = module {
             conversationRepo = get(),
             aiLoggingManager = get(),
             memoryBankService = get(),
-            memoryRecallService = get(),
             chatInteractionRepository = get()
         )
     }

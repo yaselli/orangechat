@@ -1,8 +1,6 @@
 package me.rerere.rikkahub.data.ai
 
 import kotlinx.coroutines.CancellationException
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
@@ -148,23 +146,6 @@ class GenerationModelTurnTest {
         }
         assertEquals(1, updates)
         assertEquals(1, provider.emittedChunks)
-    }
-
-    @Test
-    fun `local diagnostics never reach streaming or nonstreaming providers or change history text`() = runBlocking {
-        val metadata = buildJsonObject { put("memory_recall_v1", "local-only-secret") }
-        val history = listOf(
-            UIMessage.user("question"), UIMessage.assistant("old reply").copy(localMetadata = metadata),
-        )
-        for (stream in listOf(true, false)) {
-            val provider = RecordingProvider(listOf(chunk(UIMessagePart.Text("answer"))))
-            turn(provider, history, history, stream = stream)
-            val sent = requireNotNull(provider.requestMessages)
-            assertTrue(sent.all { it.localMetadata == null })
-            assertEquals(history.map { it.parts }, sent.map { it.parts })
-            assertEquals(history.map { it.id }, sent.map { it.id })
-            assertEquals(metadata, history.last().localMetadata)
-        }
     }
 
     private suspend fun turn(

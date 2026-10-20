@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -9,11 +9,8 @@ package me.rerere.rikkahub.data.db
 
 import me.rerere.rikkahub.data.memory.MemoryOrganizationBatch
 import me.rerere.rikkahub.data.memory.MemoryEvidence
-import me.rerere.rikkahub.data.memory.MemoryOrganizationDAO
-import me.rerere.rikkahub.data.memory.MemoryIndexDAO
 import me.rerere.rikkahub.data.memory.MemoryVectorEntity
 import me.rerere.rikkahub.data.memory.MemoryRecallSnapshotEntity
-import me.rerere.rikkahub.data.memory.HistoryMemoryDAO
 import me.rerere.rikkahub.data.memory.HistoryMemoryVector
 import me.rerere.rikkahub.data.interaction.MessageReaction
 import me.rerere.rikkahub.data.interaction.MessageReactionDAO
@@ -100,13 +97,6 @@ import me.rerere.rikkahub.utils.JsonInstant
 )
 @TypeConverters(TokenUsageConverter::class)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun memoryAutoIndexDao(): me.rerere.rikkahub.data.memory.MemoryAutoIndexDAO
-
-    abstract fun memoryOrganizationDao(): MemoryOrganizationDAO
-
-    abstract fun historyMemoryDao(): HistoryMemoryDAO
-
-    abstract fun memoryIndexDao(): MemoryIndexDAO
     abstract fun messageReactionDao(): MessageReactionDAO
 
     abstract fun conversationDao(): ConversationDAO

@@ -17,20 +17,6 @@ class GenerationMemoryPromptTest {
     )
 
     @Test
-    fun `local original evidence flag does not alter prompt serialization or cache prefix`() {
-        assertEquals(
-            me.rerere.rikkahub.utils.JsonInstant.encodeToString(memories),
-            me.rerere.rikkahub.utils.JsonInstant.encodeToString(memories.map { it.copy(hasOriginalEvidence = true) }),
-        )
-        GenerationScene.entries.forEach { scene ->
-            assertEquals(
-                buildGenerationMemoryPrompt(true, memories, scene),
-                buildGenerationMemoryPrompt(true, memories.map { it.copy(hasOriginalEvidence = true) }, scene),
-            )
-        }
-    }
-
-    @Test
     fun `disabled memory emits nothing for either scene`() {
         GenerationScene.entries.forEach { scene ->
             assertEquals("", buildGenerationMemoryPrompt(false, memories, scene))

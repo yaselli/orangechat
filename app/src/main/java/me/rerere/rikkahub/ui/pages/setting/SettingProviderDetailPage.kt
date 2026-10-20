@@ -1034,7 +1034,6 @@ private fun ModelTypeSelector(
                             when (type) {
                                 ModelType.CHAT -> R.string.setting_provider_page_chat_model
                                 ModelType.EMBEDDING -> R.string.setting_provider_page_embedding_model
-                    ModelType.RERANK -> R.string.setting_provider_page_rerank_model
                                 ModelType.IMAGE -> R.string.setting_provider_page_image_model
                             }
                         )

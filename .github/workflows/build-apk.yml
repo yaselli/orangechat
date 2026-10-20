@@ -68,21 +68,6 @@ jobs:
           mkdir -p verification-logs
           ./gradlew testDebugUnitTest --continue 2>&1 | tee verification-logs/unit-tests.txt
 
-      - name: Verify memory database migration SQL
-        run: python3 scripts/verify-memory-migration.py
-
-      - name: Verify history memory SQL and source isolation
-        run: python3 scripts/verify-history-memory.py
-
-      - name: Verify automatic memory claims and evidence
-        run: python3 scripts/verify-memory-organization.py
-
-      - name: Verify graph retirement and incremental index claims
-        run: python3 scripts/verify-memory-graph.py
-
-      - name: Compile memory device tests
-        run: ./gradlew :app:compileDebugAndroidTestKotlin
-
       - name: Upload unit test diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -107,11 +92,6 @@ jobs:
             **/build/reports/tests/**
             **/build/test-results/**
             **/build/reports/lint-results*.*
-            app/schemas/**/30.json
-            app/schemas/**/31.json
-            app/schemas/**/33.json
-            app/schemas/**/36.json
-            app/schemas/**/37.json
           if-no-files-found: warn
 
       - name: Build APK

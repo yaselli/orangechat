@@ -27,25 +27,17 @@ fun buildMemoryTools(
     json: Json,
     onCreation: suspend (String) -> AssistantMemory,
     onUpdate: suspend (Int, String) -> AssistantMemory,
-    onDelete: suspend (Int) -> Unit,
-    onRead: (suspend (Int) -> AssistantMemory)? = null,
+    onDelete: suspend (Int) -> Unit
 ): List<Tool> = listOf(
     Tool(
         name = "memory_tool",
         description = """
             The memory tool stores long-term information across conversations.
-            Use `action` to control the operation: `create` (add), `edit` (update), `delete` (remove), `read` (fetch the complete record before editing a recalled excerpt).
+            Use `action` to control the operation: `create` (add), `edit` (update), `delete` (remove).
             - No relevant record: `create` + `content`
             - Existing relevant record: `edit` + `id` + `content`
             - Outdated/irrelevant record: `delete` + `id`
-            For create/edit, write memories from your own perspective as the assistant, not as an outside narrator.
-            In Chinese, refer to yourself as “我” and the user as “她”.
-            Do not use your character name or “用户” as the narrator's subject.
-            “我” in a saved memory means the assistant; do not mistake the user's quoted “我” for yourself.
-            Preserve who did what and the names of other people. Store only supported facts;
-            do not invent experiences or promises to fit this perspective.
-            Memories may be retrieved as partial background excerpts in later conversations.
-            A recalled excerpt is NOT the full record: read the complete record before editing it.
+            Memories will automatically appear in the <memories> tag in later conversations.
             Do not store sensitive information (e.g., ethnicity, religion, sexual orientation, political views, sex life, criminal records).
             You may store: preferred name, preferences, plans, work-related notes, chat style preferences, first chat time, etc.
             Do not show memory content directly in the conversation unless the user explicitly asks.
@@ -53,8 +45,8 @@ fun buildMemoryTools(
             Similar memories should be merged; prefer updating existing records.
 
             Examples:
-            {"action":"create","content":"她喜欢我简短地回复，周末更常来找我聊天。"}
-            {"action":"edit","id":12,"content":"她希望我称呼她为阿星，并用中文回复她。"}
+            {"action":"create","content":"User prefers brief replies and is more active on weekends."}
+            {"action":"edit","id":12,"content":"User’s preferred name updated to “A-Xing”, prefers Chinese replies."}
             {"action":"delete","id":7}
         """.trimIndent(),
         parameters = {
@@ -68,21 +60,17 @@ fun buildMemoryTools(
                                 add("create")
                                 add("edit")
                                 add("delete")
-                                if (onRead != null) add("read")
                             }
                         )
-                        put("description", "Operation to perform: create, edit, delete, or read")
+                        put("description", "Operation to perform: create, edit, or delete")
                     })
                     put("id", buildJsonObject {
                         put("type", "integer")
-                        put("description", "The id of the memory record (required for edit/delete/read)")
+                        put("description", "The id of the memory record (required for edit/delete)")
                     })
                     put("content", buildJsonObject {
                         put("type", "string")
-                        put(
-                            "description",
-                            "Memory content from the assistant's perspective: 我 = assistant, 她 = user (required for create/edit)"
-                        )
+                        put("description", "The content of the memory record (required for create/edit)")
                     })
                 },
                 required = listOf("action")
@@ -103,12 +91,6 @@ fun buildMemoryTools(
                     json.encodeToJsonElement(AssistantMemory.serializer(), onUpdate(id, content))
                 }
 
-                "read" -> {
-                    val id = params["id"]?.jsonPrimitive?.intOrNull ?: error("id is required")
-                    val read = onRead ?: error("Reading memory is not available")
-                    json.encodeToJsonElement(AssistantMemory.serializer(), read(id))
-                }
-
                 "delete" -> {
                     val id = params["id"]?.jsonPrimitive?.intOrNull ?: error("id is required")
                     onDelete(id)
@@ -118,7 +100,7 @@ fun buildMemoryTools(
                     }
                 }
 
-                else -> error("unknown action: $action, must be one of [create, edit, delete, read]")
+                else -> error("unknown action: $action, must be one of [create, edit, delete]")
             }
             listOf(UIMessagePart.Text(payload.toString()))
         }

@@ -9,7 +9,6 @@ package me.rerere.rikkahub.data.ai
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import android.content.Context
 import android.util.Log
-import me.rerere.rikkahub.utils.JsonInstant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -21,12 +20,9 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import me.rerere.ai.core.InputSchema
-import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -53,11 +49,6 @@ import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.memory.MemoryRecallService
-import me.rerere.rikkahub.data.memory.MemoryRecallTurn
-import me.rerere.rikkahub.data.model.MemorySource
-import me.rerere.rikkahub.data.model.ContextCompaction
-import me.rerere.rikkahub.data.model.selectCompactedContext
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -89,7 +80,6 @@ class GenerationHandler(
     private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
     private val memoryBankService: MemoryBankService,
-    private val memoryRecallService: MemoryRecallService,
     private val chatInteractionRepository: ChatInteractionRepository,
 ) {
     fun generateText(
@@ -103,7 +93,6 @@ class GenerationHandler(
         tools: List<Tool> = emptyList(),
         maxSteps: Int = 256,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
-        contextCompaction: ContextCompaction? = null,
         conversationSystemPrompt: String? = null,
         workspaceCwd: String? = null,
         pluginPromptInjections: List<String> = emptyList(),
@@ -112,14 +101,6 @@ class GenerationHandler(
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
  
-        val recallHistory = selectCompactedContext(messages, contextCompaction).messages
-        val recallTurn = memoryRecallService.prepare(
-            assistant, settings, conversationId,
-            selectGenerationHistory(recallHistory, assistant.contextMessageSize, GenerationScene.CHAT),
-        )
-
-        var requestProfile: JsonElement? = null
-        val originalMessageIds = messages.mapTo(hashSetOf()) { it.id }
         runGenerationToolLoop(
             initialMessages = messages,
             maxSteps = maxSteps,
@@ -136,22 +117,16 @@ class GenerationHandler(
                         } else {
                             assistant.id.toString()
                         }
-                        val memorySource = MemorySource(
-                            kind = "tool",
-                            conversationId = conversationId.orEmpty(),
-                            messageId = messages.lastOrNull { it.role == MessageRole.USER }?.id?.toString().orEmpty(),
-                        )
                         buildMemoryTools(
                             json = json,
                             onCreation = { content ->
-                                memoryRepo.addMemory(memoryAssistantId, content, memorySource)
+                                memoryRepo.addMemory(memoryAssistantId, content)
                             },
                             onUpdate = { id, content ->
-                                memoryRepo.updateContent(id, content, memorySource, memoryAssistantId)
+                                memoryRepo.updateContent(id, content)
                             },
-                            onRead = { id -> memoryRepo.getMemoryInScope(id, memoryAssistantId) },
                             onDelete = { id ->
-                                memoryRepo.deleteMemory(id, memoryAssistantId)
+                                memoryRepo.deleteMemory(id)
                             }
                         ).let(this::addAll)
                     }
@@ -167,13 +142,8 @@ class GenerationHandler(
                     settings = settings,
                     messages = turnMessages,
                     pluginPromptInjections = pluginPromptInjections,
-                    onUpdateMessages = { updated ->
-                        val recorded = updated.mapIndexed { index, message ->
-                            if (index == updated.lastIndex && message.id !in originalMessageIds) {
-                                recallTurn.annotate(message).attachRequestInputProfileValue(requestProfile)
-                            } else message
-                        }
-                        turnMessages = recorded.transforms(
+                    onUpdateMessages = {
+                        turnMessages = it.transforms(
                             transformers = outputTransformers,
                             context = context,
                             model = model,
@@ -198,11 +168,8 @@ class GenerationHandler(
                     provider = provider,
                     tools = toolsInternal,
                     memories = memories ?: emptyList(),
-                    recallTurn = recallTurn,
-                    onRequestProfile = { requestProfile = it?.let(::encodeRequestInputProfile) },
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
-                    contextCompaction = contextCompaction,
                     conversationSystemPrompt = conversationSystemPrompt,
                     workspaceCwd = workspaceCwd,
                     conversationId = conversationId,
@@ -221,11 +188,7 @@ class GenerationHandler(
                     assistant = assistant,
                     settings = settings
                 )
-                val lastReply = turnMessages.last()
-                val recordedReply = if (lastReply.id !in originalMessageIds) {
-                    recallTurn.annotate(lastReply).attachRequestInputProfileValue(requestProfile)
-                } else lastReply
-                turnMessages = turnMessages.slice(0 until turnMessages.lastIndex) + recordedReply.copy(
+                turnMessages = turnMessages.slice(0 until turnMessages.lastIndex) + turnMessages.last().copy(
                     finishedAt = Clock.System.now()
                         .toLocalDateTime(TimeZone.currentSystemDefault())
                 )
@@ -270,49 +233,37 @@ class GenerationHandler(
         provider: ProviderSetting,
         tools: List<Tool>,
         memories: List<AssistantMemory>,
-        recallTurn: MemoryRecallTurn,
-        onRequestProfile: (RequestInputProfile?) -> Unit,
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
-        contextCompaction: ContextCompaction? = null,
         conversationSystemPrompt: String? = null,
         workspaceCwd: String? = null,
         conversationId: String? = null,
     ) {
-        val collectProfile = settings.displaySetting.showTokenUsage
-        val systemSizes = linkedMapOf<String, Long>()
-        val transformationSizes = mutableListOf<InputSizeEntry>()
-        fun measured(label: String, text: String): String {
-            if (collectProfile) systemSizes[label] = (systemSizes[label] ?: 0L) + inputUtf8Bytes(text)
-            return text
-        }
         val baseMessages = buildList {
             val system = buildString {
                 val effectiveSystemPrompt = selectGenerationSystemPrompt(
                     assistant, GenerationScene.CHAT, conversationSystemPrompt
                 )
                 if (effectiveSystemPrompt.isNotBlank()) {
-                    append(measured("角色/会话设定", effectiveSystemPrompt))
+                    append(effectiveSystemPrompt)
                 }
  
                 // 记忆
-                append(measured("旧整库记忆", buildGenerationMemoryPrompt(
-                    assistant.enableMemory && !assistant.memoryRecallEnabled, memories, GenerationScene.CHAT
-                )))
+                append(buildGenerationMemoryPrompt(assistant.enableMemory, memories, GenerationScene.CHAT))
  
                 if (assistant.enableRecentChatsReference) {
                     appendLine()
-                    append(measured("近期聊天标题", buildRecentChatsPrompt(assistant, conversationRepo)))
+                    append(buildRecentChatsPrompt(assistant, conversationRepo))
                 }
  
                 // 代码文件命名和ZIP打包功能说明
                 appendLine()
-                append(measured("代码与打包说明", buildCodeBlockPrompt()))
+                append(buildCodeBlockPrompt())
  
                 // 工具prompt
                 tools.forEach { tool ->
                     appendLine()
-                    append(measured("工具附加说明", tool.systemPrompt(model, messages)))
+                    append(tool.systemPrompt(model, messages))
                 }
  
                 // 插件提示词注入
@@ -320,7 +271,7 @@ class GenerationHandler(
                     pluginPromptInjections.forEach { injection ->
                         appendLine()
                         appendLine()
-                        append(measured("插件/额外背景", injection))
+                        append(injection)
                     }
                 }
  
@@ -356,13 +307,8 @@ class GenerationHandler(
                 }
  
             }
-            if (collectProfile) {
-                systemSizes["界面/跳转/其他说明"] = (inputUtf8Bytes(system) - systemSizes.values.sum()).coerceAtLeast(0)
-            }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            val compacted = selectCompactedContext(messages, contextCompaction)
-            compacted.summary?.let { add(contextSummaryMessage(it)) }
-            addAll(selectGenerationHistory(compacted.messages, assistant.contextMessageSize, GenerationScene.CHAT))
+            addAll(selectGenerationHistory(messages, assistant.contextMessageSize, GenerationScene.CHAT))
         }.transforms(
             transformers = transformers,
             context = context,
@@ -371,46 +317,13 @@ class GenerationHandler(
             settings = settings,
             processingStatus = processingStatus,
             workspaceCwd = workspaceCwd,
-            onTransformed = if (collectProfile) { transformer, before, after ->
-                transformationSizes += InputSizeEntry(transformer.javaClass.simpleName.take(80),
-                    inputTextBytes(after) - inputTextBytes(before))
-            } else null,
         )
  
-        val internalMessages = memoryRecallService.apply(recallTurn, chatInteractionRepository.decorate(
+        val internalMessages = chatInteractionRepository.decorate(
             baseMessages, conversationId, assistant, sourceMessages = messages,
-        ))
+        )
 
         val params = buildGenerationRequestParameters(assistant, model, tools)
-        // Sizes are local diagnostics, not billable token estimates. A diagnostics failure cannot stop chat.
-        onRequestProfile(if (collectProfile) runCatching {
-            val exposedTools = if (ModelAbility.TOOL in model.abilities) params.tools else emptyList()
-            val toolSizes = exposedTools.map { tool ->
-                val schema = tool.parameters()
-                val definition = buildJsonObject {
-                    put("type", "function")
-                    put("function", buildJsonObject {
-                        put("name", tool.name)
-                        put("description", tool.description)
-                        put("parameters", schema?.let { JsonInstant.encodeToJsonElement(InputSchema.serializer(), it) }
-                            ?: buildJsonObject { put("type", "object"); put("properties", buildJsonObject {}) })
-                    })
-                }
-                InputSizeEntry(tool.name.take(80), inputUtf8Bytes(definition.toString()))
-            }
-            RequestInputProfile(
-                messageCount = internalMessages.size,
-                textBytes = inputTextBytes(internalMessages),
-                roles = inputRoleSizes(internalMessages),
-                systemParts = systemSizes.map { InputSizeEntry(it.key, it.value) },
-                transformations = transformationSizes,
-                recallBytes = inputTextBytes(internalMessages) - inputTextBytes(baseMessages),
-                toolCount = toolSizes.size,
-                toolSchemaBytes = toolSizes.sumOf { it.bytes },
-                largestTools = toolSizes.sortedByDescending { it.bytes }.take(10),
-                customBodyKeys = params.customBody.size,
-            )
-        }.getOrNull() else null)
         aiLoggingManager.addLog(
             AILogging.Generation(
                 messageCount = messages.size,

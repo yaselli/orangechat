@@ -1,10 +1,10 @@
-name: Build Stable Release APK
+name: Build Stable Rollback APK
 
 on:
   push:
     branches:
       - build/stable-release
-      - test/memory-release-v164
+      - fix/stable-memory-rollback
       - feature/chat-interactions
   workflow_dispatch:
 
@@ -57,13 +57,10 @@ jobs:
       - name: Verify stable and memory migration routes
         run: |
           python3 scripts/verify-stable-memory-upgrade.py
-          python3 scripts/verify-memory-migration.py
-          python3 scripts/verify-history-memory.py
-          python3 scripts/verify-memory-organization.py
-          python3 scripts/verify-memory-graph.py
+          python3 scripts/verify-stable-memory-rollback.py
       - name: Enable KVM for migration tests
         run: sudo chmod 666 /dev/kvm
-      - name: Run stable memory migration device test
+      - name: Run upgrade and rollback compatibility device tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -71,7 +68,7 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest,me.rerere.rikkahub.data.db.migrations.StableMemoryRollbackTest
       - name: Release lint
         run: ./gradlew lintRelease
       - name: Build signed release APK
@@ -93,7 +90,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Xiguaban-release
+          name: Xiguaban-rollback-release
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
       - name: Upload verification reports

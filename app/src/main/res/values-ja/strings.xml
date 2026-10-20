@@ -264,12 +264,12 @@
   <string name="chat_page_compress_additional_prompt">追加指示（オプション）</string>
   <string name="chat_page_compress_additional_prompt_hint">保持または重点的に扱う内容を指定</string>
   <string name="chat_page_compress_context">履歴を圧縮</string>
-  <string name="chat_page_compress_context_desc">次回以降のリクエスト用に過去の会話を要約します。履歴はそのまま残ります</string>
+  <string name="chat_page_compress_context_desc">会話を要約して圧縮し、トークンを節約します</string>
   <string name="chat_page_compress_context_title">会話履歴を圧縮</string>
-  <string name="chat_page_compress_keep_recent">原文のまま送る最近のメッセージ数</string>
+  <string name="chat_page_compress_keep_recent">最近のメッセージを保持</string>
   <string name="chat_page_compress_not_enough_messages">圧縮するためのメッセージが不足しています。保持するメッセージ数を減らすか、メッセージを追加してください。</string>
   <string name="chat_page_compress_target_tokens">ターゲットトークンサイズ</string>
-  <string name="chat_page_compress_warning">元のメッセージ、分岐、添付は保持されます。要約には選択した圧縮モデルを使用します。</string>
+  <string name="chat_page_compress_warning">⚠️ コンテキストを圧縮すると、現在の会話のすべてのメッセージがリセットされます</string>
   <string name="chat_page_compressing">圧縮中…</string>
   <string name="chat_page_conversation_system_prompt">会話システムプロンプト</string>
   <string name="chat_page_conversation_system_prompt_clear">クリア</string>
@@ -1089,5 +1089,4 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_folder_add">新規</string>
   <string name="chat_page_delete_folder_confirm">フォルダ "%1$s" を削除しますか？内部の会話は削除されず、フォルダから取り除かれるだけです。</string>
   <string name="chat_page_delete_folder_generating">フォルダ内の一部の会話がまだ生成中です。削除する前にそれらを停止してください。</string>
-  <string name="setting_provider_page_rerank_model">再ランキング</string>
 </resources>

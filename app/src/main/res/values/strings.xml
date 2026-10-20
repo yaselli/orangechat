@@ -267,12 +267,12 @@
   <string name="chat_page_compress_additional_prompt">Additional Instructions (Optional)</string>
   <string name="chat_page_compress_additional_prompt_hint">Specify what to preserve or focus on</string>
   <string name="chat_page_compress_context">Compress History</string>
-  <string name="chat_page_compress_context_desc">Summarize older context for future requests; full chat history stays here</string>
+  <string name="chat_page_compress_context_desc">Compress the conversation into a summary to save tokens</string>
   <string name="chat_page_compress_context_title">Compress Conversation History</string>
-  <string name="chat_page_compress_keep_recent">Recent messages sent in full</string>
+  <string name="chat_page_compress_keep_recent">Keep recent messages</string>
   <string name="chat_page_compress_not_enough_messages">Not enough messages to compress. Reduce the number of messages to keep or add more messages.</string>
   <string name="chat_page_compress_target_tokens">Target Token Size</string>
-  <string name="chat_page_compress_warning">Original messages, branches and attachments stay intact. Summary generation calls your selected compression model.</string>
+  <string name="chat_page_compress_warning">⚠️ Compressing context will reset all messages in the current conversation</string>
   <string name="chat_page_compressing">Compressing...</string>
   <string name="chat_page_conversation_system_prompt">Conversation System Prompt</string>
   <string name="chat_page_conversation_system_prompt_clear">Clear</string>
@@ -1228,5 +1228,4 @@
 
   <string name="plugin_security_banner">⚠ Plugins can make network requests and access system data you have authorized. Only install plugins from trusted sources.</string>
   <string name="web_server_security_warning_no_jwt">⚠ JWT authentication is not enabled or the password is empty. Anyone who can access this address can read your conversation records. It is strongly recommended to set a password and enable JWT immediately.</string>
-    <string name="setting_provider_page_rerank_model">Rerank</string>
 </resources>
