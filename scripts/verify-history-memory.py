@@ -61,6 +61,18 @@ db.execute("INSERT INTO message_node VALUES('negative','past',7,?,-1)", (json.du
 db.execute("INSERT INTO message_node VALUES('oversized','past',8,?,0)",
            (json.dumps([message('oversized-message', 'x' * 64001)]),))
 assert len(db.execute(source_sql, ('assistant-a',)).fetchall()) == 3
+# Boundaries only need selected IDs and node indexes, including textless messages (e.g. images).
+boundary_sql = re.search(r'internal val BOUNDARY_SQL = """(.*?)"""', repository, re.S)[1]
+assert 'json_each' not in boundary_sql and 'group_concat' not in boundary_sql
+query_boundary = boundary_sql.replace('%IDS%', '?,?')
+assert db.execute(query_boundary, ('assistant-a','chat','visible-message','future-message')).fetchall() == [(1,'visible-message'),(4,'future-message')]
+assert not db.execute(query_boundary, ('assistant-b','chat','visible-message','future-message')).fetchall()
+assert not db.execute(query_boundary, ('assistant-a','past','hidden','tool-message')).fetchall()
+image_only = dict(id='image-message', role='user', createdAt='2020-01-01T00:00', parts=[dict(type='image',url='image')])
+db.execute('INSERT INTO message_node VALUES(?,?,?,?,?)', ('image-only','chat',2,json.dumps([image_only]),0))
+assert db.execute(query_boundary, ('assistant-a','chat','image-message','visible-message')).fetchall() == [(1,'visible-message'),(2,'image-message')]
+print('PASS: context boundaries query IDs without text aggregation; preserve conversation, assistant and selected-branch isolation')
+
 # Room's node REPLACE is already the source-write path: it must cascade every old derived vector.
 insert_vector = "INSERT INTO history_memory_vector VALUES('model','slice','assistant-a','past','node','selected','hash',0,8,'[1,0]')"
 db.execute(insert_vector)

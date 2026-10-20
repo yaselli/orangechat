@@ -204,21 +204,25 @@ class MemoryRecallServiceTest {
     }
 
     @Test
-    fun `shared deadline cancels all recall before chat without starting a late rerank`() = runBlocking {
+    fun `history timeout preserves completed long term matches and reranks them`() = runBlocking {
         val f = Fixture()
         f.service.buildIndex(f.assistant, f.settings)
         f.history.vectorDelayMillis = 10_000
         val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true, memoryRerankEnabled = true,
             memoryRerankModelId = f.rerankModel.id)
-        val user = UIMessage.user("炸鸡")
+        val user = UIMessage.user("饮食偏好")
         val turn = f.service.prepare(assistant, f.settings, "timeout-chat", listOf(user))
-        assertEquals(listOf(user), f.service.apply(turn, listOf(user)))
+        assertNotEquals(listOf(user), f.service.apply(turn, listOf(user)))
         val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertTrue(trace.diagnostics.deadlineExceeded)
-        assertEquals(MemoryRecallState.FAILED, trace.state)
-        assertEquals(1, f.calls)
-        assertEquals(0, f.rerankCalls)
-        assertTrue(requireNotNull(trace.diagnostics.timings.totalMillis) in 3_500L..8_000L)
+        assertFalse(trace.diagnostics.deadlineExceeded)
+        assertEquals(MemoryVectorState.TIMEOUT, trace.diagnostics.vector)
+        assertEquals(MemoryRecallState.USED, trace.state)
+        assertEquals(MemoryRerankState.SUCCESS, trace.diagnostics.rerank)
+        assertTrue(trace.excerpts.isNotEmpty())
+        assertEquals(2, f.calls)
+        assertEquals(1, f.rerankCalls)
+        assertTrue(requireNotNull(trace.diagnostics.timings.vectorMillis) >= 3_500L)
+        assertNotNull(trace.diagnostics.timings.rerankMillis)
     }
 
     @Test

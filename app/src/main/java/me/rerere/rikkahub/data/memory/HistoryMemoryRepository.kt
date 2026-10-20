@@ -56,18 +56,26 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
         scope: String, conversationId: String, messages: List<UIMessage>,
     ): HistoryRecallBoundary {
         val latest = messages.last { it.role == MessageRole.USER }
-        val row = dao.sources(SimpleSQLiteQuery(
-            "$SOURCE_SQL AND conversationId = ? AND messageId = ? LIMIT 1",
-            arrayOf(scope, conversationId, latest.id.toString()),
-        )).firstOrNull()
         val firstVisible = messages.filter { it.role == MessageRole.USER || it.role == MessageRole.ASSISTANT }
-            .take(16).map { it.id.toString() }
-        val firstIndex = if (row == null || firstVisible.isEmpty()) 0 else dao.sources(SimpleSQLiteQuery(
-            "$SOURCE_SQL AND conversationId = ? AND messageId IN (${firstVisible.joinToString(",") { "?" }})",
-            (listOf(scope, conversationId) + firstVisible).toTypedArray(),
-        )).minOfOrNull { it.nodeIndex } ?: row.nodeIndex
+            .take(16).mapTo(hashSetOf()) { it.id.toString() }
+        val ids = (firstVisible + latest.id.toString()).toList()
+        var latestIndex: Int? = null
+        var firstIndex: Int? = null
+        // Establish context boundaries from IDs only; never aggregate message parts or load original text.
+        val placeholders = ids.joinToString(",") { "?" }
+        database.openHelper.writableDatabase.query(
+            BOUNDARY_SQL.replace("%IDS%", placeholders),
+            (listOf(scope, conversationId) + ids).toTypedArray<Any>(),
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val nodeIndex = cursor.getInt(0)
+                val messageId = cursor.getString(1)
+                if (messageId == latest.id.toString()) latestIndex = nodeIndex
+                if (messageId in firstVisible) firstIndex = minOf(firstIndex ?: nodeIndex, nodeIndex)
+            }
+        }
         return HistoryRecallBoundary(
-            conversationId, firstIndex, latest.createdAt.toString(),
+            conversationId, if (latestIndex == null) 0 else firstIndex ?: latestIndex ?: 0, latest.createdAt.toString(),
             messages.mapTo(hashSetOf()) { it.id.toString() },
         )
     }
@@ -198,6 +206,14 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
     }
 
     companion object {
+        internal val BOUNDARY_SQL = """SELECT n.node_index,
+            json_extract(n.messages, '$[' || n.select_index || '].id') AS messageId
+            FROM message_node n JOIN conversationentity c ON c.id = n.conversation_id
+            WHERE c.assistant_id = ? AND n.conversation_id = ?
+            AND json_valid(n.messages) AND n.select_index >= 0
+            AND json_extract(n.messages, '$[' || n.select_index || '].role') IN ('user','assistant')
+            AND json_extract(n.messages, '$[' || n.select_index || '].id') IN (%IDS%)"""
+
         // SQLite extracts text only: base64 images, tool payloads and hidden background never enter RAM or embeddings.
         internal val SOURCE_SQL = """SELECT * FROM (
             SELECT n.id AS nodeId, n.conversation_id AS conversationId, n.node_index AS nodeIndex,

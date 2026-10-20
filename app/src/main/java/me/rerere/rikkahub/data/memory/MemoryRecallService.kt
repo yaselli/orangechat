@@ -233,19 +233,6 @@ class MemoryRecallService(
     suspend fun prepare(
         assistant: Assistant, settings: Settings, conversationId: String?, messages: List<UIMessage>,
     ): MemoryRecallTurn = withContext(Dispatchers.IO) {
-        val started = System.nanoTime()
-        withTimeoutOrNull(4_000) { prepareWithinBudget(assistant, settings, conversationId, messages) }
-            ?: MemoryRecallTurn(diagnostics = MemoryRecallDiagnostics(
-                timings = MemoryRecallTimings(totalMillis = elapsedMillis(started)), deadlineExceeded = true,
-            ), initialState = MemoryRecallState.FAILED)
-    }
-
-    private suspend fun prepareWithinBudget(
-        assistant: Assistant,
-        settings: Settings,
-        conversationId: String?,
-        messages: List<UIMessage>,
-    ): MemoryRecallTurn = withContext(Dispatchers.IO) {
         if (!assistant.enableMemory) return@withContext MemoryRecallTurn(initialState = MemoryRecallState.DISABLED)
         if (!assistant.memoryRecallEnabled) return@withContext MemoryRecallTurn(initialState = MemoryRecallState.LEGACY)
         if (conversationId.isNullOrBlank()) return@withContext MemoryRecallTurn(initialState = MemoryRecallState.NOT_APPLIED)
@@ -267,7 +254,7 @@ class MemoryRecallService(
                 memoryHash(JsonInstant.encodeToString(model.copy(providerOverwrite = null)) + provider?.id + provider?.baseUrl)
             }.orEmpty()
             val retrievalVersion = (config(assistant, settings)?.key ?: "keyword-v1") +
-                ":dual-v4:${assistant.memoryHistoryRecallEnabled}:$historyScope" +
+                ":dual-v5:${assistant.memoryHistoryRecallEnabled}:$historyScope" +
                 ":rerank:${assistant.memoryRerankEnabled}:$rerankIdentity:${assistant.memoryRerankThreshold}:${assistant.memoryRerankLimit}" +
                 ":retention:${assistant.memoryRetentionEnabled}:${assistant.memoryRetentionDays}:${assistant.memoryDecayHalfLifeDays}"
             val key = memoryHash("$conversationId\u0000$scope\u0000${latest.id}\u0000$hash" +
@@ -342,6 +329,7 @@ class MemoryRecallService(
         val keywords = rankKeywordMemories(query, slices) + rankKeywordMemories(query, historySlices)
         val keywordsMillis = elapsedMillis(keywordsStarted)
         val vectorStarted = System.nanoTime()
+        var completedVectors = emptyList<RankedMemory>()
         val vectors = withTimeoutOrNull(VECTOR_TIMEOUT_MILLIS) {
             try {
                 val config = config(assistant, settings) ?: return@withTimeoutOrNull emptyList()
@@ -352,7 +340,7 @@ class MemoryRecallService(
                     slice != null && slice.revision == record.revision && slice.sourceHash == record.sourceHash
                 }
                 val historyScope = assistant.id.toString()
-                var firstHistoryPage = if (boundary == null) emptyList() else {
+                var firstHistoryPage = if (boundary == null || indexed.isNotEmpty()) emptyList() else {
                     history.vectorPage(historyScope, config.key, "", boundary)
                 }
                 // Do not bill for a query when every indexed historical source is already expired or stale.
@@ -398,6 +386,12 @@ class MemoryRecallService(
                         ?: return@mapNotNull null
                     scoringQuery.similarity(vector)?.let { RankedMemory(byId.getValue(record.sliceId), it) }
                 }.sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id }).take(20)
+                // A slow historical scan must not discard completed long-term vector matches.
+                completedVectors = memoryHits
+                vectorPhase = "历史向量分页与匹配"
+                if (boundary != null && indexed.isNotEmpty()) {
+                    firstHistoryPage = history.vectorPage(historyScope, config.key, "", boundary)
+                }
                 val historyHits = if (boundary == null) emptyList() else historyVectorHits(
                     historyScope, config.key, scoringQuery, firstHistoryPage, boundary, retention,
                 )
@@ -415,9 +409,9 @@ class MemoryRecallService(
         val vectorMillis = elapsedMillis(vectorStarted)
         if (vectors == null) vectorState = MemoryVectorState.TIMEOUT
         val longTerm = fuseMemoryRanks(keywords.filter { it.slice.history == null },
-            vectors.orEmpty().filter { it.slice.history == null })
+            (vectors ?: completedVectors).filter { it.slice.history == null })
         val historical = fuseMemoryRanks(keywords.filter { it.slice.history != null },
-            vectors.orEmpty().filter { it.slice.history != null }).mapNotNull { hit ->
+            (vectors ?: completedVectors).filter { it.slice.history != null }).mapNotNull { hit ->
             val weight = retention.weight(requireNotNull(hit.slice.history).createdAt)
             if (weight <= 0) null else hit.copy(score = hit.score * weight)
         }.sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id })
