@@ -18,6 +18,15 @@ enum class MemoryRecallState { USED, NO_MATCH, FAILED, DISABLED, LEGACY, NOT_APP
 enum class MemoryVectorState { NOT_CONFIGURED, NO_INDEX, SUCCESS, CACHED, TIMEOUT, FAILED, UNKNOWN, NO_QUERY }
 
 @Serializable
+data class MemoryRecallTimings(
+    val totalMillis: Long? = null,
+    val keywordsMillis: Long? = null,
+    val vectorMillis: Long? = null,
+    val embeddingMillis: Long? = null, // Part of vectorMillis, not an additional stage.
+    val rerankMillis: Long? = null,
+)
+
+@Serializable
 data class MemoryRecallDiagnostics(
     val vector: MemoryVectorState = MemoryVectorState.UNKNOWN,
     val historyKeywordsFailed: Boolean = false,
@@ -27,6 +36,8 @@ data class MemoryRecallDiagnostics(
     val longTermCandidates: Int = 0,
     val historyCandidates: Int = 0,
     val retention: String? = null,
+    val timings: MemoryRecallTimings = MemoryRecallTimings(),
+    val vectorPhase: String? = null,
 )
 
 @Serializable

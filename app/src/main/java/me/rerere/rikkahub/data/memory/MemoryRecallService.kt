@@ -29,6 +29,9 @@ import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
+private const val VECTOR_TIMEOUT_MILLIS = 4_000L
+private const val RERANK_TIMEOUT_MILLIS = 4_000L
+
 /** Coordinates storage and transport. Ranking/budgeting and request snapshots are independent pure code. */
 class MemoryRecallService(
     private val memoryDAO: MemoryDAO,
@@ -39,15 +42,15 @@ class MemoryRecallService(
 ) {
     // Paid embedding calls must not inherit transport retries from normal streaming chat.
     private val embedding = OpenAIProvider(
-        client.newBuilder().retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false).callTimeout(8, TimeUnit.SECONDS).build(), context,
+        client.newBuilder().retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false).callTimeout(4, TimeUnit.SECONDS).build(), context,
     )
-    // Manual batch indexing is not on the chat send path; do not impose its 8-second deadline.
+    // Manual batch indexing is not on the chat send path; do not impose the chat retrieval deadline.
     private val indexEmbedding = OpenAIProvider(
         client.newBuilder().retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false)
             .callTimeout(60, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build(), context,
     )
     private val reranking = OpenAIProvider(client.newBuilder().retryOnConnectionFailure(false)
-        .followRedirects(false).followSslRedirects(false).callTimeout(8, TimeUnit.SECONDS).build(), context)
+        .followRedirects(false).followSslRedirects(false).callTimeout(4, TimeUnit.SECONDS).build(), context)
     private val budget = MemoryTextBudget()
     private val queries = MemoryQueryCache()
     private val queryMutex = Mutex()
@@ -236,6 +239,7 @@ class MemoryRecallService(
         if (!assistant.memoryRecallEnabled) return@withContext MemoryRecallTurn(initialState = MemoryRecallState.LEGACY)
         if (conversationId.isNullOrBlank()) return@withContext MemoryRecallTurn(initialState = MemoryRecallState.NOT_APPLIED)
         try {
+            val started = System.nanoTime()
             val scope = scope(assistant)
             val latest = messages.lastOrNull { it.role == MessageRole.USER }
                 ?: return@withContext MemoryRecallTurn(initialState = MemoryRecallState.NOT_APPLIED)
@@ -264,7 +268,10 @@ class MemoryRecallService(
                 "\u0000${memoryHash(query)}\u0000$retrievalVersion")
             var snapshot = index.snapshot(key)
             if (snapshot == null) {
-                val result = recall(assistant, settings, scope, query, sources(scope), boundary, retention)
+                val recalled = recall(assistant, settings, scope, query, sources(scope), boundary, retention)
+                val result = recalled.copy(diagnostics = recalled.diagnostics.copy(
+                    timings = recalled.diagnostics.timings.copy(totalMillis = elapsedMillis(started)),
+                ))
                 index.putSnapshot(MemoryRecallSnapshotEntity(
                     key, conversationId, scope, latest.id.toString(), hash,
                     JsonInstant.encodeToString(result), System.currentTimeMillis(),
@@ -314,6 +321,9 @@ class MemoryRecallService(
         if (query.isBlank()) return MemoryRecallSnapshot(emptyList(), MemoryRecallDiagnostics(MemoryVectorState.NO_QUERY))
         var historyKeywordsFailed = false
         var vectorState = MemoryVectorState.NOT_CONFIGURED
+        var vectorPhase: String? = null
+        var embeddingMillis: Long? = null
+        val keywordsStarted = System.nanoTime()
         val slices = slices(sources)
         val historySlices = if (boundary == null) emptyList() else try {
             history.keywords(assistant.id.toString(), query, boundary)
@@ -324,9 +334,12 @@ class MemoryRecallService(
             emptyList()
         }
         val keywords = rankKeywordMemories(query, slices) + rankKeywordMemories(query, historySlices)
-        val vectors = withTimeoutOrNull(8000) {
+        val keywordsMillis = elapsedMillis(keywordsStarted)
+        val vectorStarted = System.nanoTime()
+        val vectors = withTimeoutOrNull(VECTOR_TIMEOUT_MILLIS) {
             try {
                 val config = config(assistant, settings) ?: return@withTimeoutOrNull emptyList()
+                vectorPhase = "索引读取与来源校验"
                 val byId = slices.associateBy { it.id }
                 val indexed = index.vectors(scope, config.key).filter { record ->
                     val slice = byId[record.sliceId]
@@ -355,10 +368,19 @@ class MemoryRecallService(
                 }
                 val cacheKey = memoryHash(config.key + "\u0000" + scope + "\u0000" + historyScope + "\u0000" + query)
                 var cached = false
+                vectorPhase = "查询向量缓存等待"
                 val queryVector = queryMutex.withLock {
-                    queries.get(cacheKey)?.also { cached = true }
-                        ?: embed(config, listOf(query)).single().also { queries.put(cacheKey, it) }
+                    queries.get(cacheKey)?.also { cached = true } ?: run {
+                        vectorPhase = "查询向量接口"
+                        val embeddingStarted = System.nanoTime()
+                        try {
+                            embed(config, listOf(query)).single().also { queries.put(cacheKey, it) }
+                        } finally {
+                            embeddingMillis = elapsedMillis(embeddingStarted)
+                        }
+                    }
                 }
+                vectorPhase = "本地向量匹配"
                 val memoryHits = indexed.mapNotNull { record ->
                     currentCoroutineContext().ensureActive()
                     val vector = try {
@@ -376,11 +398,13 @@ class MemoryRecallService(
                     .sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id })
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                vectorState = MemoryVectorState.FAILED
+            } catch (failure: Exception) {
+                vectorState = if (failure is java.io.InterruptedIOException) MemoryVectorState.TIMEOUT
+                    else MemoryVectorState.FAILED
                 emptyList()
             }
         }
+        val vectorMillis = elapsedMillis(vectorStarted)
         if (vectors == null) vectorState = MemoryVectorState.TIMEOUT
         val longTerm = fuseMemoryRanks(keywords.filter { it.slice.history == null },
             vectors.orEmpty().filter { it.slice.history == null })
@@ -401,6 +425,8 @@ class MemoryRecallService(
         val candidates = memoryRerankCandidates(query, validLongTerm, validHistory)
         val diagnostics = MemoryRecallDiagnostics(vectorState, historyKeywordsFailed,
             longTermCandidates = validLongTerm.size, historyCandidates = validHistory.size,
+            timings = MemoryRecallTimings(keywordsMillis = keywordsMillis, vectorMillis = vectorMillis,
+                embeddingMillis = embeddingMillis), vectorPhase = vectorPhase,
             retention = if (retention.enabled) "短期原文：${retention.days}天保留期，${retention.halfLifeDays}天权重减半；长期记忆不衰减。" else "短期遗忘未开启。")
         if (!assistant.memoryRerankEnabled) {
             val selected = selectMemoryExcerpts(query, (validLongTerm + validHistory).sortedByDescending { it.score }).map {
@@ -408,9 +434,12 @@ class MemoryRecallService(
             }
             return MemoryRecallSnapshot(selected, diagnostics)
         }
+        var rerankStarted: Long? = null
         fun finish(state: MemoryRerankState, selected: List<SavedMemoryExcerpt> = emptyList(),
             scores: Map<Int, Double> = emptyMap()): MemoryRecallSnapshot = MemoryRecallSnapshot(selected,
-            diagnostics.copy(rerank = state, candidates = candidates.mapIndexed { index, hit ->
+            diagnostics.copy(rerank = state,
+                timings = diagnostics.timings.copy(rerankMillis = rerankStarted?.let(::elapsedMillis)),
+                candidates = candidates.mapIndexed { index, hit ->
                 MemoryCandidateTrace(hit.slice.memoryId, hit.slice.history, hit.text, scores[index],
                     selected.any { it.memoryId == hit.slice.memoryId && it.history == hit.slice.history && it.text == hit.text })
             }))
@@ -421,19 +450,26 @@ class MemoryRecallService(
             ?: return finish(MemoryRerankState.NOT_CONFIGURED)
         val provider = (model.findProvider(settings.providers) as? ProviderSetting.OpenAI)?.takeIf { it.enabled }
             ?: return finish(MemoryRerankState.NOT_CONFIGURED)
+        rerankStarted = System.nanoTime()
         val scores = try {
-            withTimeoutOrNull(8000) { reranking.rerank(provider, model, query, candidates.map {
+            withTimeoutOrNull(RERANK_TIMEOUT_MILLIS) { reranking.rerank(provider, model, query, candidates.map {
                 val ref = it.slice.history
                 // Labels inform interpretation without allowing provider text to replace a saved source.
                 (ref?.let { ref -> "历史原文 role=${ref.role} time=${ref.createdAt}\n" } ?: "长期记忆\n") + it.text
             }) } ?: return finish(MemoryRerankState.TIMEOUT)
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) { return finish(MemoryRerankState.FAILED) }
+        } catch (failure: Exception) {
+            return finish(if (failure is java.io.InterruptedIOException) MemoryRerankState.TIMEOUT
+                else MemoryRerankState.FAILED)
+        }
         val threshold = assistant.memoryRerankThreshold.takeIf { it.isFinite() }?.coerceIn(0.0, 1.0) ?: 0.5
         val selected = selectRerankedMemory(candidates, scores, threshold, assistant.memoryRerankLimit)
         return finish(MemoryRerankState.SUCCESS, selected, scores.associate { it.index to it.score })
     }
+
+    private fun elapsedMillis(started: Long): Long =
+        ((System.nanoTime() - started) / 1_000_000).coerceAtLeast(0)
 
     private data class HistoryScore(val record: HistoryMemoryVector, val score: Double)
 

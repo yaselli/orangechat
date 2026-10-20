@@ -93,13 +93,32 @@ private fun MemoryRecallReferenceDialog(trace: MemoryRecallTrace, onDismiss: () 
                             Text("历史关键词查询失败，仅使用其他可用结果。", style = MaterialTheme.typography.bodySmall)
                         }
                     }
+                    val timings = trace.diagnostics.timings
+                    timings.totalMillis?.let { total ->
+                        fun seconds(millis: Long) = String.format(java.util.Locale.ROOT, "%.2f秒", millis / 1000.0)
+                        Text("首次记忆准备共 ${seconds(total)}（不含聊天模型出字；重试会复用首次记录）",
+                            style = MaterialTheme.typography.bodySmall)
+                        Text(listOfNotNull(
+                            timings.keywordsMillis?.let { "关键词 ${seconds(it)}" },
+                            timings.vectorMillis?.let { "向量 ${seconds(it)}" },
+                            timings.rerankMillis?.let { "重排 ${seconds(it)}" },
+                        ).joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                        timings.embeddingMillis?.let {
+                            Text("向量阶段中，查询嵌入接口耗时 ${seconds(it)}。", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (trace.diagnostics.vector in setOf(MemoryVectorState.TIMEOUT, MemoryVectorState.FAILED)) {
+                            trace.diagnostics.vectorPhase?.let {
+                                Text("向量中断位置：$it", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
                     if (trace.diagnostics.rerank != MemoryRerankState.DISABLED) {
                         Text("长期候选 ${trace.diagnostics.longTermCandidates} · 短期候选 ${trace.diagnostics.historyCandidates} · 合并送审 ${trace.diagnostics.candidates.size}")
                         Text(when (trace.diagnostics.rerank) {
                             MemoryRerankState.NOT_CONFIGURED -> "未配置可用重排模型，本轮未附带候选。"
                             MemoryRerankState.NO_CANDIDATES -> "两路都没有可送审候选，未请求重排。"
                             MemoryRerankState.SUCCESS -> "重排完成；达到门槛的片段还需通过数量、长度和来源校验。"
-                            MemoryRerankState.TIMEOUT -> "重排超过8秒，未自动重试，本轮未附带候选。"
+                            MemoryRerankState.TIMEOUT -> "重排超时，未自动重试，本轮未附带候选。"
                             MemoryRerankState.FAILED -> "重排失败或返回数据无效，未自动重试，本轮未附带候选。"
                             MemoryRerankState.DISABLED -> "重排未开启。"
                         }, style = MaterialTheme.typography.bodySmall)

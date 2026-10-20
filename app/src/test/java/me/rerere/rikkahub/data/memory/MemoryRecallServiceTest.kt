@@ -54,6 +54,7 @@ class MemoryRecallServiceTest {
     private class HistoryStore : HistoryMemoryStorage {
         val rows = mutableListOf<HistoryMemorySource>()
         val stored = mutableListOf<HistoryMemoryVector>()
+        var vectorDelayMillis = 0L
         override suspend fun sources(scope: String, nodeIds: List<String>) = rows.filter {
             it.scope == scope && it.nodeId in nodeIds
         }
@@ -69,8 +70,11 @@ class MemoryRecallServiceTest {
         }.mapTo(hashSetOf()) { it.sliceId }
         override suspend fun vectors(
             scope: String, namespace: String, after: String, boundary: HistoryRecallBoundary,
-        ) = stored.filter { it.scope == scope && it.namespace == namespace && it.sliceId > after }
-            .sortedBy { it.sliceId }.take(64)
+        ): List<HistoryMemoryVector> {
+            kotlinx.coroutines.delay(vectorDelayMillis)
+            return stored.filter { it.scope == scope && it.namespace == namespace && it.sliceId > after }
+                .sortedBy { it.sliceId }.take(64)
+        }
         override suspend fun removeOtherModels(scope: String, namespace: String) {
             stored.removeAll { it.scope == scope && it.namespace != namespace }
         }
@@ -177,11 +181,53 @@ class MemoryRecallServiceTest {
     }
 
     @Test
-    fun `manual batch indexing has longer deadline while chat retrieval remains eight seconds`() = runBlocking {
+    fun `manual batch indexing has longer deadline while chat retrieval is bounded at four seconds`() = runBlocking {
         val f = Fixture()
         assertEquals(1, f.service.buildIndex(f.assistant, f.settings))
         f.service.prepare(f.assistant, f.settings, "chat", listOf(UIMessage.user("炸鸡")))
-        assertEquals(listOf(60_000_000_000L, 8_000_000_000L), f.callTimeouts)
+        assertEquals(listOf(60_000_000_000L, 4_000_000_000L), f.callTimeouts)
+    }
+
+    @Test
+    fun `vector deadline releases chat to rerank existing candidates without another embedding call`() = runBlocking {
+        val f = Fixture()
+        f.service.buildIndex(f.assistant, f.settings)
+        f.history.vectorDelayMillis = 10_000
+        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true, memoryRerankEnabled = true,
+            memoryRerankModelId = f.rerankModel.id)
+        val user = UIMessage.user("炸鸡")
+        val turn = f.service.prepare(assistant, f.settings, "timeout-chat", listOf(user))
+        f.service.apply(turn, listOf(user))
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryVectorState.TIMEOUT, trace.diagnostics.vector)
+        assertEquals("索引读取与来源校验", trace.diagnostics.vectorPhase)
+        assertEquals(MemoryRerankState.SUCCESS, trace.diagnostics.rerank)
+        assertEquals(MemoryRecallState.USED, trace.state)
+        assertEquals(1, f.calls) // Only the explicit indexing call; lookup timed out before query billing.
+        assertEquals(1, f.rerankCalls)
+        val timings = trace.diagnostics.timings
+        assertTrue(requireNotNull(timings.vectorMillis) in 3_500L..8_000L)
+        assertTrue(requireNotNull(timings.totalMillis) >= requireNotNull(timings.vectorMillis))
+        assertNull(timings.embeddingMillis)
+        assertNotNull(timings.rerankMillis)
+    }
+
+    @Test
+    fun `transport rerank timeout records timing and never injects unfiltered fallback`() = runBlocking {
+        val f = Fixture()
+        f.onRerank = { throw java.net.SocketTimeoutException("private provider detail") }
+        val assistant = f.assistant.copy(memoryRerankEnabled = true, memoryRerankModelId = f.rerankModel.id)
+        val user = UIMessage.user("炸鸡")
+        val turn = f.service.prepare(assistant, f.settings, "rerank-timeout", listOf(user))
+        assertEquals(listOf(user), f.service.apply(turn, listOf(user)))
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryRerankState.TIMEOUT, trace.diagnostics.rerank)
+        assertEquals(MemoryRecallState.FAILED, trace.state)
+        assertTrue(trace.excerpts.isEmpty())
+        assertEquals(1, f.rerankCalls)
+        assertNotNull(trace.diagnostics.timings.totalMillis)
+        assertNotNull(trace.diagnostics.timings.rerankMillis)
+        assertFalse(trace.toString().contains("private provider detail"))
     }
 
     @Test

@@ -91,6 +91,20 @@ class MemoryRecallTraceTest {
     }
 
     @Test
+    fun `timing diagnostics round trip while old replies retain unknown timing`() {
+        val diagnostics = MemoryRecallDiagnostics(MemoryVectorState.TIMEOUT,
+            timings = MemoryRecallTimings(totalMillis = 4_500, keywordsMillis = 10,
+                vectorMillis = 4_000, embeddingMillis = 3_900, rerankMillis = 400),
+            vectorPhase = "查询向量接口")
+        val reply = UIMessage.assistant("answer").attachMemoryRecallTrace(
+            encodeMemoryRecallTrace(MemoryRecallTrace(MemoryRecallState.NO_MATCH, diagnostics = diagnostics)))
+        assertEquals(diagnostics, requireNotNull(reply.memoryRecallTrace()).diagnostics)
+        val old = decodeMemoryRecallSnapshot("""{"excerpts":[],"diagnostics":{"vector":"SUCCESS"}}""")
+        assertEquals(MemoryRecallTimings(), old.diagnostics.timings)
+        assertNull(old.diagnostics.vectorPhase)
+    }
+
+    @Test
     fun `missing malformed oversized and inconsistent local records do not invent a recall result`() {
         val reply = UIMessage.assistant("old message")
         assertNull(reply.memoryRecallTrace())
