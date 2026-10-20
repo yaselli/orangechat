@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - build/stable-release
+      - test/memory-release-v164
   workflow_dispatch:
 
 permissions:
