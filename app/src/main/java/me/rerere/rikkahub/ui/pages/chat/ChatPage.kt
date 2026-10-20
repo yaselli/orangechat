@@ -323,6 +323,7 @@ private fun ChatPageContent(
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
 ) {
+    val reactions by vm.reactions.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val scrollCaptureInProgress = LocalScrollCaptureInProgress.current
@@ -511,6 +512,9 @@ private fun ChatPageContent(
                 ChatList(
                     innerPadding = innerPadding,
                     conversation = conversation,
+                    reactions = reactions,
+                    onReact = vm::toggleReaction,
+                    onAvatarInteraction = vm::interactWithAvatar,
                     state = chatListState,
                     loading = loadingJob != null && !blockedChatState.waiting,
                     processingStatus = if (blockedChatState.waiting) null else processingStatus,

@@ -15,6 +15,8 @@ import me.rerere.rikkahub.data.memory.MemoryVectorEntity
 import me.rerere.rikkahub.data.memory.MemoryRecallSnapshotEntity
 import me.rerere.rikkahub.data.memory.HistoryMemoryDAO
 import me.rerere.rikkahub.data.memory.HistoryMemoryVector
+import me.rerere.rikkahub.data.interaction.MessageReaction
+import me.rerere.rikkahub.data.interaction.MessageReactionDAO
 import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -73,8 +75,9 @@ import me.rerere.rikkahub.utils.JsonInstant
         WorkflowRunEntity::class,
         SshHostEntity::class,
         SecurityAuditEntity::class,
+        MessageReaction::class,
     ],
-    version = 37,
+    version = 38,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -104,6 +107,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun historyMemoryDao(): HistoryMemoryDAO
 
     abstract fun memoryIndexDao(): MemoryIndexDAO
+    abstract fun messageReactionDao(): MessageReactionDAO
 
     abstract fun conversationDao(): ConversationDAO
 

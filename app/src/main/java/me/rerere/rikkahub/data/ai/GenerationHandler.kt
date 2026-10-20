@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.data.ai
  
+import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import android.content.Context
 import android.util.Log
 import me.rerere.rikkahub.utils.JsonInstant
@@ -89,6 +90,7 @@ class GenerationHandler(
     private val aiLoggingManager: AILoggingManager,
     private val memoryBankService: MemoryBankService,
     private val memoryRecallService: MemoryRecallService,
+    private val chatInteractionRepository: ChatInteractionRepository,
 ) {
     fun generateText(
         settings: Settings,
@@ -203,6 +205,7 @@ class GenerationHandler(
                     contextCompaction = contextCompaction,
                     conversationSystemPrompt = conversationSystemPrompt,
                     workspaceCwd = workspaceCwd,
+                    conversationId = conversationId,
                 )
                 turnMessages = turnMessages.visualTransforms(
                     transformers = outputTransformers,
@@ -274,6 +277,7 @@ class GenerationHandler(
         contextCompaction: ContextCompaction? = null,
         conversationSystemPrompt: String? = null,
         workspaceCwd: String? = null,
+        conversationId: String? = null,
     ) {
         val collectProfile = settings.displaySetting.showTokenUsage
         val systemSizes = linkedMapOf<String, Long>()
@@ -373,7 +377,9 @@ class GenerationHandler(
             } else null,
         )
  
-        val internalMessages = memoryRecallService.apply(recallTurn, baseMessages)
+        val internalMessages = memoryRecallService.apply(recallTurn, chatInteractionRepository.decorate(
+            baseMessages, conversationId, assistant, sourceMessages = messages,
+        ))
 
         val params = buildGenerationRequestParameters(assistant, model, tools)
         // Sizes are local diagnostics, not billable token estimates. A diagnostics failure cannot stop chat.

@@ -521,7 +521,9 @@ internal fun AssistantBasicContent(
                 )
             }
         }
- 
+
+        ChatInteractionSettings(assistant, vm::updateChatInteraction)
+
         Card(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
@@ -576,4 +578,3 @@ internal fun AssistantBasicContent(
         }
     }
 }
- 

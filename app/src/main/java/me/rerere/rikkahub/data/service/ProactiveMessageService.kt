@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.data.service
 
+import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -313,6 +314,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val providerManager: ProviderManager by inject()
     private val json: Json by inject()
     private val chatService: ChatService by inject()
+    private val chatInteractionRepository: ChatInteractionRepository by inject()
     private val extraInfoCollector: me.rerere.rikkahub.data.ai.transformers.ExtraInfoInjectionCollector by inject()
     private val proactiveMessageService = ProactiveMessageService()
     private val serviceScope = CoroutineScope(
@@ -1374,7 +1376,13 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // the local streaming list: doing so can fold this run's assistant into the previous
                 // persisted assistant and transfer ownership back to the old message id.
                 val requestMessages = mergeAdjacentSameRoleMessages(
-                    memoryRecallService.apply(recallTurn, currentMessages)
+                    memoryRecallService.apply(recallTurn, chatInteractionRepository.decorate(
+                        currentMessages, conversationId.toString(), assistant,
+                        sourceMessages = chatService.getConversationFlow(conversationId).value.currentMessages.let { source ->
+                            val requested = currentMessages.mapTo(hashSetOf()) { it.id }
+                            source.take(source.indexOfLast { it.id in requested } + 1)
+                        },
+                    ))
                 )
                 // A proactive request may legitimately end with an existing ASSISTANT message. Seed a
                 // fresh assistant placeholder locally so handleMessageChunk cannot append the new

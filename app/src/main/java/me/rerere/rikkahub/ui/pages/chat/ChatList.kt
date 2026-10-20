@@ -95,6 +95,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.interaction.MessageReaction
+import me.rerere.rikkahub.data.interaction.avatarInteraction
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -152,6 +154,9 @@ fun ChatList(
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
     onSaveSummary: (suspend (ContextCompaction, String) -> Result<Unit>)? = null,
+    reactions: List<MessageReaction> = emptyList(),
+    onReact: ((UIMessage, String, String) -> Unit)? = null,
+    onAvatarInteraction: ((UIMessage) -> Unit)? = null,
 ) {
     AnimatedContent(
         targetState = previewMode,
@@ -193,6 +198,9 @@ fun ChatList(
                 onToggleFavorite = onToggleFavorite,
                 onConversationSystemPromptChange = onConversationSystemPromptChange,
                 onSaveSummary = onSaveSummary,
+                reactions = reactions,
+                onReact = onReact,
+                onAvatarInteraction = onAvatarInteraction,
             )
         }
     }
@@ -223,6 +231,9 @@ private fun ChatListNormal(
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
     onSaveSummary: (suspend (ContextCompaction, String) -> Result<Unit>)? = null,
+    reactions: List<MessageReaction> = emptyList(),
+    onReact: ((UIMessage, String, String) -> Unit)? = null,
+    onAvatarInteraction: ((UIMessage) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -338,6 +349,12 @@ private fun ChatListNormal(
                 onSave = { text -> requireNotNull(onSaveSummary).invoke(opened, text) },
             )
         }
+        val interaction = conversation.currentMessages.lastOrNull { it.avatarInteraction() != null }
+        val targetRole = if (interaction?.avatarInteraction()?.target == "user") MessageRole.USER else MessageRole.ASSISTANT
+        val targetAvatar = interaction?.avatarInteraction()?.targetMessageId ?: displayNodes.lastOrNull {
+            it.currentMessage.role == targetRole && it.currentMessage.avatarInteraction() == null
+        }?.currentMessage?.id?.toString()
+        val currentAssistant = settings.getAssistantById(conversation.assistantId)
 
         LazyColumn(
             state = state,
@@ -370,6 +387,16 @@ private fun ChatListNormal(
                     ) {
                         ChatMessage(
                             node = node,
+                            reactions = reactions.filter { it.messageId == node.currentMessage.id.toString() },
+                            onReact = if (currentAssistant?.enableMessageReactions == true &&
+                                !(loading && index == displayNodes.lastIndex)
+                            ) onReact?.let { callback ->
+                                { emoji, quote -> callback(node.currentMessage, emoji, quote) }
+                            } else null,
+                            onAvatarInteraction = if (!loading && currentAssistant?.enableAvatarInteractions == true) {
+                                onAvatarInteraction
+                            } else null,
+                            avatarPulse = if (node.currentMessage.id.toString() == targetAvatar) interaction?.id?.toString() else null,
                             model = node.currentMessage.modelId?.let { settings.findModelById(it) },
                             assistant = settings.getAssistantById(conversation.assistantId),
                             loading = loading && index == displayNodes.lastIndex,

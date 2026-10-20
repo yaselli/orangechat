@@ -6,6 +6,10 @@
 
 package me.rerere.rikkahub.service
 
+import me.rerere.ai.ui.UIMessageAnnotation
+import me.rerere.rikkahub.data.interaction.interactionText
+import me.rerere.rikkahub.data.interaction.buildChatInteractionTools
+import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
@@ -172,6 +176,7 @@ class ChatService(
     private val memoryRepository: MemoryRepository,
     private val memoryOrganization: MemoryOrganizationService,
     private val memoryAutoIndex: MemoryAutoIndexService,
+    private val chatInteractionRepository: ChatInteractionRepository,
     private val generationHandler: GenerationHandler,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
@@ -537,7 +542,10 @@ class ChatService(
 
     // ---- 发送消息 ----
 
-    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
+    fun sendMessage(
+        conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true,
+        interaction: UIMessageAnnotation.AvatarInteraction? = null,
+    ) {
         if (isChatBlocked(conversationId) || content.isEmptyInputMessage()) return
 
         val session = getOrCreateSession(conversationId)
@@ -560,12 +568,13 @@ class ChatService(
                     val latestConversation = session.state.value
                     val assistant = settings.getAssistantById(latestConversation.assistantId)
                         ?: settings.getCurrentAssistant()
-                    val processedContent = preprocessUserInputParts(content, assistant)
+                    val processedContent = if (interaction == null) preprocessUserInputParts(content, assistant) else content
 
                     val newConversation = latestConversation.copy(
                         messageNodes = latestConversation.messageNodes + UIMessage(
                             role = MessageRole.USER,
                             parts = processedContent,
+                            annotations = listOfNotNull(interaction),
                         ).toMessageNode(),
                     )
                     saveConversation(conversationId, newConversation)
@@ -616,6 +625,54 @@ class ChatService(
             }
         }
         session.setJob(job)
+    }
+
+    /** Avatar actions are genuine user events, sent through the existing generation lifecycle. */
+    fun sendAvatarInteraction(conversationId: Uuid, targetMessage: UIMessage) {
+        val session = getOrCreateSession(conversationId)
+        if (session.isGenerating || isChatBlocked(conversationId)) return
+        val settings = settingsStore.settingsFlow.value
+        val assistant = settings.getAssistantById(session.state.value.assistantId) ?: return
+        if (!assistant.enableAvatarInteractions) return
+        if (session.state.value.currentMessages.none { it.id == targetMessage.id }) return
+        val target = targetMessage.role
+        if (target != MessageRole.USER && target != MessageRole.ASSISTANT) return
+        val targetName = if (target == MessageRole.USER) "自己" else assistant.name.ifBlank { "AI" }
+        val text = runCatching {
+            interactionText("你", targetName, assistant.userInteractionAction.ifBlank { "拍了拍" },
+                assistant.userInteractionSuffix)
+        }.getOrElse {
+            addError(it, conversationId, title = "头像互动")
+            return
+        }
+        sendMessage(conversationId, listOf(UIMessagePart.Text(text)), interaction =
+            UIMessageAnnotation.AvatarInteraction(
+                "user", if (target == MessageRole.USER) "user" else "assistant", targetMessage.id.toString(),
+            ))
+    }
+
+    private suspend fun appendAssistantAvatarInteraction(conversationId: Uuid, assistant: Assistant): String {
+        val session = getOrCreateSession(conversationId)
+        return session.saveMutex.withLock {
+            check(!isChatBlocked(conversationId)) { "聊天已被拉黑" }
+            check(conversationRepo.existsConversationById(conversationId)) { "聊天已删除" }
+            val current = session.state.value
+            check(current.assistantId == assistant.id) { "助手已改变" }
+            check(settingsStore.settingsFlow.value.getAssistantById(assistant.id)?.enableAvatarInteractions == true) {
+                "头像互动已关闭"
+            }
+            val text = interactionText(assistant.name.ifBlank { "AI" }, "你",
+                assistant.assistantInteractionAction.ifBlank { "拍了拍" }, assistant.assistantInteractionSuffix)
+            val notice = UIMessage(
+                role = MessageRole.SYSTEM, parts = listOf(UIMessagePart.Text(text)),
+                annotations = listOf(UIMessageAnnotation.AvatarInteraction("assistant", "user",
+                    current.currentMessages.lastOrNull { it.role == MessageRole.USER &&
+                        it.annotations.none { annotation -> annotation is UIMessageAnnotation.AvatarInteraction }
+                    }?.id?.toString())),
+            )
+            saveConversation(conversationId, current.copy(messageNodes = current.messageNodes + notice.toMessageNode()))
+            text
+        }
     }
 
     // ---- 添加主动消息 ----
@@ -1389,6 +1446,13 @@ class ChatService(
             allowAppUsage = allowAppUsage,
             chatBlocked = isChatBlocked(conversationId),
         ),
+    ) + if (isChatBlocked(conversationId)) emptyList() else buildChatInteractionTools(
+        assistant = assistant,
+        onAvatar = { appendAssistantAvatarInteraction(conversationId, assistant) },
+        onReaction = { target, emoji, add, quote ->
+            check(!isChatBlocked(conversationId)) { "聊天已被拉黑" }
+            chatInteractionRepository.react(conversationId, assistant, target, "assistant", emoji, add, quote)
+        },
     )
 
     // ---- 检查无效消息 ----
@@ -1991,6 +2055,8 @@ class ChatService(
         )
 
         saveConversation(forkConversation.id, forkConversation)
+        chatInteractionRepository.copyForFork(conversationId, forkConversation.id,
+            copiedNodes.flatMap { it.messages }.mapTo(hashSetOf()) { it.id.toString() })
         return forkConversation
     }
 
@@ -2040,6 +2106,7 @@ class ChatService(
         }
 
         saveConversation(conversationId, updatedConversation)
+        chatInteractionRepository.deleteForMessage(conversationId, messageId)
     }
 
     private fun rejectBlockedHistoryChange(conversationId: Uuid): Boolean {

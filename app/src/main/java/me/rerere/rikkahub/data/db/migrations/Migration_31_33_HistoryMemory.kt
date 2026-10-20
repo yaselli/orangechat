@@ -3,7 +3,7 @@ package me.rerere.rikkahub.data.db.migrations
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-/** v32 belongs to stable chat interactions. This debug path never introduces that feature. */
+/** Memory v31 entry point; stable v32 joins through Migration_32_33_StableMemory. */
 object Migration_31_33_HistoryMemory : Migration(31, 33) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("""CREATE TABLE IF NOT EXISTS history_memory_vector (

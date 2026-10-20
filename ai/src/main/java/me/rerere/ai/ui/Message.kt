@@ -792,6 +792,15 @@ fun <T> List<T>.migrateToolNodes(
 
 @Serializable
 sealed class UIMessageAnnotation {
+    /** A real avatar interaction, displayed as a centered notice instead of a text bubble. */
+    @Serializable
+    @SerialName("avatar_interaction")
+    data class AvatarInteraction(
+        val actor: String,
+        val target: String,
+        val targetMessageId: String? = null,
+    ) : UIMessageAnnotation()
+
     @Serializable
     @SerialName("url_citation")
     data class UrlCitation(

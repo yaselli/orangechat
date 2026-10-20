@@ -141,6 +141,7 @@ val appModule = module {
             memoryRepository = get(),
             memoryOrganization = get(),
             memoryAutoIndex = get(),
+            chatInteractionRepository = get(),
             generationHandler = get(),
             templateTransformer = get(),
             providerManager = get(),
