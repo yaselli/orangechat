@@ -1,66 +1,74 @@
-name: Release Build
+name: Prepare Update Release
 
 on:
   workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Build Stable Release APK or Build Personal APK run ID
+        required: true
+        type: string
+      channel:
+        description: Update channel
+        required: true
+        type: choice
+        options: [release, debug]
+      notes:
+        description: User-facing update notes (Markdown)
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
 
 jobs:
-  build:
+  draft:
     runs-on: ubuntu-latest
-    
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id }}
+      CHANNEL: ${{ inputs.channel }}
+      RELEASE_NOTES: ${{ inputs.notes }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Gradle cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-
-      - name: Prepare build files
+      - name: Verify successful source build
         run: |
-          # 解码base64编码的keystore文件
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
-          
-          # 写入签名配置到local.properties
-          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
-          
-          # 写入Google Services配置
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
-
-      - name: Gradle Build
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > "$RUNNER_TEMP/source-run.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          run = json.loads((Path(os.environ['RUNNER_TEMP']) / 'source-run.json').read_text())
+          channel = os.environ['CHANNEL']
+          expected = {'release': '.github/workflows/build-isolated-apk.yml', 'debug': '.github/workflows/build-apk.yml'}
+          assert run['status'] == 'completed' and run['conclusion'] == 'success', 'Build must pass first'
+          assert run['path'] == expected[channel], 'Wrong build workflow for this channel'
+          assert run['head_repository']['full_name'] == os.environ['GITHUB_REPOSITORY'], 'Wrong repository'
+          assert re.fullmatch('[0-9a-f]{40}', run['head_sha']), 'Invalid source commit'
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('SOURCE_COMMIT=' + run['head_sha'] + '\n')
+          PY
+      - name: Download the verified APK artifact
         run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease
-
-      - name: Extract version
-        id: version
+          if [ "$CHANNEL" = release ]; then ARTIFACT=Xiguaban-release; else ARTIFACT=OrangeChat-personal-debug; fi
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT" --dir update-artifact
+      - name: Verify update metadata and checksums
         run: |
-          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: artifacts
-          path: app/build/outputs/apk/release/*.apk
-
-      - name: Create GitHub Release
-        if: success()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          python3 - <<'PY'
+          import os, runpy
+          from pathlib import Path
+          verify = runpy.run_path('scripts/prepare-update-assets.py')['verify_artifact']
+          metadata = verify('update-artifact', os.environ['CHANNEL'], os.environ['SOURCE_COMMIT'])
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('UPDATE_TAG=' + metadata['tag'] + '\n')
+              output.write('UPDATE_VERSION=' + metadata['version'] + '\n')
+          (Path(os.environ['RUNNER_TEMP']) / 'update-notes.md').write_text(os.environ['RELEASE_NOTES'])
+          PY
+      - name: Create a reviewable release draft
         run: |
-          gh release create "${{ steps.version.outputs.version }}" \
-            --title "Release ${{ steps.version.outputs.version }}" \
-            --generate-notes \
-            app/build/outputs/apk/release/*.apk
+          FLAGS=()
+          if [ "$CHANNEL" = debug ]; then FLAGS+=(--prerelease); fi
+          gh release create "$UPDATE_TAG" update-artifact/*.apk \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_COMMIT" --draft "${FLAGS[@]}" \
+            --title "西瓜瓣 $UPDATE_VERSION" --notes-file "$RUNNER_TEMP/update-notes.md"
+          echo 'Release draft prepared. Review and publish it from GitHub Releases to enable in-app notices.' >> "$GITHUB_STEP_SUMMARY"
