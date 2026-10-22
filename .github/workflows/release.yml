@@ -23,6 +23,7 @@ permissions:
 
 jobs:
   draft:
+    if: github.ref == 'refs/heads/build/stable-release'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
