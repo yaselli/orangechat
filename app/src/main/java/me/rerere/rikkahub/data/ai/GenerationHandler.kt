@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.data.ai
  
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import android.content.Context
 import android.util.Log
@@ -279,7 +280,7 @@ class GenerationHandler(
         workspaceCwd: String? = null,
         conversationId: String? = null,
     ) {
-        val collectProfile = settings.displaySetting.showTokenUsage
+        val collectProfile = BuildConfig.DEBUG && settings.displaySetting.showTokenUsage
         val systemSizes = linkedMapOf<String, Long>()
         val transformationSizes = mutableListOf<InputSizeEntry>()
         fun measured(label: String, text: String): String {

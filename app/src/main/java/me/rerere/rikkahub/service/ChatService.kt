@@ -6,18 +6,17 @@
 
 package me.rerere.rikkahub.service
 
+import me.rerere.rikkahub.data.ai.mcp.getAvailableMcpTools
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.rikkahub.data.interaction.interactionText
 import me.rerere.rikkahub.data.interaction.buildChatInteractionTools
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import android.app.Application
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -67,8 +66,6 @@ import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
-import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
-import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
@@ -77,7 +74,6 @@ import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.ToolSurfaceBuilder
 import me.rerere.rikkahub.data.ai.tools.ToolSurfacePolicy
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
-import me.rerere.rikkahub.data.ai.tools.ToolNaming
 import me.rerere.rikkahub.plugin.loader.PluginLoader
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
@@ -124,8 +120,6 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
-import me.rerere.rikkahub.utils.sendNotification
-import me.rerere.rikkahub.utils.cancelNotification
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -191,6 +185,7 @@ class ChatService(
     private val okHttpClient: OkHttpClient,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
+    private val notifications = ChatNotifications(context)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
     private val extraInfoInjectionCollector = ExtraInfoInjectionCollector(
         context = context,
@@ -842,7 +837,9 @@ class ChatService(
                     } else {
                         model.displayName
                     }
-                    sendGenerationDoneNotification(conversationId, senderName)
+                    notifications.sendGenerationDoneNotification(
+                        conversationId, senderName, getConversationFlow(conversationId).value.currentMessages.lastOrNull(),
+                    )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "notifyVoiceCallDeclined failed, conversationId=$conversationId: ${e.javaClass.simpleName}")
@@ -1102,7 +1099,7 @@ class ChatService(
 
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
-                if (settings.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
+                if (settings.enableWebSearch || settings.getAvailableMcpTools(assistant).isNotEmpty()) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),
                         conversationId,
@@ -1211,7 +1208,7 @@ class ChatService(
                 conversationId = conversationId.toString(),
             ).onCompletion {
                 // 取消 Live Update 通知
-                cancelLiveUpdateNotification(conversationId)
+                notifications.cancelLiveUpdateNotification(conversationId)
 
                 // 可能被取消了，或者意外结束，兜底更新
                 val updatedConversation = getConversationFlow(conversationId).value.copy(
@@ -1229,7 +1226,9 @@ class ChatService(
                 if (notifyCompletion && !isForeground.value &&
                     settings.displaySetting.enableNotificationOnMessageGeneration
                 ) {
-                    sendGenerationDoneNotification(conversationId, senderName)
+                    notifications.sendGenerationDoneNotification(
+                        conversationId, senderName, getConversationFlow(conversationId).value.currentMessages.lastOrNull(),
+                    )
                 }
             }.collect { chunk ->
                 when (chunk) {
@@ -1267,7 +1266,7 @@ class ChatService(
                             settings.displaySetting.enableNotificationOnMessageGeneration &&
                             settings.displaySetting.enableLiveUpdateNotification
                         ) {
-                            sendLiveUpdateNotification(
+                            notifications.sendLiveUpdateNotification(
                                 conversationId, chunk.messages.filterNot { it.id == applicationReceipt?.id }, senderName
                             )
                         }
@@ -1276,7 +1275,7 @@ class ChatService(
             }
         }.onFailure {
             // 取消 Live Update 通知
-            cancelLiveUpdateNotification(conversationId)
+            notifications.cancelLiveUpdateNotification(conversationId)
 
             it.printStackTrace()
             addError(it, conversationId, title = context.getString(R.string.error_title_generation))
@@ -1721,118 +1720,6 @@ class ChatService(
         throw cancelled
     } catch (failure: Exception) {
         Result.failure(failure)
-    }
-
-    // ---- 通知 ----
-
-    private fun sendGenerationDoneNotification(conversationId: Uuid, senderName: String) {
-        // 先取消 Live Update 通知
-        cancelLiveUpdateNotification(conversationId)
-
-        val conversation = getConversationFlow(conversationId).value
-        context.sendNotification(
-            channelId = CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID,
-            notificationId = 1
-        ) {
-            title = senderName
-            content = conversation.currentMessages.lastOrNull()?.toText()?.take(50)?.trim() ?: ""
-            autoCancel = true
-            useDefaults = true
-            category = NotificationCompat.CATEGORY_MESSAGE
-            contentIntent = getPendingIntent(context, conversationId)
-        }
-    }
-
-    private fun getLiveUpdateNotificationId(conversationId: Uuid): Int {
-        return conversationId.hashCode() + 10000
-    }
-
-    private fun sendLiveUpdateNotification(
-        conversationId: Uuid,
-        messages: List<UIMessage>,
-        senderName: String
-    ) {
-        val lastMessage = messages.lastOrNull() ?: return
-        val parts = lastMessage.parts
-
-        // 确定当前状态
-        val (chipText, statusText, contentText) = determineNotificationContent(parts)
-
-        context.sendNotification(
-            channelId = CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
-            notificationId = getLiveUpdateNotificationId(conversationId)
-        ) {
-            title = senderName
-            content = contentText
-            subText = statusText
-            ongoing = true
-            onlyAlertOnce = true
-            category = NotificationCompat.CATEGORY_PROGRESS
-            useBigTextStyle = true
-            contentIntent = getPendingIntent(context, conversationId)
-            requestPromotedOngoing = true
-            shortCriticalText = chipText
-        }
-    }
-
-    private fun determineNotificationContent(parts: List<UIMessagePart>): Triple<String, String, String> {
-        // 检查最近的 part 来确定状态
-        val lastReasoning = parts.filterIsInstance<UIMessagePart.Reasoning>().lastOrNull()
-        val lastTool = parts.filterIsInstance<UIMessagePart.Tool>().lastOrNull()
-        val lastText = parts.filterIsInstance<UIMessagePart.Text>().lastOrNull()
-
-        return when {
-            // 正在执行工具
-            lastTool != null && !lastTool.isExecuted -> {
-                val toolName = ToolNaming.toDisplayName(lastTool.toolName)
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_tool),
-                    context.getString(R.string.notification_live_update_tool, toolName),
-                    lastTool.input.take(100)
-                )
-            }
-            // 正在思考（Reasoning 未结束）
-            lastReasoning != null && lastReasoning.finishedAt == null -> {
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_thinking),
-                    context.getString(R.string.notification_live_update_thinking),
-                    lastReasoning.reasoning.takeLast(200)
-                )
-            }
-            // 正在写回复
-            lastText != null -> {
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_writing),
-                    context.getString(R.string.notification_live_update_writing),
-                    lastText.text.takeLast(200)
-                )
-            }
-            // 默认状态
-            else -> {
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_writing),
-                    context.getString(R.string.notification_live_update_title),
-                    ""
-                )
-            }
-        }
-    }
-
-    private fun cancelLiveUpdateNotification(conversationId: Uuid) {
-        context.cancelNotification(getLiveUpdateNotificationId(conversationId))
-    }
-
-    private fun getPendingIntent(context: Context, conversationId: Uuid): PendingIntent {
-        val intent = Intent(context, RouteActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("conversationId", conversationId.toString())
-        }
-        return PendingIntent.getActivity(
-            context,
-            conversationId.hashCode(),
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
     }
 
     // ---- 对话状态更新 ----

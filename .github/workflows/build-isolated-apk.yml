@@ -6,6 +6,7 @@ on:
       - build/stable-release
       - test/memory-release-v164
       - feature/chat-interactions
+      - fix/workflow-mcp-release-diagnostics
   workflow_dispatch:
 
 permissions:
@@ -29,6 +30,9 @@ jobs:
       - name: Install web dependencies
         working-directory: web-ui
         run: pnpm install --frozen-lockfile
+      - name: Verify announcement authorization
+        working-directory: functions
+        run: npm test
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
