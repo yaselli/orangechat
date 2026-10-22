@@ -53,7 +53,6 @@ import me.rerere.rikkahub.data.ai.mcp.transport.StreamableHttpClientTransport
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.saveUploadFromBytes
 import me.rerere.rikkahub.utils.JsonInstant
@@ -147,20 +146,6 @@ class McpManager(
 
     fun getClient(config: McpServerConfig): Client? {
         return clients[config.id]?.second
-    }
-
-    fun getAllAvailableTools(): List<Pair<Uuid, McpTool>> {
-        val settings = settingsStore.settingsFlow.value
-        val assistant = settings.getCurrentAssistant()
-        return settings.mcpServers
-            .filter {
-                it.commonOptions.enable && it.id in assistant.mcpServers
-            }
-            .flatMap { server ->
-                server.commonOptions.tools
-                    .filter { tool -> tool.enable }
-                    .map { tool -> server.id to tool }
-            }
     }
 
     suspend fun callTool(serverId: Uuid, toolName: String, args: JsonObject): List<UIMessagePart> {

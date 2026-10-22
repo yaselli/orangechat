@@ -14,6 +14,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessage
 import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.rikkahub.data.ai.mcp.getAvailableMcpTools
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
@@ -89,7 +90,7 @@ class ToolSurfaceBuilder(
         if (assistant.enabledSkills.isNotEmpty()) {
             addAll(createSkillTools(assistant.enabledSkills, skillManager.listSkills(), skillManager))
         }
-        mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
+        settings.getAvailableMcpTools(assistant).forEach { (serverId, tool) ->
             add(
                 Tool(
                     name = ToolNaming.buildMcpToolName(serverId, tool.name),

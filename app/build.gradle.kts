@@ -25,8 +25,8 @@ android {
         applicationId = "me.rerere.orangechat"
         minSdk = 26
         targetSdk = 37
-        versionCode = 161
-        versionName = "2.2.3"
+        versionCode = 165
+        versionName = "2.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -107,10 +107,11 @@ android {
         }
         debug {
             applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug.1"
             // 统一使用项目内置共享 debug keystore；若配置了 release keystore 则改用 release 签名，
             // 保证不同机器签名一致，避免覆盖安装失败（Failure [-99]）。
             signingConfig = signingConfigs.getByName(if (hasReleaseSigning) "release" else "debug")
-            buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
+            buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}-debug.1\"")
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
             buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
             buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")

@@ -20,6 +20,9 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -230,8 +233,12 @@ class ChatVM(
     }
 
     // Update checker
-    val updateState =
-        updateChecker.checkUpdate().stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
+    val updateState = settings.map { !it.init && it.displaySetting.showUpdates }
+        .distinctUntilChanged()
+        .flatMapLatest { enabled ->
+            if (enabled) updateChecker.checkUpdate() else flowOf(UiState.Idle)
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Idle)
 
     /**
      * 处理消息发送

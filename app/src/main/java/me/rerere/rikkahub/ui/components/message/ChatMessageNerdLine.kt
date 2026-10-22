@@ -29,6 +29,7 @@ import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Download04
 import me.rerere.hugeicons.stroke.Upload02
 import me.rerere.hugeicons.stroke.Zap
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.rikkahub.utils.toFixed
@@ -122,10 +123,10 @@ fun ChatMessageNerdLine(
                         )
                     }
                 }
-                if (settings.showMemoryRecallReferences) {
+                if (BuildConfig.DEBUG && settings.showMemoryRecallReferences) {
                     MemoryRecallReferenceButton(message)
                 }
-                if (settings.showTokenUsage) {
+                if (BuildConfig.DEBUG && settings.showTokenUsage) {
                     RequestInputProfileButton(message)
                 }
             }

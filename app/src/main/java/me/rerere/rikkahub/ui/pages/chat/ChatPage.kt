@@ -84,6 +84,7 @@ import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.BlockedChatState
 import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ai.ChatInput
+import me.rerere.rikkahub.ui.components.ui.AppUpdatePrompt
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
@@ -109,6 +110,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
     val scope = rememberCoroutineScope()
 
     val setting by vm.settings.collectAsStateWithLifecycle()
+    AppUpdatePrompt(vm)
     val conversation by vm.conversation.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()

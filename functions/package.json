@@ -2,6 +2,7 @@
   "name": "orangechat-functions",
   "description": "橘瓣 OrangeChat 公告推送 Cloud Functions",
   "scripts": {
+    "test": "node --test test/*.test.js",
     "deploy": "firebase deploy --only functions"
   },
   "engines": {

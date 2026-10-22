@@ -42,8 +42,7 @@ val appModule = module {
         AppEventBus()
     }
 
-    // Workflows: AgentRun ledger (no-op stub), repository, engine, trigger registry.
-    single { me.rerere.rikkahub.data.agentrun.AgentRunRepository() }
+    // Workflows: repository, engine, trigger registry.
     single {
         me.rerere.rikkahub.data.repository.SshHostRepository(
             get<me.rerere.rikkahub.data.db.AppDatabase>().sshHostDao()
