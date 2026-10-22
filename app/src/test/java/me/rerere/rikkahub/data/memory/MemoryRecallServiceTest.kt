@@ -40,6 +40,9 @@ class MemoryRecallServiceTest {
         override suspend fun removeOtherModels(scope: String, namespace: String) {
             vectors.removeAll { it.scope == scope && it.namespace != namespace }
         }
+        override suspend fun removeUnusedModels(scope: String, namespaces: List<String>) {
+            vectors.removeAll { it.scope == scope && it.namespace !in namespaces }
+        }
         override suspend fun removeStaleVectors(scope: String) = Unit
         override suspend fun removeStaleSource(memoryId: Int, revision: Long, sourceHash: String) {
             vectors.removeAll { it.memoryId == memoryId && (it.revision != revision || it.sourceHash != sourceHash) }
@@ -85,6 +88,12 @@ class MemoryRecallServiceTest {
             } }
         }
         override suspend fun refreshKeywords(scope: String) = rows.count { it.scope == scope }
+        override suspend fun pruneInvalid(scope: String): Boolean {
+            stored.removeAll { record -> record.scope == scope && rows.none {
+                it.scope == scope && it.reference.key == "${record.conversationId}/${record.nodeId}/${record.messageId}" && it.hash == record.sourceHash
+            } }
+            return true
+        }
     }
 
     private class Fixture {
@@ -145,7 +154,18 @@ class MemoryRecallServiceTest {
                 .body((if (httpStatus == 200) body else """{"error":{"message":"rate limited"}}""")
                     .toResponseBody("application/json".toMediaType())).build()
         }.build()
-        val service = MemoryRecallService(dao, store, client, history = history)
+        val evidenceRows = mutableListOf<MemoryEvidence>()
+        var evidenceQueries = 0
+        val evidenceDAO = Proxy.newProxyInstance(MemoryOrganizationDAO::class.java.classLoader,
+            arrayOf(MemoryOrganizationDAO::class.java)) { _, method, args ->
+            check(method.name == "evidenceForRecall")
+            evidenceQueries++
+            @Suppress("UNCHECKED_CAST") val ids = args!![0] as List<Int>
+            evidenceRows.filter { it.memoryId in ids && rows.any { memory ->
+                memory.id == it.memoryId && memory.assistantId == args[1] && memory.sourceKind == "automatic" && memory.revision == 1L
+            } }
+        } as MemoryOrganizationDAO
+        val service = MemoryRecallService(dao, store, client, history = history, evidenceDAO = evidenceDAO)
     }
 
     @Test
@@ -183,7 +203,7 @@ class MemoryRecallServiceTest {
     @Test
     fun `rollback reads packed and JSON indexes for both roles beyond the removed four second cutoff`() = runBlocking {
         val f = Fixture()
-        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true, memoryRerankEnabled = true,
+        val assistant = f.assistant.copy(memoryIndependentHistoryRecallEnabled = true, memoryRerankEnabled = true,
             memoryRerankModelId = f.rerankModel.id)
         for ((n, role) in listOf("user", "assistant").withIndex()) {
             f.history.rows += HistoryMemorySource("past", "node-$n", "message-$n", assistant.id.toString(),
@@ -324,7 +344,7 @@ class MemoryRecallServiceTest {
     @Test
     fun `history keyword fallback costs nothing and uses the current assistant even with global memories`() = runBlocking {
         val f = Fixture()
-        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true, useGlobalMemory = true)
+        val assistant = f.assistant.copy(memoryIndependentHistoryRecallEnabled = true, useGlobalMemory = true)
         val source = HistoryMemorySource("past", "node", "message", assistant.id.toString(), "user",
             "2020-01-01T00:00", "只喝燕麦牛奶", 0)
         f.history.rows += source
@@ -344,7 +364,7 @@ class MemoryRecallServiceTest {
     @Test
     fun `memory and history vectors share one paid query and revalidate sources on tool steps`() = runBlocking {
         val f = Fixture()
-        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true)
+        val assistant = f.assistant.copy(memoryIndependentHistoryRecallEnabled = true)
         f.history.rows += HistoryMemorySource("past", "node", "message", assistant.id.toString(), "user",
             "2020-01-01T00:00", "炸鸡一定要脆脆的", 0)
         assertEquals(MemoryRecallService.IndexPlan(2, 1), f.service.indexPlan(assistant, f.settings))
@@ -365,7 +385,7 @@ class MemoryRecallServiceTest {
     @Test
     fun `late embedding response cannot recreate a removed history source`() = runBlocking {
         val f = Fixture()
-        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true)
+        val assistant = f.assistant.copy(memoryIndependentHistoryRecallEnabled = true)
         f.history.rows += HistoryMemorySource("past", "node", "message", assistant.id.toString(), "user",
             "2020-01-01T00:00", "燕麦牛奶", 0)
         f.duringEmbedding = { f.history.rows.clear() }
@@ -377,13 +397,13 @@ class MemoryRecallServiceTest {
     @Test
     fun `turn snapshots invalidate on history toggle without reusing another assistants history`() = runBlocking {
         val f = Fixture()
-        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true)
+        val assistant = f.assistant.copy(memoryIndependentHistoryRecallEnabled = true)
         f.history.rows += HistoryMemorySource("past", "node", "message", assistant.id.toString(), "assistant",
             "2020-01-01T00:00", "燕麦牛奶", 0)
         val user = UIMessage.user("燕麦牛奶")
         val turn = f.service.prepare(assistant, f.settings, "chat", listOf(user))
         assertEquals(2, f.service.apply(turn, listOf(user)).single().parts.size)
-        val disabled = f.service.prepare(assistant.copy(memoryHistoryRecallEnabled = false), f.settings, "chat", listOf(user))
+        val disabled = f.service.prepare(assistant.copy(memoryIndependentHistoryRecallEnabled = false), f.settings, "chat", listOf(user))
         assertEquals(user, f.service.apply(disabled, listOf(user)).single())
         val other = f.service.prepare(assistant.copy(id = kotlin.uuid.Uuid.random()), f.settings, "chat", listOf(user))
         assertEquals(user, f.service.apply(other, listOf(user)).single())
@@ -391,7 +411,7 @@ class MemoryRecallServiceTest {
     }
 
     private fun rerankAssistant(f: Fixture) = f.assistant.copy(memoryRerankEnabled = true,
-        memoryRerankModelId = f.rerankModel.id, memoryHistoryRecallEnabled = true)
+        memoryRerankModelId = f.rerankModel.id, memoryIndependentHistoryRecallEnabled = true)
 
     @Test
     fun `two independent routes send both roles through one rerank and reuse the paid snapshot`() = runBlocking {
@@ -455,18 +475,113 @@ class MemoryRecallServiceTest {
     }
 
     @Test
-    fun `forgetting excludes old keywords and vectors while long term memory remains available`() = runBlocking {
+    fun `retired forgetting settings cannot expire independent history after explicit new opt in`() = runBlocking {
         val f = Fixture()
-        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true, memoryRetentionEnabled = true)
+        val assistant = f.assistant.copy(memoryIndependentHistoryRecallEnabled = true, memoryRetentionEnabled = true,
+            memoryRetentionDays = 7, memoryDecayHalfLifeDays = 1)
         f.history.rows += HistoryMemorySource("old", "n1", "m1", assistant.id.toString(), "user", "2020-01-01T00:00", "炸鸡", 0)
-        assertEquals(1, f.service.buildIndex(assistant, f.settings)) // The expired history is not embedded.
+        assertEquals(2, f.service.buildIndex(assistant, f.settings))
         val messages = listOf(UIMessage.user("炸鸡"))
         val turn = f.service.prepare(assistant, f.settings, "chat", messages)
         f.service.apply(turn, messages)
         val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
-        assertTrue(trace.excerpts.isNotEmpty())
-        assertTrue(trace.excerpts.all { it.history == null })
+        assertTrue(trace.excerpts.any { it.history != null })
+        assertNull(trace.diagnostics.retention)
+    }
+
+    @Test
+    fun `old history enabled setting cannot silently restore independent injection on upgrade`() = runBlocking {
+        val f = Fixture()
+        val assistant = f.assistant.copy(memoryHistoryRecallEnabled = true)
+        f.history.rows += HistoryMemorySource("old", "n1", "m1", assistant.id.toString(), "user", "2020-01-01T00:00", "燕麦牛奶", 0)
+        val messages = listOf(UIMessage.user("燕麦牛奶"))
+        val turn = f.service.prepare(assistant, f.settings, "chat", messages)
+        assertEquals(messages, f.service.apply(turn, messages))
+        assertEquals(0, turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace()?.diagnostics?.historyCandidates)
+    }
+
+    @Test
+    fun `vector only neighbours cannot force injection without a relevance model`() = runBlocking {
+        val f = Fixture()
+        f.service.buildIndex(f.assistant, f.settings)
+        val messages = listOf(UIMessage.user("电脑为什么打不开"))
+        val turn = f.service.prepare(f.assistant, f.settings, "chat", messages)
+        assertEquals(messages, f.service.apply(turn, messages))
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryRecallState.NO_MATCH, trace.state)
+        assertTrue(trace.diagnostics.candidates.isNotEmpty())
+        assertTrue(trace.diagnostics.candidates.none { it.kept })
+    }
+
+    @Test
+    fun `automatic fact loads its own quotation in batches and rejects edited or foreign evidence`() = runBlocking {
+        val f = Fixture()
+        val owner = f.assistant.id.toString()
+        val original = HistoryMemorySource("past", "n1", "m1", owner, "user", "2020-01-01T00:00", "我喜欢吃炸鸡，因为脆脆的", 0)
+        f.history.rows += original
+        f.history.rows += original.copy(nodeId = "unrelated", messageId = "wrong", text = "炸鸡与这条记忆没有来源关系")
+        f.rows[0] = f.source.copy(sourceKind = "automatic", sourceConversationId = "past", sourceMessageId = "m1")
+        f.evidenceRows += MemoryEvidence(7, owner, "past", "n1", "m1", original.hash, "user", original.createdAt, "我喜欢吃炸鸡，因为脆脆的")
+        val messages = listOf(UIMessage.user("炸鸡"))
+        val turn = f.service.prepare(f.assistant, f.settings, "chat", messages)
+        val request = f.service.apply(turn, messages)
+        val block = (request.single().parts.last() as me.rerere.ai.ui.UIMessagePart.Text).text
+        assertTrue(block.contains("message=m1"))
+        assertFalse(block.contains("wrong"))
+        assertEquals(2, f.evidenceQueries) // One batched query when preparing, one when applying.
+        val trace = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertEquals(MemoryEvidenceState.VERIFIED, trace.excerpts.single().evidenceState)
         assertEquals(0, trace.diagnostics.historyCandidates)
+        f.history.rows[0] = original.copy(text = "我不喜欢炸鸡了")
+        f.service.apply(turn, messages)
+        val edited = requireNotNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace())
+        assertNull(edited.excerpts.single().evidence)
+        assertEquals(MemoryEvidenceState.STALE, edited.excerpts.single().evidenceState)
+        f.history.rows[0] = original.copy(scope = "another-assistant")
+        f.service.apply(turn, messages)
+        assertNull(turn.annotate(UIMessage.assistant("answer")).memoryRecallTrace()?.excerpts?.single()?.evidence)
+    }
+
+    @Test
+    fun `background maintenance removes obsolete vectors without paid calls or deleting original data`() = runBlocking {
+        val f = Fixture()
+        f.service.buildIndex(f.assistant, f.settings)
+        val valid = f.store.vectors.single()
+        f.store.vectors += valid.copy(namespace = "old-model")
+        f.store.vectors += valid.copy(sliceId = "old-revision", revision = 0)
+        f.history.stored += HistoryMemoryVector(valid.namespace, "stale-history", f.assistant.id.toString(),
+            "past", "missing", "gone", "invalid", 0, 1, valid.vector)
+        val before = f.calls
+        val journal = Journal()
+        val settings = f.settings.copy(assistants = listOf(f.assistant))
+        val auto = MemoryAutoIndexService(journal, { settings }, f.service)
+        auto.afterReply(f.assistant.id, emptyList()) // Cleanup runs even when paid automatic indexing is off.
+        assertEquals(listOf(valid), f.store.vectors)
+        assertTrue(f.history.stored.isEmpty())
+        assertEquals(before, f.calls)
+        assertEquals(listOf(f.source), f.rows)
+        assertTrue(journal.rows.isEmpty())
+    }
+
+    @Test
+    fun `global memory maintenance preserves models still used by another assistant`() = runBlocking {
+        val f = Fixture()
+        val otherModel = f.model.copy(id = kotlin.uuid.Uuid.random(), modelId = "other-embedding")
+        val a = f.assistant.copy(useGlobalMemory = true)
+        val b = a.copy(id = kotlin.uuid.Uuid.random(), memoryEmbeddingModelId = otherModel.id)
+        val provider = (f.settings.providers.single() as ProviderSetting.OpenAI)
+        val settings = f.settings.copy(providers = listOf(provider.copy(models = provider.models + otherModel)),
+            assistants = listOf(a, b))
+        f.rows[0] = f.source.copy(assistantId = "__global__")
+        f.service.buildIndex(a, settings)
+        f.service.buildIndex(b, settings)
+        val namespaces = f.store.vectors.map { it.namespace }.toSet()
+        assertEquals(2, namespaces.size)
+        f.store.vectors += f.store.vectors.first().copy(namespace = "unused-model")
+        val calls = f.calls
+        f.service.maintainIndex(a, settings, force = true)
+        assertEquals(namespaces, f.store.vectors.map { it.namespace }.toSet())
+        assertEquals(calls, f.calls)
     }
 
     private class Journal : MemoryAutoIndexDAO {
@@ -514,7 +629,7 @@ class MemoryRecallServiceTest {
         val f = Fixture()
         val journal = Journal()
         val assistant = f.assistant.copy(memoryAutoIndexEnabled = true, memoryAutoIndexSinceMillis = 1,
-            memoryHistoryRecallEnabled = true)
+            memoryIndependentHistoryRecallEnabled = true)
         val now = java.time.LocalDateTime.now().toString()
         f.history.rows += HistoryMemorySource("chat", "n1", "m1", assistant.id.toString(), "user", now, "她说的话", 0)
         f.history.rows += HistoryMemorySource("chat", "n2", "m2", assistant.id.toString(), "assistant", now, "我说的话", 1)

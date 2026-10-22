@@ -67,6 +67,13 @@ private fun MemoryRecallReferenceDialog(trace: MemoryRecallTrace, onDismiss: () 
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(recallLabel(trace), style = MaterialTheme.typography.titleSmall)
+                    if (trace.state !in setOf(MemoryRecallState.DISABLED, MemoryRecallState.LEGACY)) {
+                        Text("候选：记忆 ${trace.diagnostics.longTermCandidates} / 独立历史 ${trace.diagnostics.historyCandidates}" +
+                            " · 筛选后 ${trace.diagnostics.selectedCount} · 最终附带 ${trace.diagnostics.injectedCount}",
+                            style = MaterialTheme.typography.bodySmall)
+                        if (trace.diagnostics.budgetDropped > 0) Text("${trace.diagnostics.budgetDropped} 组因记忆与完整引文超过总预算而未发送。")
+                        if (trace.diagnostics.staleDropped > 0) Text("${trace.diagnostics.staleDropped} 条在发送前来源失效。")
+                    }
                     if (trace.diagnostics.deadlineExceeded) {
                         Text("记忆准备达到4秒总预算，已取消本轮检索；本轮未附带召回记忆，也未自动重试。")
                     }
@@ -125,14 +132,16 @@ private fun MemoryRecallReferenceDialog(trace: MemoryRecallTrace, onDismiss: () 
                             MemoryRerankState.FAILED -> "重排失败或返回数据无效，未自动重试，本轮未附带候选。"
                             MemoryRerankState.DISABLED -> "重排未开启。"
                         }, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (trace.diagnostics.candidates.isNotEmpty()) {
                         trace.diagnostics.candidates.forEachIndexed { index, hit ->
                             Text("候选 ${index + 1} · " + (if (hit.history == null) "长期 #${hit.memoryId}" else "短期 ${hit.history.role}") +
                                 " · 分数 ${hit.score?.let { String.format(java.util.Locale.ROOT, "%.3f", it) } ?: "未返回"}" +
                                 if (hit.kept) " · 筛选保留" else " · 未保留", style = MaterialTheme.typography.labelSmall)
                             Text(hit.text, style = MaterialTheme.typography.bodySmall)
+                            hit.reason?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                         }
                     }
-                    trace.diagnostics.retention?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     trace.excerpts.forEachIndexed { index, excerpt ->
                         HorizontalDivider()
                         val history = excerpt.history
@@ -157,6 +166,16 @@ private fun MemoryRecallReferenceDialog(trace: MemoryRecallTrace, onDismiss: () 
                             Text(date ?: "原记忆未记录创建日期", style = MaterialTheme.typography.bodySmall)
                         }
                         Text(excerpt.text, style = MaterialTheme.typography.bodyMedium)
+                        if (excerpt.history == null) {
+                            val evidence = excerpt.evidence
+                            if (evidence != null) {
+                                Text("对应原话：${evidence.quote}", style = MaterialTheme.typography.bodyMedium)
+                                Text("${evidence.source.role} · ${evidence.source.createdAt.replace('T', ' ')}" +
+                                    " · 消息 ${evidence.source.messageId.take(8)}", style = MaterialTheme.typography.bodySmall)
+                            } else Text(if (excerpt.evidenceState == me.rerere.rikkahub.data.memory.MemoryEvidenceState.STALE)
+                                "原话依据已失效，本轮未附带引文。" else "没有可验证的对应原话，未补配其他历史内容。",
+                                style = MaterialTheme.typography.bodySmall)
+                        } else Text("独立历史原文，未作为其他记忆的出处。", style = MaterialTheme.typography.bodySmall)
                         excerpt.graphRelation?.let { Text("图谱依据：$it", style = MaterialTheme.typography.bodySmall) }
                     }
                     Text("仅记录按需召回片段，不统计人设、原上下文或记忆工具的读取结果。",

@@ -25,6 +25,10 @@ class MemoryAutoIndexService(
         mutex.withLock {
             val snapshot = settings()
             val assistant = snapshot.getAssistantById(owner) ?: return@withLock
+            if (!assistant.enableMemory) return@withLock
+            try { recall.maintainIndex(assistant, snapshot)
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (_: Exception) { /* Optional local cleanup cannot disable automatic indexing. */ }
             if (!assistant.enableMemory || !assistant.memoryRecallEnabled || !assistant.memoryAutoIndexEnabled ||
                 assistant.memoryAutoIndexSinceMillis <= 0) return@withLock
             val namespace = recall.embeddingNamespace(assistant, snapshot) ?: return@withLock

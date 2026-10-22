@@ -39,7 +39,7 @@ internal fun MemoryRecallAdvancedSettings(assistant: Assistant, settings: Settin
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CardGroup {
             item(headlineContent = { Text("重排筛选") }, supportingContent = {
-                Text("长期记忆、短期原文各最多6个候选，合并去重后最多12个。每轮最多一次 /rerank 请求，按服务商计费；失败不重试，本轮不附带未筛选结果。")
+                Text("默认只筛选长期记忆，命中后自动附上有效出处；手动开启旧模式时才加入独立历史候选。每轮最多一次 /rerank 请求，按服务商计费；失败不重试，本轮不附带未筛选结果。")
             }, trailingContent = { Switch(assistant.memoryRerankEnabled,
                 onCheckedChange = { onUpdate(assistant.copy(memoryRerankEnabled = it)) }) })
         }
@@ -63,7 +63,7 @@ internal fun MemoryRecallAdvancedSettings(assistant: Assistant, settings: Settin
         }
         CardGroup {
             item(headlineContent = { Text("自动更新向量索引") }, supportingContent = {
-                Text("默认关闭。开启后只处理开启以来的新原文、创建或修改的长期记忆；每次回复完成最多一批32个片段、一次嵌入请求，有费用。应用关闭时不运行，不自动补扫旧聊天。")
+                Text("默认关闭。开启后只处理开启以来创建或修改的长期记忆（旧模式额外处理新原文）；每次回复完成最多一批32个片段、一次嵌入请求，有费用。应用关闭时不运行，不自动补扫旧聊天。")
             }, trailingContent = { Switch(assistant.memoryAutoIndexEnabled,
                 enabled = assistant.memoryAutoIndexEnabled || assistant.memoryEmbeddingModelId != null,
                 onCheckedChange = { enabled -> onUpdate(assistant.copy(memoryAutoIndexEnabled = enabled,
@@ -78,26 +78,6 @@ internal fun MemoryRecallAdvancedSettings(assistant: Assistant, settings: Settin
             dailyUsed?.let { Text("今日自动索引：$it / ${assistant.memoryAutoIndexDailyLimit} 批",
                 style = MaterialTheme.typography.bodySmall) }
             Text(latest?.detail ?: "尚无自动索引记录。", style = MaterialTheme.typography.bodySmall)
-        }
-        CardGroup {
-            item(headlineContent = { Text("短期原文逐渐遗忘") }, supportingContent = {
-                Text("旧原文逐步降低候选优先级，到期后不再被关键词或向量召回，并清理过期向量索引。长期记忆、聊天正文、已保存的原话依据保留。")
-            }, trailingContent = { Switch(assistant.memoryRetentionEnabled,
-                onCheckedChange = { onUpdate(assistant.copy(memoryRetentionEnabled = it)) }) })
-        }
-        if (assistant.memoryRetentionEnabled) {
-            Text("短期原文保留时间", style = MaterialTheme.typography.bodySmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(7, 30, 90).forEach { days -> FilterChip(assistant.memoryRetentionDays == days,
-                    onClick = { onUpdate(assistant.copy(memoryRetentionDays = days)) }, label = { Text("$days 天") }) }
-            }
-            Text("每隔多久候选权重减半", style = MaterialTheme.typography.bodySmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(1, 7, 14).forEach { days -> FilterChip(assistant.memoryDecayHalfLifeDays == days,
-                    onClick = { onUpdate(assistant.copy(memoryDecayHalfLifeDays = days)) }, label = { Text("$days 天") }) }
-            }
-            Text("本地清理在查询时执行；应用关闭时不会定时清理。延长保留期或关闭遗忘后，已清理的旧向量需要手动重建。",
-                style = MaterialTheme.typography.bodySmall)
         }
     }
 }

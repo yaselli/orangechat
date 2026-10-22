@@ -14,6 +14,7 @@ on:
       - fix/plugin-file-boundaries
       - feature/raw-audio-messages
       - feature/memory-system
+      - fix/memory-evidence-recall
 
 jobs:
   build:
@@ -76,6 +77,9 @@ jobs:
 
       - name: Verify automatic memory claims and evidence
         run: python3 scripts/verify-memory-organization.py
+
+      - name: Verify recall evidence and vector maintenance
+        run: python3 scripts/verify-memory-recall-evidence.py
 
       - name: Verify graph retirement and incremental index claims
         run: python3 scripts/verify-memory-graph.py

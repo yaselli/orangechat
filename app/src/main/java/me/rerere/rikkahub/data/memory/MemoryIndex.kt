@@ -61,6 +61,9 @@ interface MemoryIndexDAO {
     @Query("DELETE FROM memory_vector WHERE scope = :scope AND namespace != :namespace")
     suspend fun removeOtherModels(scope: String, namespace: String)
 
+    @Query("DELETE FROM memory_vector WHERE scope = :scope AND namespace NOT IN (:namespaces)")
+    suspend fun removeUnusedModels(scope: String, namespaces: List<String>)
+
     @Query("""DELETE FROM memory_vector WHERE scope = :scope AND (
         NOT EXISTS (SELECT 1 FROM memoryentity m WHERE m.id = memory_vector.memoryId
             AND m.assistant_id = memory_vector.scope AND m.revision = memory_vector.revision))""")

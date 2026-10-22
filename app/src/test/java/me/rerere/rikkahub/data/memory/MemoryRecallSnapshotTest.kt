@@ -67,7 +67,16 @@ class MemoryRecallSnapshotTest {
         val query = memoryRecallQuery(listOf(old, answer, current), current)
         assertTrue(query.startsWith("这个呢"))
         assertTrue(query.contains("炸鸡"))
+        assertFalse(query.contains("脆脆的"))
         assertFalse(query.contains("private reasoning"))
+    }
+
+    @Test
+    fun `independent topic excludes earlier assistant wording and user question`() {
+        val current = UIMessage.user("我想吃辣辣的")
+        val messages = listOf(UIMessage.user("先把快速启动关掉"), UIMessage.assistant("周末再远程处理"), current)
+        assertEquals("我想吃辣辣的", memoryRecallQuery(messages, current))
+        assertEquals("", memoryRecallQuery(messages.dropLast(1), current))
     }
 
     @Test

@@ -72,4 +72,8 @@ interface MemoryOrganizationDAO {
     @Query("SELECT e.* FROM memory_evidence e JOIN memoryentity m ON e.memoryId = m.id " +
         "WHERE e.memoryId = :id AND m.assistant_id = :scope AND m.revision = 1 AND m.source_kind = 'automatic'")
     suspend fun evidence(id: Int, scope: String): MemoryEvidence?
+
+    @Query("SELECT e.* FROM memory_evidence e JOIN memoryentity m ON e.memoryId = m.id " +
+        "WHERE e.memoryId IN (:ids) AND m.assistant_id = :scope AND m.revision = 1 AND m.source_kind = 'automatic'")
+    suspend fun evidenceForRecall(ids: List<Int>, scope: String): List<MemoryEvidence>
 }

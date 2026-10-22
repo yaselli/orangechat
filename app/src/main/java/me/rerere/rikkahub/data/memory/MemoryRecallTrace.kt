@@ -39,6 +39,10 @@ data class MemoryRecallDiagnostics(
     val timings: MemoryRecallTimings = MemoryRecallTimings(),
     val vectorPhase: String? = null,
     val deadlineExceeded: Boolean = false,
+    val selectedCount: Int = 0,
+    val injectedCount: Int = 0,
+    val budgetDropped: Int = 0,
+    val staleDropped: Int = 0,
 )
 
 @Serializable

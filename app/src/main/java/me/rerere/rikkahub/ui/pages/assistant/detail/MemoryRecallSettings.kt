@@ -38,7 +38,7 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
     val scope = rememberCoroutineScope()
     var job by remember { mutableStateOf<Job?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var status by remember(assistant.id, assistant.useGlobalMemory, assistant.memoryEmbeddingModelId, assistant.memoryHistoryRecallEnabled) {
+    var status by remember(assistant.id, assistant.useGlobalMemory, assistant.memoryEmbeddingModelId, assistant.memoryIndependentHistoryRecallEnabled) {
         mutableStateOf("")
     }
     var plan by remember { mutableStateOf<MemoryRecallService.IndexPlan?>(null) }
@@ -50,7 +50,7 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
         CardGroup {
             item(
                 headlineContent = { Text("按需召回记忆（测试）") },
-                supportingContent = { Text("长期记忆与历史原文分别检索；重排可筛选少量相关片段。默认关闭，开启后不再整库注入。") },
+                supportingContent = { Text("默认只搜索已保存记忆，命中后携带对应原话；无相关结果可以不注入。开启后不再整库注入。") },
                 trailingContent = {
                     Switch(
                         checked = assistant.memoryRecallEnabled,
@@ -63,19 +63,19 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
         if (assistant.memoryRecallEnabled && assistant.enableMemory) {
             CardGroup {
                 item(
-                    headlineContent = { Text("同时检索当前助手的聊天历史") },
+                    headlineContent = { Text("独立召回历史原文（旧模式）") },
                     supportingContent = {
-                        Text("保留用户和 AI 双方普通文字，只查当前助手与所选分支；与长期记忆合并筛选，默认关闭。")
+                        Text("默认关闭，升级后也需重新手动开启。开启会额外注入未关联记忆的历史原文，可能带来无关内容。")
                     },
                     trailingContent = {
                         Switch(
-                            checked = assistant.memoryHistoryRecallEnabled, enabled = !busy,
-                            onCheckedChange = { onUpdate(assistant.copy(memoryHistoryRecallEnabled = it)) },
+                            checked = assistant.memoryIndependentHistoryRecallEnabled, enabled = !busy,
+                            onCheckedChange = { onUpdate(assistant.copy(memoryIndependentHistoryRecallEnabled = it)) },
                         )
                     },
                 )
             }
-            if (assistant.memoryHistoryRecallEnabled) TextButton(enabled = !busy, onClick = {
+            if (assistant.memoryIndependentHistoryRecallEnabled) TextButton(enabled = !busy, onClick = {
                 val target = assistant
                 busy = true
                 job = scope.launch {
@@ -93,7 +93,7 @@ internal fun MemoryRecallSettings(assistant: Assistant, settings: Settings, onUp
             Card(colors = CustomColors.cardColorsOnSurfaceContainer, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("嵌入模型", style = MaterialTheme.typography.titleSmall)
-                    Text("未配置时仍可用本地关键词召回。向量目前支持 OpenAI 兼容嵌入接口。",
+                    Text("未配置时使用主题关键词召回。纯语义候选需要重排筛选；向量支持 OpenAI 兼容接口。",
                         style = MaterialTheme.typography.bodySmall)
                     if (!busy) ModelSelector(
                         modelId = assistant.memoryEmbeddingModelId,

@@ -10,6 +10,7 @@ enum class MemoryRerankState { DISABLED, NOT_CONFIGURED, NO_CANDIDATES, SUCCESS,
 data class MemoryCandidateTrace(
     val memoryId: Int, val history: HistoryReference? = null, val text: String,
     val score: Double? = null, val kept: Boolean = false,
+    val reason: String? = null,
 )
 
 /** Reserve each route's own quota before mixing; history can never crowd out all long-term candidates. */

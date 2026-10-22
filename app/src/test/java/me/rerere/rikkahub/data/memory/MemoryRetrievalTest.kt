@@ -9,6 +9,17 @@ class MemoryRetrievalTest {
         budget.slices(scope, id, revision, text)
 
     @Test
+    fun `guessing filler alone cannot retrieve unrelated names or settings`() {
+        val unrelated = slices("你猜他们叫什么呀", 1) + slices("我们可以把这个设置关掉", 2)
+        assertTrue(rankKeywordMemories("你猜我吃了什么", unrelated).isEmpty())
+        assertTrue(rankKeywordMemories("你我什么怎么", unrelated).isEmpty())
+        assertEquals(3, rankKeywordMemories("想吃火锅", unrelated + slices("我喜欢吃辣和火锅", 3))
+            .first().slice.memoryId)
+        assertTrue(rankKeywordMemories("辣", slices("喜欢辣味")).isNotEmpty())
+        assertTrue(rankKeywordMemories("电脑为什么打不开", slices("我喜欢吃炸鸡，因为脆脆的")).isEmpty())
+    }
+
+    @Test
     fun `CJK emoji slices keep complete original coverage with bounded overlap`() {
         val text = ("喜欢吃脆脆的炸鸡🍗。今天喝奶茶。\n").repeat(150)
         val result = slices(text)

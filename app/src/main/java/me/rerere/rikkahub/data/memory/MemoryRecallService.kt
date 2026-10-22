@@ -35,6 +35,7 @@ class MemoryRecallService(
     client: OkHttpClient,
     context: Context? = null,
     private val history: HistoryMemoryStorage,
+    private val evidenceDAO: MemoryOrganizationDAO? = null,
 ) {
     // Paid embedding calls must not inherit transport retries from normal streaming chat.
     private val embedding = OpenAIProvider(
@@ -51,6 +52,27 @@ class MemoryRecallService(
     private val queries = MemoryQueryCache()
     private val queryMutex = Mutex()
     private val indexMutex = Mutex()
+    private val lastMaintenance = linkedMapOf<String, Long>()
+
+    /** Local-only cleanup after replies. Never delete chat, evidence or memory content, or make paid calls. */
+    suspend fun maintainIndex(assistant: Assistant, settings: Settings, force: Boolean = false) = indexMutex.withLock {
+        val memoryScope = scope(assistant)
+        val namespace = config(assistant, settings)?.key
+        val key = "$memoryScope:${assistant.id}:$namespace"
+        val now = System.currentTimeMillis()
+        if (!force && lastMaintenance[key]?.let { now - it in 0 until 86_400_000L } == true) return@withLock
+        if (namespace != null) {
+            index.removeUnusedModels(memoryScope, activeNamespaces(assistant, settings))
+            history.removeOtherModels(assistant.id.toString(), namespace)
+        }
+        index.removeStaleVectors(memoryScope)
+        sources(memoryScope).forEach { index.removeStaleSource(it.id, it.revision, memoryHash(it.content)) }
+        index.trimSnapshots()
+        if (history.pruneInvalid(assistant.id.toString())) {
+            lastMaintenance[key] = now
+            if (lastMaintenance.size > 32) lastMaintenance.remove(lastMaintenance.keys.first())
+        }
+    }
 
     private data class EmbeddingConfig(val model: Model, val provider: ProviderSetting.OpenAI, val key: String)
 
@@ -69,6 +91,10 @@ class MemoryRecallService(
 
     private fun scope(assistant: Assistant) = if (assistant.useGlobalMemory) MemoryRepository.GLOBAL_MEMORY_ID
         else assistant.id.toString()
+
+    private fun activeNamespaces(assistant: Assistant, settings: Settings): List<String> =
+        (settings.assistants.filter { it.enableMemory && scope(it) == scope(assistant) } + assistant)
+            .mapNotNull { config(it, settings)?.key }.distinct()
 
     private suspend fun sources(scope: String): List<MemoryEntity> = memoryDAO.getMemoriesOfAssistant(scope)
         .filterNot { it.isSummaryMemory() }
@@ -91,7 +117,7 @@ class MemoryRecallService(
         val scope = scope(assistant)
         val existing = index.vectors(scope, config.key).mapTo(hashSetOf()) { it.sliceId }
         val pending = slices(sources(scope)).filter { it.id !in existing }.take(2049).toMutableList()
-        if (assistant.memoryHistoryRecallEnabled && pending.size < 2049) {
+        if (assistant.memoryIndependentHistoryRecallEnabled && pending.size < 2049) {
             val indexed = history.indexedIds(assistant.id.toString(), config.key)
             var after = ""
             while (pending.size < 2049) {
@@ -99,7 +125,6 @@ class MemoryRecallService(
                 val page = history.page(assistant.id.toString(), after)
                 if (page.isEmpty()) break
                 for (source in page) {
-                    if (!retention(assistant).allows(source.createdAt)) continue
                     pending += historyMemorySlices(source).filter { it.id !in indexed }.take(2049 - pending.size)
                     if (pending.size >= 2049) break
                 }
@@ -119,10 +144,10 @@ class MemoryRecallService(
         val since = assistant.memoryAutoIndexSinceMillis
         val facts = sources(scope(assistant)).filter { maxOf(it.createdAt, it.updatedAt) >= since }
         val longTerm = slices(facts).filter { it.id !in indexed && it.id !in attempted }.take(16)
-        val historical = if (!assistant.memoryHistoryRecallEnabled) emptyList() else {
+        val historical = if (!assistant.memoryIndependentHistoryRecallEnabled) emptyList() else {
             val already = history.indexedIds(assistant.id.toString(), config.key)
             history.sources(assistant.id.toString(), nodeIds).filter {
-                (organizationSourceMillis(it.createdAt) ?: Long.MIN_VALUE) >= since && retention(assistant).allows(it.createdAt)
+                (organizationSourceMillis(it.createdAt) ?: Long.MIN_VALUE) >= since
             }.sortedBy { it.createdAt }.flatMap { historyMemorySlices(it) }
                 .filter { it.id !in already && it.id !in attempted }.take(16)
         }
@@ -146,7 +171,7 @@ class MemoryRecallService(
                 slice.sourceHash, JsonInstant.encodeToString(vector))
         }
         index.putVectors(facts)
-        if (assistant.memoryHistoryRecallEnabled) history.putValid(batch.zip(vectors).mapNotNull { (slice, vector) ->
+        if (assistant.memoryIndependentHistoryRecallEnabled) history.putValid(batch.zip(vectors).mapNotNull { (slice, vector) ->
             val ref = slice.history ?: return@mapNotNull null
             HistoryMemoryVector(config.key, slice.id, assistant.id.toString(), ref.conversationId, ref.nodeId,
                 ref.messageId, slice.sourceHash, slice.start, slice.end, JsonInstant.encodeToString(vector))
@@ -172,8 +197,8 @@ class MemoryRecallService(
                 "待处理记忆已变化，请重新确认索引调用次数"
             }
             val pending = available.take(maxChunks.coerceIn(0, 2048))
-            index.removeOtherModels(scope, config.key)
-            if (assistant.memoryHistoryRecallEnabled) history.removeOtherModels(assistant.id.toString(), config.key)
+            index.removeUnusedModels(scope, activeNamespaces(assistant, settings))
+            if (assistant.memoryIndependentHistoryRecallEnabled) history.removeOtherModels(assistant.id.toString(), config.key)
             index.removeStaleVectors(scope)
             sourceRows.forEach { index.removeStaleSource(it.id, it.revision, memoryHash(it.content)) }
             var completed = 0
@@ -190,7 +215,7 @@ class MemoryRecallService(
                         JsonInstant.encodeToString(vector),
                     )
                 })
-                if (assistant.memoryHistoryRecallEnabled) {
+                if (assistant.memoryIndependentHistoryRecallEnabled) {
                     history.putValid(batch.zip(vectors).mapNotNull { (slice, vector) ->
                         val ref = slice.history ?: return@mapNotNull null
                         HistoryMemoryVector(
@@ -241,29 +266,22 @@ class MemoryRecallService(
             val hash = memoryMessageHash(latest)
             val query = memoryRecallQuery(messages, latest)
             val historyScope = assistant.id.toString()
-            val retention = retention(assistant)
-            val boundary = if (assistant.memoryHistoryRecallEnabled) {
-                history.boundary(historyScope, conversationId, messages).copy(oldestMillis = retention.cutoffMillis)
+            val boundary = if (assistant.memoryIndependentHistoryRecallEnabled) {
+                history.boundary(historyScope, conversationId, messages)
             } else null
-            if (boundary != null && retention.cutoffMillis != null) {
-                try { history.pruneExpired(historyScope, retention.cutoffMillis!!)
-                } catch (cancelled: CancellationException) { throw cancelled
-                } catch (_: Exception) { /* Optional local cleanup cannot disable otherwise valid recall. */ }
-            }
             val rerankModel = assistant.memoryRerankModelId?.let(settings::findModelById)
             val rerankIdentity = rerankModel?.let { model ->
                 val provider = model.findProvider(settings.providers) as? ProviderSetting.OpenAI
                 memoryHash(JsonInstant.encodeToString(model.copy(providerOverwrite = null)) + provider?.id + provider?.baseUrl)
             }.orEmpty()
             val retrievalVersion = (config(assistant, settings)?.key ?: "keyword-v1") +
-                ":dual-rollback-v1:${assistant.memoryHistoryRecallEnabled}:$historyScope" +
-                ":rerank:${assistant.memoryRerankEnabled}:$rerankIdentity:${assistant.memoryRerankThreshold}:${assistant.memoryRerankLimit}" +
-                ":retention:${assistant.memoryRetentionEnabled}:${assistant.memoryRetentionDays}:${assistant.memoryDecayHalfLifeDays}"
+                ":paired-evidence-v1:${assistant.memoryIndependentHistoryRecallEnabled}:$historyScope" +
+                ":rerank:${assistant.memoryRerankEnabled}:$rerankIdentity:${assistant.memoryRerankThreshold}:${assistant.memoryRerankLimit}"
             val key = memoryHash("$conversationId\u0000$scope\u0000${latest.id}\u0000$hash" +
                 "\u0000${memoryHash(query)}\u0000$retrievalVersion")
             var snapshot = index.snapshot(key)
             if (snapshot == null) {
-                val result = recall(assistant, settings, scope, query, sources(scope), boundary, retention)
+                val result = attachEvidence(recall(assistant, settings, scope, query, sources(scope), boundary), scope, historyScope)
                 index.putSnapshot(MemoryRecallSnapshotEntity(
                     key, conversationId, scope, latest.id.toString(), hash,
                     JsonInstant.encodeToString(result), System.currentTimeMillis(),
@@ -294,7 +312,8 @@ class MemoryRecallService(
             val historical = if (turn.historyScope == null || refs.isEmpty()) emptyMap() else {
                 history.sources(turn.historyScope, refs.map { it.nodeId }.distinct()).associateBy { it.reference.key }
             }
-            turn.apply(messages, sources(scope).associateBy { it.id }, historical)
+            val evidence = turn.memoryIds().takeIf { it.isNotEmpty() }?.let { evidenceDAO?.evidenceForRecall(it, scope) }.orEmpty().associateBy { it.memoryId }
+            turn.apply(messages, sources(scope).associateBy { it.id }, historical, evidence)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -303,12 +322,37 @@ class MemoryRecallService(
         }
     }
 
-    private fun retention(assistant: Assistant) = MemoryRetentionPolicy(System.currentTimeMillis(),
-        assistant.memoryRetentionEnabled, assistant.memoryRetentionDays, assistant.memoryDecayHalfLifeDays)
+    private suspend fun attachEvidence(result: MemoryRecallSnapshot, scope: String, owner: String): MemoryRecallSnapshot {
+        val memories = sources(scope).associateBy { it.id }
+        val ids = result.excerpts.filter { it.history == null }.map { it.memoryId }.distinct()
+        val records = ids.takeIf { it.isNotEmpty() }?.let { evidenceDAO?.evidenceForRecall(it, scope) }.orEmpty().associateBy { it.memoryId }
+        val originals = if (records.isEmpty()) emptyMap() else history.sources(owner,
+            records.values.map { it.nodeId }.distinct()).associateBy { it.reference.key }
+        val grouped = result.excerpts.map { excerpt ->
+            if (excerpt.history != null) excerpt else {
+                val memory = memories[excerpt.memoryId]
+                val record = records[excerpt.memoryId]
+                val saved = memory?.let { verifiedRecallEvidence(it, record, originals, owner) }
+                excerpt.copy(evidence = saved, evidenceState = when {
+                    saved != null -> MemoryEvidenceState.VERIFIED
+                    record != null -> MemoryEvidenceState.STALE
+                    else -> MemoryEvidenceState.MISSING
+                })
+            }
+        }
+        val fitted = fitMemoryEvidenceGroups(grouped)
+        return result.copy(excerpts = fitted, diagnostics = result.diagnostics.copy(
+            selectedCount = grouped.size, budgetDropped = grouped.size - fitted.size,
+            candidates = result.diagnostics.candidates.map { candidate ->
+                val kept = fitted.any { it.memoryId == candidate.memoryId && it.history == candidate.history && it.text == candidate.text }
+                candidate.copy(kept = kept, reason = if (candidate.kept && !kept) "记忆和完整引文超过总预算" else candidate.reason)
+            },
+        ))
+    }
 
     private suspend fun recall(
         assistant: Assistant, settings: Settings, scope: String, query: String, sources: List<MemoryEntity>,
-        boundary: HistoryRecallBoundary?, retention: MemoryRetentionPolicy,
+        boundary: HistoryRecallBoundary?,
     ): MemoryRecallSnapshot {
         if (query.isBlank()) return MemoryRecallSnapshot(emptyList(), MemoryRecallDiagnostics(MemoryVectorState.NO_QUERY))
         var historyKeywordsFailed = false
@@ -365,7 +409,7 @@ class MemoryRecallService(
                     memoryCosine(queryVector, vector)?.let { RankedMemory(byId.getValue(record.sliceId), it) }
                 }.sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id }).take(20)
                 val historyHits = if (boundary == null) emptyList() else historyVectorHits(
-                    historyScope, config.key, queryVector, firstHistoryPage, boundary, retention,
+                    historyScope, config.key, queryVector, firstHistoryPage, boundary,
                 )
                 vectorState = if (cached) MemoryVectorState.CACHED else MemoryVectorState.SUCCESS
                 (memoryHits + historyHits)
@@ -381,10 +425,7 @@ class MemoryRecallService(
         val longTerm = fuseMemoryRanks(keywords.filter { it.slice.history == null },
             vectors.orEmpty().filter { it.slice.history == null })
         val historical = fuseMemoryRanks(keywords.filter { it.slice.history != null },
-            vectors.orEmpty().filter { it.slice.history != null }).mapNotNull { hit ->
-            val weight = retention.weight(requireNotNull(hit.slice.history).createdAt)
-            if (weight <= 0) null else hit.copy(score = hit.score * weight)
-        }.sortedWith(compareByDescending<RankedMemory> { it.score }.thenBy { it.slice.id })
+            vectors.orEmpty().filter { it.slice.history != null })
         val currentFacts = this.sources(scope).associateBy { it.id }
         val currentHistory = historical.mapNotNull { it.slice.history?.nodeId }.distinct().chunked(64)
             .flatMap { history.sources(assistant.id.toString(), it) }.associateBy { it.reference.key }
@@ -397,18 +438,35 @@ class MemoryRecallService(
         val candidates = memoryRerankCandidates(query, validLongTerm, validHistory)
         val diagnostics = MemoryRecallDiagnostics(vectorState, historyKeywordsFailed,
             longTermCandidates = validLongTerm.size, historyCandidates = validHistory.size,
-            retention = if (retention.enabled) "短期原文：${retention.days}天保留期，${retention.halfLifeDays}天权重减半；长期记忆不衰减。" else "短期遗忘未开启。")
+            )
         if (!assistant.memoryRerankEnabled) {
-            val selected = selectMemoryExcerpts(query, (validLongTerm + validHistory).sortedByDescending { it.score }).map {
+            // Without a relevance model, do not inject vector-only neighbours merely because they rank highest.
+            val keywordIds = keywords.mapTo(hashSetOf()) { it.slice.id }
+            val keywordCandidates = memoryRerankCandidates(query,
+                validLongTerm.filter { it.slice.id in keywordIds }, validHistory.filter { it.slice.id in keywordIds })
+            val selected = fitMemoryEvidenceGroups(keywordCandidates.map {
                 SavedMemoryExcerpt(it.slice.memoryId, it.slice.revision, it.slice.sourceHash, it.text, it.slice.history)
-            }
-            return MemoryRecallSnapshot(selected, diagnostics)
+            })
+            val observed = (keywordCandidates + candidates)
+                .distinctBy { it.slice.history?.role to it.text.trim() }.take(12)
+            return MemoryRecallSnapshot(selected, diagnostics.copy(candidates = observed.map { hit ->
+                val kept = selected.any { it.memoryId == hit.slice.memoryId && it.history == hit.slice.history && it.text == hit.text }
+                MemoryCandidateTrace(hit.slice.memoryId, hit.slice.history, hit.text, kept = kept,
+                    reason = if (kept) "主题关键词命中" else "无主题关键词支持或受数量、长度限制")
+            }))
         }
         fun finish(state: MemoryRerankState, selected: List<SavedMemoryExcerpt> = emptyList(),
             scores: Map<Int, Double> = emptyMap()): MemoryRecallSnapshot = MemoryRecallSnapshot(selected,
             diagnostics.copy(rerank = state, candidates = candidates.mapIndexed { index, hit ->
                 MemoryCandidateTrace(hit.slice.memoryId, hit.slice.history, hit.text, scores[index],
-                    selected.any { it.memoryId == hit.slice.memoryId && it.history == hit.slice.history && it.text == hit.text })
+                    selected.any { it.memoryId == hit.slice.memoryId && it.history == hit.slice.history && it.text == hit.text },
+                    reason = when {
+                        selected.any { it.memoryId == hit.slice.memoryId && it.history == hit.slice.history && it.text == hit.text } -> "重排筛选保留"
+                        state != MemoryRerankState.SUCCESS -> "重排未完成：$state"
+                        scores[index] == null -> "重排未返回该候选"
+                        scores.getValue(index) < assistant.memoryRerankThreshold -> "低于相关性门槛"
+                        else -> "数量、去重或总长度限制"
+                    })
             }))
         if (candidates.isEmpty()) return finish(MemoryRerankState.NO_CANDIDATES)
         val model = assistant.memoryRerankModelId?.let(settings::findModelById)
@@ -436,7 +494,7 @@ class MemoryRecallService(
     /** Read vector pages and retain only 80 lightweight candidates, not the entire archive's vectors. */
     private suspend fun historyVectorHits(
         scope: String, namespace: String, query: List<Float>, firstPage: List<HistoryMemoryVector>,
-        boundary: HistoryRecallBoundary, retention: MemoryRetentionPolicy,
+        boundary: HistoryRecallBoundary,
     ): List<RankedMemory> {
         val best = java.util.PriorityQueue<HistoryScore>(
             compareBy<HistoryScore> { it.score }.thenByDescending { it.record.sliceId },
@@ -450,7 +508,7 @@ class MemoryRecallService(
                 if (original.hash != record.sourceHash) continue
                 currentCoroutineContext().ensureActive()
                 val vector = MemoryVectorCodec.decode(record.vector, record.vectorBytes)?.toList() ?: continue
-                val score = (memoryCosine(query, vector) ?: continue) * retention.weight(original.createdAt)
+                val score = memoryCosine(query, vector) ?: continue
                 if (score <= 0) continue
                 best += HistoryScore(record.copy(vector = "", vectorBytes = null), score)
                 if (best.size > 80) best.poll()

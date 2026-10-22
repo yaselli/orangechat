@@ -38,6 +38,8 @@ data class Assistant(
     val enableMemory: Boolean = false,
     val memoryRecallEnabled: Boolean = false,
     val memoryHistoryRecallEnabled: Boolean = false,
+    // A fresh opt-in: an old installation's history switch must not enable independent raw-text injection.
+    val memoryIndependentHistoryRecallEnabled: Boolean = false,
     val memoryEmbeddingModelId: Uuid? = null,
     val memoryRerankEnabled: Boolean = false,
     val memoryRerankModelId: Uuid? = null,
@@ -46,7 +48,8 @@ data class Assistant(
     val memoryAutoIndexEnabled: Boolean = false,
     val memoryAutoIndexSinceMillis: Long = 0,
     val memoryAutoIndexDailyLimit: Int = 20,
-    val memoryRetentionEnabled: Boolean = true,
+    // Decode-only compatibility with old exports. No retention/decay behavior uses these values anymore.
+    val memoryRetentionEnabled: Boolean = false,
     val memoryRetentionDays: Int = 30,
     val memoryDecayHalfLifeDays: Int = 7,
     val memoryAutoOrganizeEnabled: Boolean = false,

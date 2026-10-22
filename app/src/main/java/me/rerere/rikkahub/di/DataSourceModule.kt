@@ -146,7 +146,7 @@ val dataSourceModule = module {
     single { get<AppDatabase>().memoryIndexDao() }
 
     single<HistoryMemoryStorage> { HistoryMemoryRepository(get()) }
-    single { MemoryRecallService(get(), get(), get(), get<Context>(), get()) }
+    single { MemoryRecallService(get(), get(), get(), get<Context>(), get(), get<AppDatabase>().memoryOrganizationDao()) }
     single { get<AppDatabase>().memoryAutoIndexDao() }
     single { MemoryAutoIndexService(get(), { get<SettingsStore>().settingsFlow.value }, get()) }
     single { MemoryOrganizationService(get(), get(), get(), get(), get()) }

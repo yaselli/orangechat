@@ -34,8 +34,19 @@ data class HistoryMemoryVector(
     val vectorBytes: ByteArray? = null,
 )
 
+data class HistoryVectorSource(
+    val sliceId: String, val conversationId: String, val nodeId: String, val messageId: String, val sourceHash: String,
+)
+
 @Dao
 interface HistoryMemoryDAO {
+    @Query("SELECT DISTINCT sliceId,conversationId,nodeId,messageId,sourceHash FROM history_memory_vector " +
+        "WHERE scope=:scope AND sliceId>:after ORDER BY sliceId LIMIT 64")
+    suspend fun maintenancePage(scope: String, after: String): List<HistoryVectorSource>
+
+    @Query("DELETE FROM history_memory_vector WHERE scope=:scope AND sliceId IN (:ids)")
+    suspend fun removeSlices(scope: String, ids: List<String>)
+
     @RawQuery
     suspend fun sources(query: SupportSQLiteQuery): List<HistoryMemorySource>
 

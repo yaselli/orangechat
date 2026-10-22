@@ -21,7 +21,7 @@ interface HistoryMemoryStorage {
     ): List<HistoryMemoryVector>
     suspend fun removeOtherModels(scope: String, namespace: String)
     suspend fun putValid(vectors: List<HistoryMemoryVector>)
-    suspend fun pruneExpired(scope: String, oldestMillis: Long) {}
+    suspend fun pruneInvalid(scope: String): Boolean = true
     suspend fun refreshKeywords(scope: String): Int
 }
 
@@ -110,38 +110,33 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
         })
     }
 
-    private val lastPrune = mutableMapOf<String, Pair<Long, Long>>()
-    private val pruneMutex = kotlinx.coroutines.sync.Mutex()
-    private val pruneCursors = mutableMapOf<String, String>()
+    private val maintenanceCursors = mutableMapOf<String, String>()
+    private val maintenanceMutex = kotlinx.coroutines.sync.Mutex()
 
-    override suspend fun pruneExpired(scope: String, oldestMillis: Long) {
-        if (!pruneMutex.tryLock()) return
+    override suspend fun pruneInvalid(scope: String): Boolean {
+        if (!maintenanceMutex.tryLock()) return false
         try {
-            val now = System.currentTimeMillis()
-            val previous = lastPrune[scope]
-            if (previous != null && now - previous.first < 3_600_000 && oldestMillis - previous.second < 86_400_000) return
-            var after = pruneCursors[scope].orEmpty()
-            // At most 256 nodes per query; a large archive must not turn local cleanup into a send-time scan.
+            var after = maintenanceCursors[scope].orEmpty()
+            // Bound each background pass to 256 lightweight records; continue after the next reply if needed.
             repeat(4) {
                 currentCoroutineContext().ensureActive()
-                val nodes = dao.indexedNodes(scope, after)
-                if (nodes.isEmpty()) {
-                    pruneCursors.remove(scope)
-                    lastPrune[scope] = now to oldestMillis
-                    return
+                val page = dao.maintenancePage(scope, after)
+                if (page.isEmpty()) {
+                    maintenanceCursors.remove(scope)
+                    return true
                 }
                 database.withTransaction {
-                    val current = sources(scope, nodes).associateBy { it.nodeId }
-                    val expired = nodes.filter { node ->
-                        val time = current[node]?.createdAt?.let(::organizationSourceMillis)
-                        time == null || time < oldestMillis
+                    val originals = sources(scope, page.map { it.nodeId }.distinct()).associateBy { it.reference.key }
+                    val stale = page.filter { record ->
+                        originals["${record.conversationId}/${record.nodeId}/${record.messageId}"]?.hash != record.sourceHash
                     }
-                    if (expired.isNotEmpty()) dao.removeNodes(scope, expired)
+                    if (stale.isNotEmpty()) dao.removeSlices(scope, stale.map { it.sliceId })
                 }
-                after = nodes.last()
+                after = page.last().sliceId
             }
-            pruneCursors[scope] = after
-        } finally { pruneMutex.unlock() }
+            maintenanceCursors[scope] = after
+            return false
+        } finally { maintenanceMutex.unlock() }
     }
 
     /** Repairs old truncated FTS rows locally; no embedding calls and no changes to message content. */

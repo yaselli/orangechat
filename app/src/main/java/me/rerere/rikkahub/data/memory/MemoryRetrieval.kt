@@ -94,7 +94,7 @@ class MemoryTextBudget(private val counter: MemoryTokenCounter = MemoryTokenCoun
     fun excerpt(slice: MemorySlice, query: String, allowance: Int = 600): String {
         val text = slice.text
         if (count(text) <= allowance) return text
-        val terms = memoryTerms(query)
+        val terms = memoryQueryTerms(query)
         val windows = buildList {
             var offset = 0
             while (offset < text.length) {
@@ -109,6 +109,15 @@ class MemoryTextBudget(private val counter: MemoryTokenCounter = MemoryTokenCoun
     }
 }
 
+/** Remove conversational filler from keyword routes only; embedding/rerank queries retain the full text. */
+private val MEMORY_KEYWORD_STOPWORDS = setOf(
+    "我", "你", "他", "她", "它", "什", "么", "怎", "个", "这", "那", "样", "们", "想", "猜",
+    "的", "了", "呢", "吗", "啊", "呀", "吧", "是", "在", "就", "也", "都",
+    "这个", "那个", "什么", "怎么", "我们", "你们", "他们", "她们", "这样", "那样", "一下", "一个",
+    "我想", "你猜", "猜猜", "知道", "可以", "好吧", "为什么", "为何", "如何", "然后", "还有",
+    "the", "a", "an", "you", "your", "i", "my",
+)
+
 /** Words plus CJK bigrams: Chinese matching must not depend on spaces or SQL wildcard syntax. */
 internal fun memoryTerms(text: String): Set<String> {
     val normalized = text.lowercase(Locale.ROOT)
@@ -122,11 +131,20 @@ internal fun memoryTerms(text: String): Set<String> {
             ) result += String(points, index, 2)
         }
     }
-    return result.filterTo(mutableSetOf()) { it.isNotBlank() }.take(256).toSet()
+    return result.filterTo(mutableSetOf()) { it.isNotBlank() && it !in MEMORY_KEYWORD_STOPWORDS }.take(256).toSet()
+}
+
+/** Multi-character questions must not match a document solely through an isolated Han character. */
+internal fun memoryQueryTerms(query: String): Set<String> {
+    val compact = query.lowercase(Locale.ROOT).replace(Regex("[\\s\\p{P}\\p{S}]+"), "")
+    return memoryTerms(query).filterTo(mutableSetOf()) { term ->
+        term.codePointCount(0, term.length) > 1 || term == compact ||
+            Character.UnicodeScript.of(term.codePointAt(0)) != Character.UnicodeScript.HAN
+    }
 }
 
 fun rankKeywordMemories(query: String, slices: List<MemorySlice>): List<RankedMemory> {
-    val terms = memoryTerms(query)
+    val terms = memoryQueryTerms(query)
     if (terms.isEmpty() || slices.isEmpty()) return emptyList()
     val documents = slices.map { it to memoryTerms(it.text) }
     val frequencies = terms.associateWith { term -> documents.count { term in it.second } }

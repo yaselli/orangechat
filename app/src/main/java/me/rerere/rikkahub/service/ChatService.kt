@@ -1294,7 +1294,6 @@ class ChatService(
             ) return@onSuccess
 
             if (applicationReceipt == null && assistant.enableMemory &&
-                (assistant.memoryAutoOrganizeEnabled || assistant.memoryAutoIndexEnabled) &&
                 finalConversation.currentMessages.lastOrNull()?.let {
                     it.role == MessageRole.ASSISTANT && it.id !in initialConversation.currentMessages.map { msg -> msg.id }
                 } == true
