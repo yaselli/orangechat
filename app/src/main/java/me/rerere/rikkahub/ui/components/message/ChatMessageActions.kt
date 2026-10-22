@@ -240,6 +240,7 @@ fun ChatMessageActionsSheet(
     onSelectAndCopy: () -> Unit,
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
+    onReact: (() -> Unit)? = null,
     onWebViewPreview: () -> Unit,
     onDismissRequest: () -> Unit
 ) {
@@ -254,6 +255,26 @@ fun ChatMessageActionsSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            if (onReact != null) {
+                Card(
+                    onClick = {
+                        onDismissRequest()
+                        onReact()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Text("☺", modifier = Modifier.padding(4.dp), style = MaterialTheme.typography.headlineSmall)
+                        Text("贴表情", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+
             // Select and Copy
             Card(
                 onClick = {

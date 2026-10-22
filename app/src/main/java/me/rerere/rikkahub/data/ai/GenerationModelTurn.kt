@@ -27,6 +27,11 @@ internal suspend fun generateModelTurn(
     onUpdateMessages: suspend (List<UIMessage>) -> Unit,
 ): List<UIMessage> {
     var messages = initialMessages
+    // Keep local diagnostics out of provider requests and prompt caches, preserving the original
+    // list when no local fields are present (including callers' local placeholder ownership).
+    val providerMessages = if (requestMessages.any { it.localMetadata != null }) {
+        requestMessages.map { if (it.localMetadata == null) it else it.copy(localMetadata = null) }
+    } else requestMessages
 
     suspend fun accept(chunk: MessageChunk) {
         messages = messages.handleMessageChunk(chunk = chunk, model = model)
@@ -46,9 +51,9 @@ internal suspend fun generateModelTurn(
     }
 
     if (stream) {
-        providerImpl.streamText(providerSetting, requestMessages, params).collect { accept(it) }
+        providerImpl.streamText(providerSetting, providerMessages, params).collect { accept(it) }
     } else {
-        accept(providerImpl.generateText(providerSetting, requestMessages, params))
+        accept(providerImpl.generateText(providerSetting, providerMessages, params))
     }
     return messages
 }

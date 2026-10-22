@@ -96,6 +96,9 @@ interface ConversationDAO {
     @Query("UPDATE conversationentity SET suggestions = :suggestions WHERE id = :id")
     suspend fun updateSuggestions(id: String, suggestions: String): Int
 
+    @Query("UPDATE conversationentity SET context_compaction = :value WHERE id = :id")
+    suspend fun updateCompaction(id: String, value: String): Int
+
     @Query("UPDATE conversationentity SET folder_id = :folderId WHERE id = :id")
     suspend fun updateFolderId(id: String, folderId: String)
 

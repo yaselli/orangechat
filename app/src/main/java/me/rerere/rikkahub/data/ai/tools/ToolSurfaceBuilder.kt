@@ -8,6 +8,8 @@ package me.rerere.rikkahub.data.ai.tools
 
 import android.content.Context
 import kotlinx.serialization.json.Json
+import me.rerere.ai.core.MessageRole
+import me.rerere.rikkahub.data.model.MemorySource
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessage
 import kotlinx.serialization.json.jsonObject
@@ -56,11 +58,17 @@ class ToolSurfaceBuilder(
             } else {
                 assistant.id.toString()
             }
+            val source = MemorySource(
+                kind = "tool",
+                conversationId = invocationContext.callerConversationId.orEmpty(),
+                messageId = recentMessages.lastOrNull { it.role == MessageRole.USER }?.id?.toString().orEmpty(),
+            )
             addAll(buildMemoryTools(
                 json = json,
-                onCreation = { content -> memoryRepository.addMemory(memoryAssistantId, content) },
-                onUpdate = { id, content -> memoryRepository.updateContent(id, content) },
-                onDelete = { id -> memoryRepository.deleteMemory(id) },
+                onCreation = { content -> memoryRepository.addMemory(memoryAssistantId, content, source) },
+                onUpdate = { id, content -> memoryRepository.updateContent(id, content, source, memoryAssistantId) },
+                onRead = { id -> memoryRepository.getMemoryInScope(id, memoryAssistantId) },
+                onDelete = { id -> memoryRepository.deleteMemory(id, memoryAssistantId) },
             ))
         }
         if (settings.enableWebSearch) {
