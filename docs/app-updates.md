@@ -19,10 +19,10 @@
 更新源固定为公开仓库 `yaselli/orangechat` 的 GitHub Releases，不需要在 App 中保存 GitHub 令牌。仅 Actions 附件、草稿或无匹配 APK 的 Release 不会产生更新提醒。
 
 1. 从同一提交完成两条构建。构建脚本从 APK 实际包名、版本、debug 标记和 ABI 生成安装包文件名与 `release-metadata.json`，上传到既有 Actions 附件。
-2. 以包含本次修改的分支运行 `release.yml`（Prepare Update Release），填写已成功的构建 run ID、`release` 或 `debug` 渠道，以及更新说明。工作流会核对构建来源、版本和 APK 校验和，再创建草稿。旧 master 中的旧版发布脚本不能用于这个新流程。
+2. 将发布入口 PR #18 合并后，可从默认分支运行 `release.yml`（Prepare Update Release），填写已成功的构建 run ID、`release` 或 `debug` 渠道，以及更新说明。工作流会核对构建来源、版本和 APK 校验和，再创建草稿。发布入口只复用已验证的安装包，不会重编译默认分支的旧 App 源码。
 3. 在 GitHub Releases 检查草稿、安装包和更新说明后，手动发布。Debug 草稿自动标记 prerelease；正式版草稿不标记 prerelease。发布后 App 在下一次有效检查时提示更新。
 
-可通过 CLI 指定工作流分支，例如：`gh workflow run release.yml --ref build/stable-release -f run_id=构建ID -f channel=release -f notes='更新说明'`。需先将这些修改合入目标分支；不在旧 master 上直接构建或发布。
+也可通过 CLI 指定包含本次发布脚本的分支，例如：`gh workflow run release.yml --ref build/stable-release -f run_id=构建ID -f channel=release -f notes='更新说明'`。需先将修改合入目标分支。正式版分支今后每次更新会同时触发 Release 和 Debug 构建。
 
 文件名约定由脚本统一生成，例如 `Xiguaban-2.3.0-165-arm64-v8a-release.apk`。不要手工改掉版本、渠道或架构。草稿创建不会自动公开，也不覆盖已有 Release。
 

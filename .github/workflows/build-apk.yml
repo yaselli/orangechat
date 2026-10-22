@@ -16,6 +16,7 @@ on:
       - feature/memory-system
       - fix/memory-evidence-recall
       - fix/workflow-mcp-release-diagnostics
+      - build/stable-release
 
 jobs:
   build:
