@@ -131,6 +131,7 @@ jobs:
             app/schemas/**/33.json
             app/schemas/**/36.json
             app/schemas/**/37.json
+            app/schemas/**/39.json
           if-no-files-found: warn
 
       - name: Build APK

@@ -10,11 +10,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
@@ -51,51 +54,50 @@ class StatsVM(
 
     private val range = MutableStateFlow(UsageRange.MONTH)
     private val refreshCount = MutableStateFlow(0)
-    private val _usage = MutableStateFlow(RequestUsageStats())
-    val usage = _usage.asStateFlow()
+    // Stop observing and aggregating the ledger when the statistics screen has no subscribers.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val usage = combine(range, usageRecordDAO.observeLatestId(), refreshCount) { selected, _, _ -> selected }
+        .transformLatest { selected ->
+            emit(RequestUsageStats(range = selected))
+            try {
+                val today = LocalDate.now()
+                val summary = withContext(Dispatchers.IO) {
+                    usageRecordDAO.getSummary(
+                        usageSince(selected, today, ZoneId.systemDefault()),
+                        if (selected == UsageRange.ALL) "%Y-%m" else "%Y-%m-%d",
+                    )
+                }
+                val settings = settingsStore.settingsFlow.value
+                val models = settings.providers.flatMap { it.models }.associateBy { it.id.toString() }
+                emit(RequestUsageStats(
+                    range = selected,
+                    isLoading = false,
+                    totals = summary.totals,
+                    points = usagePoints(selected, summary.buckets, today),
+                    models = summary.models.map { item ->
+                        val model = models[item.modelId]
+                        val name = model?.displayName?.takeIf { it.isNotBlank() }
+                            ?: item.modelName?.takeIf { it.isNotBlank() } ?: "未知模型"
+                        val providerName = settings.providers.firstOrNull {
+                            it.id.toString() == item.providerId
+                        }?.name ?: item.providerId?.take(8)
+                        UsageRank(listOfNotNull(name, providerName).joinToString(" · "),
+                            item.promptTokens, item.completionTokens, item.cachedTokens)
+                    },
+                    sources = summary.sources.map {
+                        UsageRank(it.source, it.promptTokens, it.completionTokens, it.cachedTokens)
+                    },
+                ))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emit(RequestUsageStats(range = selected, isLoading = false, hasError = true))
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RequestUsageStats())
 
     init {
         viewModelScope.launch { loadStats() }
-        viewModelScope.launch {
-            combine(range, usageRecordDAO.observeLatestId(), refreshCount) { selected, _, _ -> selected }
-                .collectLatest { selected ->
-                    _usage.value = RequestUsageStats(range = selected)
-                    try {
-                        val today = LocalDate.now()
-                        val summary = withContext(Dispatchers.IO) {
-                            usageRecordDAO.getSummary(
-                                usageSince(selected, today, ZoneId.systemDefault()),
-                                if (selected == UsageRange.ALL) "%Y-%m" else "%Y-%m-%d",
-                            )
-                        }
-                        val settings = settingsStore.settingsFlow.value
-                        val models = settings.providers.flatMap { it.models }.associateBy { it.id.toString() }
-                        _usage.value = RequestUsageStats(
-                            range = selected,
-                            isLoading = false,
-                            totals = summary.totals,
-                            points = usagePoints(selected, summary.buckets, today),
-                            models = summary.models.map { item ->
-                                val model = models[item.modelId]
-                                val name = model?.displayName?.takeIf { it.isNotBlank() }
-                                    ?: item.modelName?.takeIf { it.isNotBlank() } ?: "未知模型"
-                                val providerName = settings.providers.firstOrNull {
-                                    it.id.toString() == item.providerId
-                                }?.name ?: item.providerId?.take(8)
-                                UsageRank(listOfNotNull(name, providerName).joinToString(" · "),
-                                    item.promptTokens, item.completionTokens, item.cachedTokens)
-                            },
-                            sources = summary.sources.map {
-                                UsageRank(it.source, it.promptTokens, it.completionTokens, it.cachedTokens)
-                            },
-                        )
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        _usage.value = RequestUsageStats(range = selected, isLoading = false, hasError = true)
-                    }
-                }
-        }
     }
 
     fun selectRange(selected: UsageRange) { range.value = selected }

@@ -70,7 +70,7 @@ internal fun RequestUsageCard(
                 stats.totals.requestCount == 0L -> Text("这段时间还没有接口返回的用量记录。")
                 else -> {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        UsageValue("请求次数", stats.totals.requestCount.toString())
+                        UsageValue("已记录请求", stats.totals.requestCount.toString())
                         UsageValue("总 token", formatTokens(stats.totals.promptTokens + stats.totals.completionTokens))
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
