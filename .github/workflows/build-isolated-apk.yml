@@ -8,6 +8,7 @@ on:
       - feature/chat-interactions
       - fix/workflow-mcp-release-diagnostics
       - fix/upstream-alignment-batch1
+      - feature/upstream-usage-stats
   workflow_dispatch:
 
 permissions:

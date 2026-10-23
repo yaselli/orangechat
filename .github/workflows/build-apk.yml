@@ -18,6 +18,7 @@ on:
       - fix/workflow-mcp-release-diagnostics
       - build/stable-release
       - fix/upstream-alignment-batch1
+      - feature/upstream-usage-stats
 
 jobs:
   build:

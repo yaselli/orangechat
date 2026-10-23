@@ -131,6 +131,7 @@ function getNerdStats(
   createdAt: string,
   finishedAt: string | null | undefined,
   t: TFunction,
+  generationTimeMs?: number | null,
 ) {
   const stats: Array<{ key: string; icon: React.ReactNode; label: string }> = [];
 
@@ -156,8 +157,8 @@ function getNerdStats(
     }),
   });
 
-  const durationMs = getDurationMs(createdAt, finishedAt);
-  if (durationMs && usage.completionTokens > 0) {
+  const durationMs = generationTimeMs ?? getDurationMs(createdAt, finishedAt);
+  if (durationMs != null && durationMs > 0 && usage.completionTokens > 0) {
     const durationSeconds = durationMs / 1000;
     const tps = usage.completionTokens / durationSeconds;
 
@@ -491,7 +492,7 @@ const ChatMessageNerdLineRow = React.memo(({
     return null;
   }
 
-  const stats = getNerdStats(message.usage, message.createdAt, message.finishedAt, t);
+  const stats = getNerdStats(message.usage, message.createdAt, message.finishedAt, t, message.generationTimeMs);
   if (stats.length === 0) return null;
 
   return (

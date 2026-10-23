@@ -35,6 +35,10 @@ data class UIMessage(
     val finishedAt: LocalDateTime? = null,
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
+    // Omit absent timing even with encodeDefaults=true: historical memory fingerprints must not change.
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val generationTimeMs: Long? = null,
     val translation: String? = null,
     // Local UI diagnostics only. Providers must never receive this field. Omit the default even
     // with encodeDefaults=true so older serialized history fingerprints remain byte-compatible.
