@@ -195,5 +195,20 @@ class MessageQueueTest {
         assertTrue(queue.takeNext()!!.reply === second)
     }
 
+    @Test
+    fun `voice reply includes its tool rounds but never a later queued turn`() {
+        fun message(role: me.rerere.ai.core.MessageRole, text: String) = me.rerere.ai.ui.UIMessage(
+            role = role, parts = listOf(UIMessagePart.Text(text)))
+        val user = message(me.rerere.ai.core.MessageRole.USER, "voice")
+        val messages = listOf(user,
+            message(me.rerere.ai.core.MessageRole.ASSISTANT, "checking"),
+            message(me.rerere.ai.core.MessageRole.TOOL, "tool result"),
+            message(me.rerere.ai.core.MessageRole.ASSISTANT, "answer"),
+            message(me.rerere.ai.core.MessageRole.USER, "next input"),
+            message(me.rerere.ai.core.MessageRole.ASSISTANT, "unrelated answer"))
+        assertEquals("checking\nanswer", queuedReplyText(messages, user.id))
+        assertEquals("", queuedReplyText(messages, kotlin.uuid.Uuid.random()))
+    }
+
 }
 

@@ -51,7 +51,7 @@ fun Settings.getAssistantOf(conversation: Conversation): Assistant =
 
 fun Settings.getChatModelOf(conversation: Conversation): Model? {
     val stored = getAssistantById(conversation.assistantId) ?: getCurrentAssistant()
-    val selected = conversation.config?.chatModelId?.let(::findModelById)
+    val selected = conversation.config?.chatModelId?.let { findModelById(it) }
         ?: findModelById(stored.chatModelId ?: chatModelId) ?: findModelById(chatModelId) ?: return null
     val config = conversation.config ?: return selected
     if (selected.id != config.chatModelId) return selected

@@ -3,6 +3,8 @@ package me.rerere.rikkahub.service
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyInputMessage
@@ -34,6 +36,14 @@ internal fun unreferencedQueuedAttachmentUrls(
         conversation.messageNodes.flatMap { node -> node.messages.flatMap { it.parts } }
     } + pendingMessages.flatMap { it.parts }
     return previous.parts.localFileUrls() - retainedParts.localFileUrls()
+}
+
+/** A voice observer may only consume assistant messages belonging to its own user turn. */
+internal fun queuedReplyText(messages: List<UIMessage>, userMessageId: Uuid): String {
+    val index = messages.indexOfFirst { it.id == userMessageId }
+    if (index < 0) return ""
+    return messages.drop(index + 1).takeWhile { it.role != MessageRole.USER }
+        .filter { it.role == MessageRole.ASSISTANT }.joinToString("\n") { it.toText() }
 }
 
 /** Pending input is kept outside conversation history until dispatched. */

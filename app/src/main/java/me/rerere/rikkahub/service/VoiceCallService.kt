@@ -472,7 +472,7 @@ class VoiceCallService : Service(), KoinComponent {
                 val lastMessage = conv.currentMessages.lastOrNull()
                 if (lastMessage?.role != MessageRole.ASSISTANT) return@collect
 
-                val currentText = lastMessage.toText()
+                val currentText = queuedReplyText(conv.currentMessages, voiceMessageId ?: return@collect)
 
                 // 更新 UI 显示的 AI 回复
                 _uiState.update { it.copy(assistantText = currentText) }

@@ -733,8 +733,7 @@ class ChatService(
                 } else if (session.state.value.currentMessages.lastOrNull()?.getTools().orEmpty().any { !it.isExecuted }) {
                     queued.reply.completeExceptionally(IllegalStateException("请先处理工具审批"))
                 } else {
-                    queued.reply.complete(session.state.value.currentMessages.dropWhile { it.id != queued.id }.drop(1)
-                        .filter { it.role == MessageRole.ASSISTANT }.joinToString("\n") { it.toText() })
+                    queued.reply.complete(queuedReplyText(session.state.value.currentMessages, queued.id))
                 }
 
                 // 只有本轮用户消息和正常 AI 回复完整处理完毕，才重新让主动器进入休眠计时。
