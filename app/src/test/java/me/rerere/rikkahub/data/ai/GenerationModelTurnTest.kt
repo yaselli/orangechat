@@ -84,6 +84,80 @@ class GenerationModelTurnTest {
     }
 
     @Test
+    fun `tool turns add requests but repeated cumulative snapshots count once`() = runBlocking {
+        val oldUsage = TokenUsage(10, 3, 4, 13)
+        val history = listOf(UIMessage.user("question"), UIMessage.assistant("tool result").copy(usage = oldUsage))
+        val usage = TokenUsage(20, 5, 6, 25)
+        val provider = RecordingProvider(listOf(
+            chunk(UIMessagePart.Text("answer")).copy(usage = TokenUsage(promptTokens = 20)),
+            MessageChunk("usage", "model", emptyList(), usage),
+            MessageChunk("usage", "model", emptyList(), usage),
+        ))
+        val result = turn(provider, history, history)
+        assertEquals(history.last().id, result.last().id)
+        assertEquals(TokenUsage(30, 8, 10, 38), result.last().usage)
+
+        val next = RecordingProvider(listOf(
+            chunk(UIMessagePart.Text("next")).copy(usage = TokenUsage(2, 1, 0, 3)),
+        ))
+        assertEquals(TokenUsage(32, 9, 10, 41), turn(next, result, result).last().usage)
+        assertEquals(oldUsage, history.last().usage)
+    }
+
+    @Test
+    fun `new assistant does not inherit usage from earlier answers or user messages`() = runBlocking {
+        val history = listOf(
+            UIMessage.assistant("old").copy(usage = TokenUsage(100, 50, 0, 150), generationTimeMs = 90_000),
+            UIMessage.user("next").copy(usage = TokenUsage(7, 1, 0, 8)),
+        )
+        val provider = RecordingProvider(listOf(
+            MessageChunk("usage", "model", emptyList(), TokenUsage(promptTokens = 10)),
+            chunk(UIMessagePart.Text("new")).copy(usage = TokenUsage(completionTokens = 2)),
+        ))
+        val result = turn(provider, history, history)
+        assertEquals(history, result.dropLast(1))
+        assertEquals(TokenUsage(10, 2, 0, 12), result.last().usage)
+        assertEquals(0L, result.last().generationTimeMs)
+    }
+
+    @Test
+    fun `stream timing excludes first token wait and update callbacks and adds earlier generation`() = runBlocking {
+        var nowMs = 100_000L // Includes tool/approval time before this model request.
+        val history = listOf(UIMessage.assistant("tool result").copy(generationTimeMs = 400))
+        val provider = RecordingProvider(
+            chunks = listOf(chunk(UIMessagePart.Text("a")), chunk(UIMessagePart.Text("b"))),
+            beforeEmit = { index -> nowMs += if (index == 0) 5_000 else 1_000 },
+            onComplete = { nowMs += 500 },
+        )
+        val updates = mutableListOf<List<UIMessage>>()
+        val result = generateModelTurn(
+            provider, setting, history, history, params, model, true, true,
+            nanoTime = { nowMs * 1_000_000 },
+        ) {
+            updates.add(it)
+            nowMs += 200 // Rendering/persistence must not inflate model generation time.
+        }
+        assertEquals(1_900L, result.last().generationTimeMs)
+        assertEquals(result, updates.last())
+        assertNull(provider.requestMessages!!.last().generationTimeMs)
+        assertEquals(400L, history.last().generationTimeMs)
+    }
+
+    @Test
+    fun `nonstream timing uses request duration because first token is unavailable`() = runBlocking {
+        var nowMs = 0L
+        val provider = RecordingProvider(
+            listOf(chunk(UIMessagePart.Text("reply"))), onComplete = { nowMs += 750 },
+        )
+        val history = listOf(UIMessage.user("question"))
+        val result = generateModelTurn(
+            provider, setting, history, history, params, model, false, true,
+            nanoTime = { nowMs * 1_000_000 },
+        ) { nowMs += 100 }
+        assertEquals(750L, result.last().generationTimeMs)
+    }
+
+    @Test
     fun `proactive usage policy is preserved`() = runBlocking {
         val provider = RecordingProvider(listOf(
             chunk(UIMessagePart.Text("reply")).copy(usage = TokenUsage(promptTokens = 10)),
@@ -130,6 +204,25 @@ class GenerationModelTurnTest {
     }
 
     @Test
+    fun `failed and cancelled tool turns preserve reported partial usage without a second callback`() = runBlocking {
+        for (failure in listOf(IllegalStateException("API failed"), CancellationException("stop"))) {
+            val history = listOf(UIMessage.assistant("tool result").copy(usage = TokenUsage(10, 3, 2, 13)))
+            val provider = RecordingProvider(listOf(
+                chunk(UIMessagePart.Text("partial")).copy(usage = TokenUsage(20, 1, 4, 21)),
+            ), failure)
+            val updates = mutableListOf<List<UIMessage>>()
+            try {
+                turn(provider, history, history, updates = updates)
+                fail("Failure must propagate")
+            } catch (actual: Exception) {
+                assertSame(failure, actual)
+            }
+            assertEquals(TokenUsage(30, 4, 6, 34), updates.single().last().usage)
+            assertEquals(history.last().id, updates.single().last().id)
+        }
+    }
+
+    @Test
     fun `cancel during update prevents consuming later chunks`() = runBlocking {
         val cancellation = CancellationException("stop")
         val provider = RecordingProvider(listOf(
@@ -154,13 +247,16 @@ class GenerationModelTurnTest {
     fun `local diagnostics never reach streaming or nonstreaming providers or change history text`() = runBlocking {
         val metadata = buildJsonObject { put("memory_recall_v1", "local-only-secret") }
         val history = listOf(
-            UIMessage.user("question"), UIMessage.assistant("old reply").copy(localMetadata = metadata),
+            UIMessage.user("question"), UIMessage.assistant("old reply").copy(
+                localMetadata = metadata, generationTimeMs = 123,
+            ),
         )
         for (stream in listOf(true, false)) {
             val provider = RecordingProvider(listOf(chunk(UIMessagePart.Text("answer"))))
             turn(provider, history, history, stream = stream)
             val sent = requireNotNull(provider.requestMessages)
             assertTrue(sent.all { it.localMetadata == null })
+            assertTrue(sent.all { it.generationTimeMs == null })
             assertEquals(history.map { it.parts }, sent.map { it.parts })
             assertEquals(history.map { it.id }, sent.map { it.id })
             assertEquals(metadata, history.last().localMetadata)
@@ -174,7 +270,7 @@ class GenerationModelTurnTest {
         stream: Boolean = true,
         mergeUsage: Boolean = true,
         updates: MutableList<List<UIMessage>> = mutableListOf(),
-    ) = generateModelTurn(provider, setting, history, local, params, model, stream, mergeUsage) {
+    ) = generateModelTurn(provider, setting, history, local, params, model, stream, mergeUsage, nanoTime = { 0L }) {
         updates.add(it)
     }
 
@@ -190,6 +286,8 @@ class GenerationModelTurnTest {
     private class RecordingProvider(
         private val chunks: List<MessageChunk>,
         private val failure: Exception? = null,
+        private val beforeEmit: (Int) -> Unit = {},
+        private val onComplete: () -> Unit = {},
     ) : Provider<ProviderSetting> {
         var streamCalls = 0
         var generateCalls = 0
@@ -204,11 +302,13 @@ class GenerationModelTurnTest {
             streamCalls++
             record(providerSetting, messages, params)
             return flow {
-                for (chunk in chunks) {
+                for ((index, chunk) in chunks.withIndex()) {
+                    beforeEmit(index)
                     emittedChunks++
                     emit(chunk)
                 }
                 failure?.let { throw it }
+                onComplete()
             }
         }
 
@@ -218,6 +318,7 @@ class GenerationModelTurnTest {
             generateCalls++
             record(providerSetting, messages, params)
             failure?.let { throw it }
+            onComplete()
             return chunks.single()
         }
 

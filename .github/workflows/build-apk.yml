@@ -18,6 +18,7 @@ on:
       - fix/workflow-mcp-release-diagnostics
       - build/stable-release
       - fix/upstream-alignment-batch1
+      - feature/upstream-usage-stats
 
 jobs:
   build:
@@ -44,6 +45,10 @@ jobs:
       - name: Install web dependencies
         working-directory: web-ui
         run: pnpm install --frozen-lockfile
+
+      - name: Check web types
+        working-directory: web-ui
+        run: pnpm run typecheck
 
       - name: Set up Java 17
         uses: actions/setup-java@v4

@@ -182,6 +182,7 @@ data class MessageDto(
     val finishedAt: String? = null,
     val modelId: String? = null,
     val usage: TokenUsage? = null,
+    val generationTimeMs: Long? = null,
     val translation: String? = null
 )
 
@@ -301,5 +302,6 @@ fun UIMessage.toDto() = MessageDto(
     finishedAt = finishedAt?.toString(),
     modelId = modelId?.toString(),
     usage = usage,
+    generationTimeMs = generationTimeMs,
     translation = translation
 )
