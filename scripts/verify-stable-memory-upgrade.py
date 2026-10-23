@@ -18,7 +18,8 @@ builder = (source / 'di/DataSourceModule.kt').read_text().split('.addMigrations(
 registered = [name for name in migrations if re.search(r'\b' + name + r'\b', builder)]
 assert 'Migration_32_33_StableMemory' in registered
 assert 'Migration_37_38' in registered
-assert re.search(r'version\s*=\s*38', (source / 'data/db/AppDatabase.kt').read_text())
+assert 'Migration_38_39' in registered
+assert re.search(r'version\s*=\s*39', (source / 'data/db/AppDatabase.kt').read_text())
 statement = re.compile(r'db\.execSQL\((?:"""(.*?)"""|"([^"\n]+)")\)|\b(Migration_\w+)\.migrate\(db\)', re.S)
 def apply(db, name):
     for match in statement.finditer(migrations[name][2]):

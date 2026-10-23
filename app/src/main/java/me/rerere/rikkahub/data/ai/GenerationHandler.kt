@@ -92,6 +92,7 @@ class GenerationHandler(
     private val memoryBankService: MemoryBankService,
     private val memoryRecallService: MemoryRecallService,
     private val chatInteractionRepository: ChatInteractionRepository,
+    private val usageRecorder: UsageRecorder,
 ) {
     fun generateText(
         settings: Settings,
@@ -109,9 +110,13 @@ class GenerationHandler(
         workspaceCwd: String? = null,
         pluginPromptInjections: List<String> = emptyList(),
         conversationId: String? = null,
+        usageSource: UsageSource = UsageSource.CHAT,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
-        val providerImpl = providerManager.getProviderByType(provider)
+        val providerImpl = usageRecorder.wrap(
+            providerManager.getProviderByType(provider),
+            UsageTag(usageSource, assistant.id, conversationId?.let { kotlin.uuid.Uuid.parse(it) }),
+        )
  
         val recallHistory = selectCompactedContext(messages, contextCompaction).messages
         val recallTurn = memoryRecallService.prepare(
@@ -443,7 +448,9 @@ class GenerationHandler(
         val provider = model.findProvider(settings.providers)
             ?: error("Translation provider not found")
  
-        val providerHandler = providerManager.getProviderByType(provider)
+        val providerHandler = usageRecorder.wrap(
+            providerManager.getProviderByType(provider), UsageTag(UsageSource.TRANSLATION),
+        )
  
         if (!ModelRegistry.QWEN_MT.match(model.modelId)) {
             // Use regular translation with prompt

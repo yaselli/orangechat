@@ -8,6 +8,9 @@ package me.rerere.rikkahub.di
 
 import me.rerere.rikkahub.data.db.migrations.Migration_32_33_StableMemory
 import me.rerere.rikkahub.data.db.migrations.Migration_37_38
+import me.rerere.rikkahub.data.db.migrations.Migration_38_39
+import me.rerere.rikkahub.data.ai.UsageRecorder
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.db.migrations.Migration_31_33_HistoryMemory
 import me.rerere.rikkahub.data.memory.HistoryMemoryStorage
 import me.rerere.rikkahub.data.memory.HistoryMemoryRepository
@@ -96,6 +99,7 @@ val dataSourceModule = module {
                 Migration_19_20, Migration_20_21, Migration_21_22, Migration_23_24, Migration_24_25,
                 Migration_25_26, Migration_29_32_ChatInteractions, Migration_29_30, Migration_30_31, Migration_31_33_HistoryMemory, Migration_33_34,
                 Migration_34_35, Migration_35_36, Migration_36_37, Migration_32_33_StableMemory, Migration_37_38,
+                Migration_38_39,
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
@@ -133,12 +137,14 @@ val dataSourceModule = module {
     }
 
     single { get<AppDatabase>().memoryIndexDao() }
+    single { get<AppDatabase>().usageRecordDao() }
+    single { UsageRecorder(get(), get<AppScope>()) }
 
     single<HistoryMemoryStorage> { HistoryMemoryRepository(get()) }
     single { MemoryRecallService(get(), get(), get(), get<Context>(), get(), get<AppDatabase>().memoryOrganizationDao()) }
     single { get<AppDatabase>().memoryAutoIndexDao() }
     single { MemoryAutoIndexService(get(), { get<SettingsStore>().settingsFlow.value }, get()) }
-    single { MemoryOrganizationService(get(), get(), get(), get(), get()) }
+    single { MemoryOrganizationService(get(), get(), get(), get(), get(), get()) }
 
     single {
         AssistantTemplateLoader(settingsStore = get())
@@ -216,7 +222,8 @@ val dataSourceModule = module {
             aiLoggingManager = get(),
             memoryBankService = get(),
             memoryRecallService = get(),
-            chatInteractionRepository = get()
+            chatInteractionRepository = get(),
+            usageRecorder = get(),
         )
     }
 

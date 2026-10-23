@@ -1,5 +1,9 @@
 package me.rerere.rikkahub.data.memory
 
+import me.rerere.rikkahub.data.ai.UsageRecorder
+import me.rerere.rikkahub.data.ai.UsageSource
+import me.rerere.rikkahub.data.ai.UsageTag
+
 import android.content.Context
 import androidx.room.withTransaction
 import kotlinx.coroutines.CancellationException
@@ -35,6 +39,7 @@ class MemoryOrganizationService(
     private val history: HistoryMemoryStorage,
     client: OkHttpClient,
     context: Context,
+    private val usageRecorder: UsageRecorder,
 ) {
     private val providers = ProviderManager(
         client.newBuilder().retryOnConnectionFailure(false)
@@ -113,7 +118,10 @@ class MemoryOrganizationService(
                 val inputs = plan.sources.map { SourceInput(it.messageId, it.role, it.createdAt, it.text) }
                 // Exactly one generation call. No tools, chat persona, attachments, trace metadata or fallback model.
                 val response = withTimeout(65000) {
-                    providers.getProviderByType(provider).generateText(
+                    usageRecorder.wrap(
+                        providers.getProviderByType(provider),
+                        UsageTag(UsageSource.MEMORY, assistant.id),
+                    ).generateText(
                         providerSetting = provider,
                         messages = listOf(
                             UIMessage.system(MEMORY_ORGANIZATION_PROMPT),

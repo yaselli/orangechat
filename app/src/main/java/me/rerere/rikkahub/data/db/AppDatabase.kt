@@ -76,8 +76,9 @@ import me.rerere.rikkahub.utils.JsonInstant
         SshHostEntity::class,
         SecurityAuditEntity::class,
         MessageReaction::class,
+        me.rerere.rikkahub.data.db.entity.UsageRecordEntity::class,
     ],
-    version = 38,
+    version = 39,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -100,6 +101,8 @@ import me.rerere.rikkahub.utils.JsonInstant
 )
 @TypeConverters(TokenUsageConverter::class)
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun usageRecordDao(): me.rerere.rikkahub.data.db.dao.UsageRecordDAO
+
     abstract fun memoryAutoIndexDao(): me.rerere.rikkahub.data.memory.MemoryAutoIndexDAO
 
     abstract fun memoryOrganizationDao(): MemoryOrganizationDAO

@@ -6,6 +6,10 @@
 
 package me.rerere.rikkahub.service
 
+import me.rerere.rikkahub.data.ai.UsageRecorder
+import me.rerere.rikkahub.data.ai.UsageSource
+import me.rerere.rikkahub.data.ai.UsageTag
+
 import me.rerere.rikkahub.data.ai.mcp.getAvailableMcpTools
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.rikkahub.data.interaction.interactionText
@@ -174,6 +178,7 @@ class ChatService(
     private val generationHandler: GenerationHandler,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
+    private val usageRecorder: UsageRecorder,
     private val toolSurfaceBuilder: ToolSurfaceBuilder,
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
@@ -760,7 +765,10 @@ class ChatService(
                     Log.e(TAG, "notifyVoiceCallDeclined: no provider found, conversationId=$conversationId, modelId=${model.id}")
                     return@launch
                 }
-                val providerHandler = providerManager.getProviderByType(provider)
+                val providerHandler = usageRecorder.wrap(
+                    providerManager.getProviderByType(provider),
+                    UsageTag(UsageSource.VOICE_EVENT, assistant.id, conversationId),
+                )
 
                 val compacted = selectCompactedContext(
                     currentConversation.currentMessages, currentConversation.contextCompaction
@@ -1153,6 +1161,7 @@ class ChatService(
 
             // start generating
             generationHandler.generateText(
+                usageSource = if (applicationReceipt == null) UsageSource.CHAT else UsageSource.PROACTIVE,
                 settings = settings,
                 model = model,
                 processingStatus = session.processingStatus,
@@ -1533,7 +1542,10 @@ class ChatService(
             val model = settings.findModelById(settings.titleModelId) ?: return
             val provider = model.findProvider(settings.providers) ?: return
 
-            val providerHandler = providerManager.getProviderByType(provider)
+            val providerHandler = usageRecorder.wrap(
+                providerManager.getProviderByType(provider),
+                UsageTag(UsageSource.TITLE, conversation.assistantId, conversationId),
+            )
             val result = providerHandler.generateText(
                 providerSetting = provider,
                 messages = listOf(
@@ -1589,7 +1601,10 @@ class ChatService(
                 }
             }
 
-            val providerHandler = providerManager.getProviderByType(provider)
+            val providerHandler = usageRecorder.wrap(
+                providerManager.getProviderByType(provider),
+                UsageTag(UsageSource.SUGGESTION, conversation.assistantId, conversationId),
+            )
             val result = providerHandler.generateText(
                 providerSetting = provider,
                 messages = listOf(
@@ -1679,7 +1694,10 @@ class ChatService(
                         ?: settings.getCurrentChatModel()
                         ?: error("未配置压缩模型")
                     val provider = model.findProvider(settings.providers) ?: error("未找到压缩模型供应商")
-                    val handler = providerManager.getProviderByType(provider)
+                    val handler = usageRecorder.wrap(
+                        providerManager.getProviderByType(provider),
+                        UsageTag(UsageSource.COMPRESSION, conversation.assistantId, conversationId),
+                    )
                     val summary = compressContext(plan) { previous, content ->
                         val source = buildString {
                             if (!previous.isNullOrBlank()) {

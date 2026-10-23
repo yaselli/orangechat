@@ -144,6 +144,7 @@ val appModule = module {
             generationHandler = get(),
             templateTransformer = get(),
             providerManager = get(),
+            usageRecorder = get(),
             toolSurfaceBuilder = get(),
             mcpManager = get(),
             filesManager = get(),

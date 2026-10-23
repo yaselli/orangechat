@@ -21,7 +21,7 @@ class StableMemoryUpgradeTest {
 
     @Test
     fun releasedStableAndMemoryDatabasesUpgradeWithoutLosingSourcesOrReactions() {
-        for (version in listOf(29, 30, 31, 32, 36, 37)) {
+        for (version in listOf(29, 30, 31, 32, 36, 37, 38)) {
             val name = "stable-memory-upgrade-$version"
             val original = """[{"id":"old"},{"id":"selected","annotations":[{"type":"avatar_interaction","actor":"user","target":"assistant"}]}]"""
             helper.createDatabase(name, version).apply {
@@ -33,10 +33,10 @@ class StableMemoryUpgradeTest {
                     "'reaction','chat','selected','user','❤️','原话',1)")
                 close()
             }
-            val db = helper.runMigrationsAndValidate(name, 38, true,
+            val db = helper.runMigrationsAndValidate(name, 39, true,
                 Migration_29_30, Migration_30_31, Migration_29_32_ChatInteractions,
                 Migration_31_33_HistoryMemory, Migration_32_33_StableMemory,
-                Migration_33_34, Migration_34_35, Migration_35_36, Migration_36_37, Migration_37_38)
+                Migration_33_34, Migration_34_35, Migration_35_36, Migration_36_37, Migration_37_38, Migration_38_39)
             try {
                 db.query("SELECT messages,select_index FROM message_node WHERE id='node'").use {
                     assertTrue(it.moveToFirst())
@@ -52,6 +52,10 @@ class StableMemoryUpgradeTest {
                     assertTrue(it.moveToFirst())
                     assertEquals("❤️", it.getString(0))
                     assertEquals("原话", it.getString(1))
+                }
+                db.query("SELECT COUNT(*) FROM usage_record").use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(0, it.getInt(0))
                 }
                 db.query("PRAGMA foreign_key_check").use { assertEquals(0, it.count) }
             } finally {

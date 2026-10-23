@@ -19,6 +19,7 @@ on:
       - build/stable-release
       - fix/upstream-alignment-batch1
       - feature/upstream-usage-stats
+      - feature/upstream-usage-dashboard
 
 jobs:
   build:
@@ -76,6 +77,9 @@ jobs:
         run: |
           mkdir -p verification-logs
           ./gradlew testDebugUnitTest --continue 2>&1 | tee verification-logs/unit-tests.txt
+
+      - name: Verify usage accounting SQL and migration
+        run: python3 scripts/verify-usage-stats.py
 
       - name: Verify memory database migration SQL
         run: python3 scripts/verify-memory-migration.py

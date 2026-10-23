@@ -9,6 +9,7 @@ on:
       - fix/workflow-mcp-release-diagnostics
       - fix/upstream-alignment-batch1
       - feature/upstream-usage-stats
+      - feature/upstream-usage-dashboard
   workflow_dispatch:
 
 permissions:
@@ -58,6 +59,9 @@ jobs:
           ./gradlew testDebugUnitTest
       - name: Compile database device tests
         run: ./gradlew :app:compileDebugAndroidTestKotlin
+      - name: Verify usage accounting SQL and migration
+        run: python3 scripts/verify-usage-stats.py
+
       - name: Verify interaction migration
         run: python3 scripts/verify-chat-interactions.py
       - name: Verify stable and memory migration routes
@@ -78,7 +82,7 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest,me.rerere.rikkahub.data.db.fts.MessageFtsManagerTest
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest,me.rerere.rikkahub.data.db.fts.MessageFtsManagerTest,me.rerere.rikkahub.data.db.dao.UsageRecordDAOTest
       - name: Release lint
         run: ./gradlew lintRelease
       - name: Build signed release APK
@@ -119,6 +123,7 @@ jobs:
             **/build/reports/lint-results*.*
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/32.json
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/38.json
+            app/schemas/me.rerere.rikkahub.data.db.AppDatabase/39.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
           if-no-files-found: warn

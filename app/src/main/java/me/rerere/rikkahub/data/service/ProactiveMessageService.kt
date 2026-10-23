@@ -6,6 +6,10 @@
 
 package me.rerere.rikkahub.data.service
 
+import me.rerere.rikkahub.data.ai.UsageRecorder
+import me.rerere.rikkahub.data.ai.UsageSource
+import me.rerere.rikkahub.data.ai.UsageTag
+
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -312,6 +316,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val memoryRepository: MemoryRepository by inject()
     private val memoryRecallService: MemoryRecallService by inject()
     private val providerManager: ProviderManager by inject()
+    private val usageRecorder: UsageRecorder by inject()
     private val json: Json by inject()
     private val chatService: ChatService by inject()
     private val chatInteractionRepository: ChatInteractionRepository by inject()
@@ -671,7 +676,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 )
                 trace.messages("request", messages)
 
-                val providerImpl = providerManager.getProviderByType(providerSetting)
+                val providerImpl = usageRecorder.wrap(
+                    providerManager.getProviderByType(providerSetting),
+                    UsageTag(UsageSource.PROACTIVE, assistant.id, conversationId),
+                )
 
                 // 主动消息场景：支持工具调用，但限制最大步数
                 // temperature 不强制默认 0.8f，保持与 GenerationHandler 一致（assistant.temperature 为 null 时不传），
