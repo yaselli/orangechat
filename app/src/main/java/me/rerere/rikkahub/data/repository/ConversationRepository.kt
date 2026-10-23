@@ -361,8 +361,6 @@ class ConversationRepository(
                 if (changedNodeIds.isNotEmpty()) {
                     messageFtsManager.reindexNodes(
                         conversationId = conversation.id.toString(),
-                        conversationTitle = conversation.title,
-                        updateAt = conversation.updateAt,
                         changedNodeIds = changedNodeIds,
                         currentNodes = conversation.messageNodes,
                     )
