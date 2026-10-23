@@ -24,6 +24,7 @@ import kotlin.uuid.Uuid
 @RunWith(AndroidJUnit4::class)
 class MessageFtsManagerTest {
     private lateinit var database: AppDatabase
+    private lateinit var databaseName: String
     private lateinit var db: SupportSQLiteDatabase
     private lateinit var manager: MessageFtsManager
 
@@ -38,7 +39,10 @@ class MessageFtsManagerTest {
                 options
             }
         ))
-        database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+        // Requery's in-memory path bypasses ConfigurationOptions and never loads libsimple.
+        // Use an isolated temporary file DB, matching the extension/WAL setup of the app.
+        databaseName = "message-fts-test-${Uuid.random()}.db"
+        database = Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
             .openHelperFactory(factory)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
@@ -52,7 +56,12 @@ class MessageFtsManagerTest {
     }
 
     @After
-    fun tearDown() = database.close()
+    fun tearDown() {
+        if (::database.isInitialized) database.close()
+        if (::databaseName.isInitialized) {
+            InstrumentationRegistry.getInstrumentation().targetContext.deleteDatabase(databaseName)
+        }
+    }
 
     private fun count(table: String): Int = db.query("SELECT COUNT(*) FROM $table").use {
         assertTrue(it.moveToFirst())
