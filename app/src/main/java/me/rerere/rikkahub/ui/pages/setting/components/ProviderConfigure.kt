@@ -512,9 +512,21 @@ private fun ColumnScope.ProviderConfigureGoogle(
         Checkbox(
             checked = provider.vertexAI,
             onCheckedChange = {
-                onEdit(provider.copy(vertexAI = it))
+                onEdit(provider.copy(vertexAI = it, useInteractionsApi = if (it) false else provider.useInteractionsApi))
             }
         )
+    }
+
+    if (!provider.vertexAI) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("使用 Gemini Interactions API")
+                Text("按本地会话管理历史，不启用服务端续接。关闭可使用原 GenerateContent 接口。",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            Checkbox(checked = provider.useInteractionsApi,
+                onCheckedChange = { onEdit(provider.copy(useInteractionsApi = it)) })
+        }
     }
 
     if (!(provider.vertexAI && provider.useServiceAccount)) {

@@ -25,6 +25,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -84,6 +87,7 @@ class VoiceCallService : Service(), KoinComponent {
     // 任务协程
     private var vadJob: Job? = null
     private var speakingMonitorJob: Job? = null
+    private var listenWhileReplying = true
     private var voiceMessageId: kotlin.uuid.Uuid? = null
     private var conversationMonitorJob: Job? = null
     private var asrMonitorJob: Job? = null
@@ -209,10 +213,21 @@ class VoiceCallService : Service(), KoinComponent {
             try {
                 // 关键修复: 两个工厂函数现在是 suspend 函数, 会真正挂起等待
                 // provider 设置完成后才返回实例, 消除了之前 controller 为 null 的竞态.
+                listenWhileReplying = settingsStore.settingsFlowRaw.first().voiceCallListenWhileReplying
                 asr = createCustomAsrState(applicationContext, httpClient, settingsStore)
                 tts = createCustomTtsState(applicationContext, settingsStore)
 
                 startCall()
+                launch {
+                    settingsStore.settingsFlowRaw.map { it.voiceCallListenWhileReplying }.distinctUntilChanged().collect {
+                        if (listenWhileReplying != it) {
+                            listenWhileReplying = it
+                            interruptDetectJob?.cancel()
+                            updateVoiceCapture()
+                            if (_uiState.value.status == VoiceCallStatus.Speaking) startInterruptDetection()
+                        }
+                    }
+                }
 
                 // 订阅 uiState 变化, 实时刷新通知内容
                 launch {
@@ -261,9 +276,8 @@ class VoiceCallService : Service(), KoinComponent {
     /**
      * 开始语音通话
      *
-     * ASR 在整个通话期间持续录音 (不再像原来那样只在 Listening 状态开启).
-     * 这里只调用一次 asr.start(), 作为整场通话唯一的录音启动点
-     * (除非用户中途静音又取消).
+     * 默认在回复期间持续录音；关闭继续监听后，生成与朗读阶段暂停采集。
+     * 开始时建立采集；回到聆听、取消静音或调整设置时按策略恢复。
      */
     fun startCall() {
         if (_uiState.value.status != VoiceCallStatus.Idle) return
@@ -282,20 +296,7 @@ class VoiceCallService : Service(), KoinComponent {
             )
         }
 
-        try {
-            asr.start { transcript ->
-                _uiState.update { it.copy(userTranscript = transcript) }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "启动 ASR 失败, conversationId=$conversationId")
-            _uiState.update {
-                it.copy(
-                    status = VoiceCallStatus.Error,
-                    errorMessage = "麦克风启动失败: ${e.message}"
-                )
-            }
-            return
-        }
+        if (!updateVoiceCapture()) return
 
         startVadDetection()
         startAsrMonitor()
@@ -304,7 +305,7 @@ class VoiceCallService : Service(), KoinComponent {
 
     /**
      * 从别的状态切回 Listening 时复位状态 + VAD 计时器.
-     * 不再调用 asr.stop()/asr.start() (ASR 现在贯穿全程).
+     * 按继续监听设置与静音状态恢复采集。
      */
     private fun startListening() {
         tts.stop()
@@ -326,13 +327,7 @@ class VoiceCallService : Service(), KoinComponent {
         // 重启 ASR: 非流式 ASR (SiliconFlow) 是“录一段→停”的一次性模式,
         // AI 说完话回到 Listening 时它已停, 不重启则音波球不动、说话发不出去.
         // 流式 ASR 的 start() 有 isRecording 守卫, 重复调用无副作用.
-        if (!isMuted) {
-            runCatching {
-                asr.start { transcript ->
-                    _uiState.update { it.copy(userTranscript = transcript) }
-                }
-            }.onFailure { Log.e(TAG, it.toString()) }
-        }
+        if (!updateVoiceCapture()) return
 
         startVadDetection()
     }
@@ -396,7 +391,7 @@ class VoiceCallService : Service(), KoinComponent {
 
     /**
      * 发送当前转写的消息.
-     * 不再调用 asr.stop() (ASR 要持续跑到整场通话结束).
+     * 关闭继续监听时，切到生成阶段后暂停采集。
      */
     private fun sendCurrentMessage() {
         val transcript = _uiState.value.userTranscript.trim()
@@ -416,6 +411,7 @@ class VoiceCallService : Service(), KoinComponent {
         }
         ttsSentLength = 0
         lastAssistantText = ""
+        if (!listenWhileReplying && !updateVoiceCapture()) return
 
         try {
             val queued = chatService.enqueueVoiceMessage(conversationId, transcript)
@@ -617,6 +613,7 @@ class VoiceCallService : Service(), KoinComponent {
      */
     private fun startInterruptDetection() {
         interruptDetectJob?.cancel()
+        if (!listenWhileReplying) return
         interruptDetectJob = serviceScope.launch {
             var baselineTranscript = _uiState.value.userTranscript
             while (true) {
@@ -636,7 +633,7 @@ class VoiceCallService : Service(), KoinComponent {
                 if (hasNewTranscript || hasLoudVoice) {
                     Log.d(
                         TAG,
-                        "检测到用户打断: transcript=$currentTranscript, amplitude=$recentAmplitude"
+                        "检测到用户打断: amplitude=$recentAmplitude"
                     )
                     interruptSpeaking()
                     break
@@ -647,7 +644,7 @@ class VoiceCallService : Service(), KoinComponent {
 
     /**
      * 用户打断 AI 说话 (Barge-in).
-     * 不再调用 asr.start() (ASR 一直是开着的), 只做状态切换 + cancel 协程.
+     * 切回聆听状态，由采集策略恢复麦克风。
      */
     fun interruptSpeaking() {
         if (_uiState.value.status != VoiceCallStatus.Speaking) return
@@ -694,25 +691,29 @@ class VoiceCallService : Service(), KoinComponent {
 
     /**
      * 切换静音. 在任何状态下都要能生效/取消, 不再判断 status.
-     * 静音 = 模型听不到; 取消静音 = 不管 Listening 还是 Speaking 都重新开始监听.
+     * 静音 = 模型听不到; 取消静音后仍遵守回复期间是否监听的设置。
      */
     fun toggleMute() {
         isMuted = !isMuted
         _uiState.update { it.copy(isMuted = isMuted) }
 
-        try {
-            if (isMuted) {
-                asr.stop()
-            } else {
-                // 不管当前是 Listening 还是 Speaking, 取消静音都要重新开始监听
-                asr.start { transcript ->
+        updateVoiceCapture()
+    }
+
+    private fun updateVoiceCapture(): Boolean = try {
+        if (shouldCaptureVoice(_uiState.value.status, isMuted, listenWhileReplying)) {
+            asr.start { transcript ->
+                if (shouldCaptureVoice(_uiState.value.status, isMuted, listenWhileReplying)) {
                     _uiState.update { it.copy(userTranscript = transcript) }
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "切换静音状态失败, isMuted=$isMuted")
-            _uiState.update { it.copy(errorMessage = "麦克风切换失败: ${e.message}") }
+        } else {
+            asr.stop()
         }
+        true
+    } catch (error: Exception) {
+        _uiState.update { it.copy(status = VoiceCallStatus.Error, errorMessage = "麦克风切换失败: ${error.message}") }
+        false
     }
 
     /**

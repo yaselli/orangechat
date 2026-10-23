@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -145,7 +146,7 @@ fun TranslationHistoryItem(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${Locale.forLanguageTag(entry.targetLanguage).getDisplayName(Locale.getDefault())} · " +
+                    text = "${Locale.forLanguageTag(entry.targetLanguage).getDisplayName(LocalConfiguration.current.locales[0])} · " +
                         Instant.ofEpochMilli(entry.createAt).toLocalDateTime(),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

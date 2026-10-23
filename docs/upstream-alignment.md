@@ -53,8 +53,8 @@ python3 scripts/verify-message-fts.py
 5. 模型上下文长度设置与用量显示：已接入，新增回归待本轮 CI。上限是用户填写的模型共享元数据；显示当前会话最近一次聊天／主动请求的输入 token，不叠加工具多轮，不混入标题／翻译，不冒充下一请求预算。未知上限不猜测，不触发自动压缩，摘要检查点单独保存。
 6. 原生图表工具与图表展示：已接入，新增回归待本轮 CI。角色本地工具可选开启 chart_display，支持折线／柱状／散点、图例、数值／对数轴、数据表切换。仅成功且参数合法的调用渲染为独立卡片，保留工具轨迹；大量表格行按需绘制。已有冻结配置的会话需显式同步角色默认以启用新工具。
 7. 翻译历史记录：已接入，新增回归待本轮 CI。翻译页保存最近 100 条完整成功结果，分页查看、恢复原文／译文／目标语言、左滑删除、确认清空；目标语言持久化，可将结果放回输入。取消／失败不存半条结果，新任务不会被旧任务结束回调关闭。消息气泡内的翻译保持原流程，不混入翻译页历史。
-8. DeepSeek 搜索／网页读取、Gemini Interactions API 等独立接口适配。
-9. 语音回复期间是否持续监听的可选设置，保留当前通话和打断机制。
+8. DeepSeek 搜索／网页读取、Gemini Interactions API：已接入，待本轮 CI 与统一验收。搜索服务列表可添加 DeepSeek，带独立 Key；Gemini 提供商可选 Interactions，默认仍为原接口，Vertex AI 保留原路径。Interactions 使用本地管理历史与 store=false，兼容工具分组、思考签名、服务器工具结果及输入图片／音频；用请求内状态生成旧 MessageChunk 的权威快照，避免重复拼接。流缺少完成事件会报错，不将半个调用当成功。
+9. 语音回复期间继续监听：已接入，待本轮 CI 与统一验收。语音设置 ASR 页增加开关，默认 true 保留现有行为；关闭时在生成／朗读阶段暂停采集，回到聆听恢复，静音优先，仍可手动打断。
 
 用量基础适配来源：[上游累计与耗时修复](https://github.com/rikkahub/rikkahub/commit/e7f2c04f76974b2613404385e21db999e910b29c)。
 请求用量账本与统计页适配上游 `43f1a5df24adc09b6720ae2e8aa568a12a5bf43a` 的 UsageRecorder／UsageRecordDAO。
@@ -101,3 +101,14 @@ Room v40→v41 仅新增 translation_history 及时间索引；保存与裁剪�
 v41 schema 已从 3b8ba15 的 Room/KSP 实际编译产物提取，生产迁移与编译导出的表列、索引、外键全部匹配。
 该提交的应用编译发现长图导出同样使用消息分组，已补齐 ChartBlock 渲染；不能将此次 Room 生成成功表述为全应用编译或单测通过。
 翻译流在页面协程收集并更新显示，后台请求不直接回写页面状态；最终 JVM、设备测试及双版本结果仍待复验。
+
+第二批剩余接口与语音来源仍对齐 `43f1a5df`；协议形状另核对官方文档：
+- https://api-docs.deepseek.com/api/search/ 与 https://api-docs.deepseek.com/api/fetch/
+- https://ai.google.dev/gemini-api/docs/interactions-overview 与 https://ai.google.dev/api/interactions-api
+
+本轮不引入上游整个 StreamChunk 框架：仅为 MessageChunk 增加默认关闭的快照标记，原有提供商仍使用增量语义。
+Interactions 的原始服务端工具调用／结果保存在其命名空间 metadata，输出始终标记已执行，不走手机工具调用；
+跨协议的 GenerateContent 思考签名不混回 Interactions。请求和 SSE 正文不写日志，工具与搜索模拟测试不使用真实 Key 或付费请求。
+目前不迁移服务端会话续接、后台 Deep Research 或 Vertex Interactions；旧接口和 Vertex 的既有功能不替换。
+12425e9 的 Debug 单测与设备测试编译通过，但 lint 命中翻译历史非可观察 Locale，本轮改为 LocalConfiguration 读取。
+第二批功能实现清单已覆盖；仅在最新 CI 与统一真机验收通过后才标记第二批完成，当前仍不发布或合入 master。
