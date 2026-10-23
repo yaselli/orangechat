@@ -559,6 +559,9 @@ private fun ExportedChatMessage(
         ) {
             groupedParts.forEach { block ->
                 when (block) {
+                    is MessagePartBlock.ChartBlock -> {
+                        me.rerere.rikkahub.ui.components.charts.ChartCard(spec = block.spec)
+                    }
                     is MessagePartBlock.ThinkingBlock -> {
                         if (block.steps.isNotEmpty()) {
                             ChainOfThought(

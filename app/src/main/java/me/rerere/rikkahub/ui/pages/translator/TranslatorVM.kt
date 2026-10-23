@@ -93,10 +93,10 @@ class TranslatorVM(
             try {
                 val requestSettings = settingsStore.settingsFlowRaw.first()
                 var result = ""
-                generationHandler.translateText(requestSettings, source, language) { text ->
+                generationHandler.translateText(requestSettings, source, language).collect { text ->
                     result = text
                     if (currentJob == coroutineContext[Job]) _translatedText.value = text
-                }.collect { }
+                }
                 ensureActive()
                 if (result.isNotBlank()) historyRepository.add(
                     source, result, language.toLanguageTag(), requestSettings.translateModeId,
