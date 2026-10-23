@@ -170,6 +170,7 @@ fun ChatInput(
     onStickerSend: (markdown: String) -> Unit,
     onVoiceMessage: ((url: String, duration: Long, transcript: String) -> Unit)? = null,
     autoStartVoice: Boolean = false,
+    onConversationSettings: () -> Unit = {},
 ) {
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
@@ -869,6 +870,11 @@ fun ChatInput(
                             state = state,
                             assistant = assistant,
                             mcpManager = mcpManager,
+                            onConversationSettings = {
+                                dismissExpand()
+                                onConversationSettings()
+                            },
+                            conversationSettingsEnabled = !loading,
                             onCompressContext = onCompressContext,
                             onUpdateAssistant = onUpdateAssistant,
                             showInjectionSheet = showInjectionSheet,

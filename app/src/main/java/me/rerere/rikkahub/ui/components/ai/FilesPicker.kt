@@ -57,6 +57,7 @@ import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Package01
+import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Video01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -95,6 +96,8 @@ internal fun FilesPicker(
     onPickAudio: () -> Unit,
     onRecordAudio: () -> Unit,
     onPickFile: () -> Unit,
+    onConversationSettings: () -> Unit,
+    conversationSettingsEnabled: Boolean,
 ) {
     // settings 仍保留给 InjectionQuickConfigSheet -> ExtensionSelector 使用（它需要完整 Settings）
     val settings = LocalSettings.current
@@ -171,6 +174,14 @@ internal fun FilesPicker(
                 .clickable {
                     onShowInjectionSheetChange(true)
                 },
+        )
+
+        ListItem(
+            leadingContent = { Icon(HugeIcons.Settings03, contentDescription = null) },
+            headlineContent = { Text("会话设置") },
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.large)
+                .clickable(enabled = conversationSettingsEnabled, onClick = onConversationSettings),
         )
 
         // Compress History Button

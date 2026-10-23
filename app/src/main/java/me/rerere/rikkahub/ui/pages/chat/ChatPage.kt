@@ -85,7 +85,7 @@ import me.rerere.rikkahub.service.BlockedChatState
 import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.components.ai.MessageQueuePanel
-import me.rerere.rikkahub.ui.components.ai.ConversationRequestBar
+import me.rerere.rikkahub.ui.components.ai.ConversationSettingsDialog
 import me.rerere.rikkahub.ui.components.ui.AppUpdatePrompt
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -328,7 +328,6 @@ private fun ChatPageContent(
     onClearAllErrors: () -> Unit,
 ) {
     val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
-    val contextUsage by vm.contextUsage.collectAsStateWithLifecycle()
     val reactions by vm.reactions.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -337,6 +336,7 @@ private fun ChatPageContent(
     val needsLiveHaze = displaySetting.inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS ||
         displaySetting.enableBlurEffect || displaySetting.enableGlassDrawer
     var previewMode by rememberSaveable { mutableStateOf(false) }
+    var showConversationSettings by rememberSaveable(conversation.id) { mutableStateOf(false) }
     val blockedChatState by vm.blockedChatState.collectAsStateWithLifecycle()
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(blockedChatState.blocked) {
@@ -395,16 +395,18 @@ private fun ChatPageContent(
                         onPause = vm::pauseBlockedReplies,
                     )
                 } else Column {
-                    ConversationRequestBar(
-                        conversation = conversation,
-                        assistant = setting.getCurrentAssistant(),
-                        model = currentChatModel,
-                        usage = contextUsage,
-                        loading = loadingJob != null,
-                        onSave = vm::updateConversationParameters,
-                        onModelLimit = vm::setModelContextWindow,
-                        onSync = vm::syncConversationDefaults,
-                    )
+                    if (showConversationSettings) {
+                        ConversationSettingsDialog(
+                            conversation = conversation,
+                            assistant = setting.getCurrentAssistant(),
+                            model = currentChatModel,
+                            loading = loadingJob != null,
+                            onSave = vm::updateConversationParameters,
+                            onModelLimit = vm::setModelContextWindow,
+                            onSync = vm::syncConversationDefaults,
+                            onDismiss = { showConversationSettings = false },
+                        )
+                    }
                     MessageQueuePanel(
                         state = messageQueue,
                         onRemove = vm::removeQueuedMessage,
@@ -420,6 +422,7 @@ private fun ChatPageContent(
                         mcpManager = vm.mcpManager,
                         hazeState = hazeState,
                         autoStartVoice = autoStartVoice,
+                        onConversationSettings = { showConversationSettings = true },
                         onCancelClick = {
                             vm.stopGeneration()
                         },
