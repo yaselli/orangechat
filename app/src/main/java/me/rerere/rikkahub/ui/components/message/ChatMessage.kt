@@ -399,6 +399,9 @@ private fun MessagePartsBlock(
     }
     groupedParts.fastForEach { block ->
         when (block) {
+            is MessagePartBlock.ChartBlock -> key("chart", block.index) {
+                me.rerere.rikkahub.ui.components.charts.ChartCard(spec = block.spec)
+            }
             is MessagePartBlock.ThinkingBlock -> {
                 if (block.steps.isNotEmpty()) {
                     val isReasoningOnlyBlock = block.steps.fastAll { it is ThinkingStep.ReasoningStep }

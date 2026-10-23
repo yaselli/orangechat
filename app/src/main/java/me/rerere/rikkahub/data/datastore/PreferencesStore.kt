@@ -729,6 +729,7 @@ data class Settings(
     val imageGenerationModelId: Uuid = Uuid.random(),
     val titlePrompt: String = DEFAULT_TITLE_PROMPT,
     val translateModeId: Uuid = Uuid.random(),
+    val translateTargetLanguage: String = "zh-CN",
     val translatePrompt: String = DEFAULT_TRANSLATION_PROMPT,
     val translateThinkingBudget: Int = 0,
     val suggestionModelId: Uuid = Uuid.random(),

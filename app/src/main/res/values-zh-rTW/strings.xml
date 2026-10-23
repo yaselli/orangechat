@@ -1163,4 +1163,22 @@
   <string name="plugin_security_banner">⚠ 插件可執行網路請求並存取您已授權的系統資料。請僅從可信來源安裝插件。</string>
   <string name="web_server_security_warning_no_jwt">⚠ 未啟用 JWT 鑒權或密碼為空。目前任何可存取該位址的人都能讀取您的對話記錄，強烈建議立即設定密碼並開啟 JWT。</string>
   <string name="setting_provider_page_rerank_model">重排</string>
+  <string name="chat_page_queue_paused_count">佇列已暫停（%1$d）</string>
+  <string name="chat_page_queue_pending_count">待傳送（%1$d）</string>
+  <string name="chat_page_queue_resume">繼續傳送</string>
+  <string name="chat_page_queue_image">[圖片]</string>
+  <string name="chat_page_queue_file">[檔案]</string>
+  <string name="chat_page_queue_audio">[錄音]</string>
+  <string name="chat_page_queue_video">[影片]</string>
+  <string name="chat_page_queue_editing">編輯中</string>
+  <string name="chat_page_queue_remove">撤回</string>
+  <string name="chat_page_queue_edit_title">編輯佇列訊息</string>
+  <string name="chart_series">系列</string>
+  <string name="chart_series_name">系列 %1$d</string>
+  <string name="chart_mode_chart">圖表</string>
+  <string name="chart_mode_table">表格</string>
+  <string name="translator_page_history">歷史</string>
+  <string name="translator_page_clear_history">清空歷史</string>
+  <string name="translator_page_clear_history_title">清空翻譯歷史？</string>
+  <string name="translator_page_clear_history_message">刪除所有已儲存的翻譯記錄？此操作無法復原。</string>
 </resources>

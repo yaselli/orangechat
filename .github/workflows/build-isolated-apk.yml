@@ -60,8 +60,8 @@ jobs:
       - name: Upload generated Room schema
         uses: actions/upload-artifact@v4
         with:
-          name: room-v40-release
-          path: app/schemas/me.rerere.rikkahub.data.db.AppDatabase/40.json
+          name: room-v41-release
+          path: app/schemas/me.rerere.rikkahub.data.db.AppDatabase/41.json
           if-no-files-found: error
       - name: Compile database device tests
         run: ./gradlew :app:compileDebugAndroidTestKotlin
@@ -69,6 +69,7 @@ jobs:
         run: |
           python3 scripts/verify-usage-stats.py
           python3 scripts/verify-conversation-config.py
+          python3 scripts/verify-translation-history.py
 
       - name: Verify interaction migration
         run: python3 scripts/verify-chat-interactions.py
@@ -90,7 +91,7 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest,me.rerere.rikkahub.data.db.fts.MessageFtsManagerTest,me.rerere.rikkahub.data.db.dao.UsageRecordDAOTest
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest,me.rerere.rikkahub.data.db.fts.MessageFtsManagerTest,me.rerere.rikkahub.data.db.dao.UsageRecordDAOTest,me.rerere.rikkahub.data.db.dao.TranslationHistoryDAOTest
       - name: Release lint
         run: ./gradlew lintRelease
       - name: Build signed release APK
@@ -132,7 +133,7 @@ jobs:
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/32.json
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/38.json
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/39.json
-            app/schemas/me.rerere.rikkahub.data.db.AppDatabase/40.json
+            app/schemas/me.rerere.rikkahub.data.db.AppDatabase/41.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
           if-no-files-found: warn

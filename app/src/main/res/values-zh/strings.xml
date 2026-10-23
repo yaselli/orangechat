@@ -1233,4 +1233,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_queue_editing">编辑中</string>
   <string name="chat_page_queue_remove">撤回</string>
   <string name="chat_page_queue_edit_title">编辑排队消息</string>
+  <string name="chart_series">系列</string>
+  <string name="chart_series_name">系列 %1$d</string>
+  <string name="chart_mode_chart">图表</string>
+  <string name="chart_mode_table">表格</string>
+  <string name="translator_page_history">历史</string>
+  <string name="translator_page_clear_history">清空历史</string>
+  <string name="translator_page_clear_history_title">清空翻译历史？</string>
+  <string name="translator_page_clear_history_message">删除所有已保存的翻译记录？此操作无法撤销。</string>
 </resources>
