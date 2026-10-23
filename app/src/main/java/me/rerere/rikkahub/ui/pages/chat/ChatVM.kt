@@ -19,6 +19,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -41,6 +42,12 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ConversationConfig
+import me.rerere.rikkahub.data.model.withConversation
+import me.rerere.rikkahub.data.model.bindConfig
+import me.rerere.rikkahub.data.model.withConversationConfig
+import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.rikkahub.data.model.ContextCompaction
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
@@ -161,9 +168,20 @@ class ChatVM(
         chatService.removeConversationReference(_conversationId)
     }
 
+    val contextUsage = org.koin.core.context.GlobalContext.get().get<AppDatabase>().usageRecordDao()
+        .observeContext(_conversationId.toString())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val messageQueue = chatService.getMessageQueueFlow(_conversationId)
+    fun removeQueuedMessage(id: Uuid) = chatService.removeQueuedMessage(_conversationId, id)
+    fun beginEditQueuedMessage(id: Uuid) = chatService.beginEditQueuedMessage(_conversationId, id)
+    fun finishEditQueuedMessage(id: Uuid, parts: List<UIMessagePart>?) =
+        chatService.finishEditQueuedMessage(_conversationId, id, parts)
+    fun resumeMessageQueue() = chatService.resumeMessageQueue(_conversationId)
+
     // 用户设置
     val settings: StateFlow<Settings> =
-        settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
+        combine(settingsStore.settingsFlow, conversation) { value, chat -> value.withConversationConfig(chat) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
 
     // 网络搜索
     val enableWebSearch = settings.map {
@@ -192,6 +210,10 @@ class ChatVM(
     fun updateSettings(newSettings: Settings) {
         val previous = settings.value
         viewModelScope.launch {
+            if (previous.enableWebSearch != newSettings.enableWebSearch) {
+                chatService.updateConversationConfig(_conversationId) { it.copy(enableWebSearch = newSettings.enableWebSearch) }
+                return@launch
+            }
             settingsStore.updateFrom(previous, newSettings)
             // Delete replaced assets only after the settings write succeeds.
             checkUserAvatarDelete(previous, newSettings)
@@ -200,7 +222,39 @@ class ChatVM(
 
     fun updateAssistant(previous: Assistant, desired: Assistant) {
         viewModelScope.launch {
-            settingsStore.update { it.withAssistantEdit(previous, desired) }
+            if (ConversationConfig().withAssistant(previous) != ConversationConfig().withAssistant(desired)) {
+                chatService.updateConversationConfig(_conversationId) { it.withAssistant(desired) }
+            }
+            settingsStore.update { current ->
+                val stored = current.getAssistantById(desired.id) ?: return@update current
+                val fields = ConversationConfig().withAssistant(stored)
+                current.withAssistantEdit(previous.withConversation(fields), desired.withConversation(fields))
+            }
+        }
+    }
+
+    fun updateConversationParameters(temperature: Float?, topP: Float?, maxTokens: Int?, contextSize: Int) {
+        viewModelScope.launch {
+            chatService.updateConversationConfig(_conversationId) {
+                it.copy(temperature = temperature, topP = topP, maxTokens = maxTokens, contextMessageSize = contextSize)
+            }
+        }
+    }
+
+    fun syncConversationDefaults() {
+        viewModelScope.launch {
+            val defaults = requireNotNull(conversation.value.copy(config = null)
+                .bindConfig(settingsStore.settingsFlow.value).config)
+            chatService.updateConversationConfig(_conversationId) { defaults }
+        }
+    }
+
+    fun setModelContextWindow(model: Model, limit: Int?) {
+        viewModelScope.launch {
+            settingsStore.update { current -> current.copy(providers = current.providers.map { provider ->
+                val latest = provider.models.find { it.id == model.id }
+                if (latest == null) provider else provider.editModel(latest.copy(contextWindow = limit))
+            }) }
         }
     }
 
@@ -217,17 +271,8 @@ class ChatVM(
     // 设置聊天模型
     fun setChatModel(assistant: Assistant, model: Model) {
         viewModelScope.launch {
-            settingsStore.update { settings ->
-                settings.copy(
-                    assistants = settings.assistants.map {
-                        if (it.id == assistant.id) {
-                            it.copy(
-                                chatModelId = model.id
-                            )
-                        } else {
-                            it
-                        }
-                    })
+            chatService.updateConversationConfig(_conversationId) {
+                it.copy(chatModelId = model.id, builtInSearch = BuiltInTools.Search in model.tools)
             }
         }
     }
@@ -339,6 +384,8 @@ class ChatVM(
     fun deleteConversation(conversation: Conversation) {
         viewModelScope.launch {
             if (chatService.isChatBlocked(conversation.id)) chatService.setChatBlocked(conversation.id, false)
+            chatService.discardQueuedMessages(conversation.id)
+            chatService.stopGeneration(conversation.id)
             conversationRepo.deleteConversation(conversation)
         }
     }

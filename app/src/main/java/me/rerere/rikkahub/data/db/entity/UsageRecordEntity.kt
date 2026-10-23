@@ -13,7 +13,7 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "usage_record",
-    indices = [Index(value = ["created_at"])]
+    indices = [Index(value = ["created_at"]), Index(value = ["conversation_id", "source", "id"])]
 )
 data class UsageRecordEntity(
     @PrimaryKey(autoGenerate = true)

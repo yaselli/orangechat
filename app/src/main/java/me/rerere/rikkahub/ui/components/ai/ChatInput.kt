@@ -181,13 +181,13 @@ fun ChatInput(
     fun sendMessage() {
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
-        if (loading) onCancelClick() else onSendClick()
+        if (loading && state.isEmpty()) onCancelClick() else onSendClick()
     }
 
     fun sendMessageWithoutAnswer() {
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
-        if (loading) onCancelClick() else onLongSendClick()
+        if (loading && state.isEmpty()) onCancelClick() else onLongSendClick()
     }
 
     var expand by remember { mutableStateOf(ExpandState.Collapsed) }
@@ -689,6 +689,7 @@ fun ChatInput(
                                     },
                                     onUpdateSearchService = onUpdateSearchService,
                                     model = chatModel,
+                                    onUpdateModel = onUpdateChatModel,
                                     modifier = Modifier.size(40.dp),
                                 )
 
@@ -791,12 +792,12 @@ fun ChatInput(
                                             )
                                     ) {
                                         val containerColor = when {
-                                            loading -> MaterialTheme.colorScheme.errorContainer
+                                            loading && state.isEmpty() -> MaterialTheme.colorScheme.errorContainer
                                             state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh
                                             else -> MaterialTheme.colorScheme.primary
                                         }
                                         val contentColor = when {
-                                            loading -> MaterialTheme.colorScheme.onErrorContainer
+                                            loading && state.isEmpty() -> MaterialTheme.colorScheme.onErrorContainer
                                             state.isEmpty() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                             else -> MaterialTheme.colorScheme.onPrimary
                                         }
@@ -805,7 +806,7 @@ fun ChatInput(
                                             shape = CircleShape,
                                             color = containerColor,
                                             content = {})
-                                        if (loading) {
+                                        if (loading && state.isEmpty()) {
                                             KeepScreenOn()
                                             Icon(
                                                 imageVector = HugeIcons.Cancel01,

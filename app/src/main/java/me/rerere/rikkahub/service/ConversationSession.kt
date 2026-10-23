@@ -32,8 +32,13 @@ class ConversationSession(
         Log.d(TAG, message)
         Unit
     },
+    private val onGenerationFinished: (Uuid, Throwable?) -> Unit = { _, _ -> },
     private val onIdle: (Uuid) -> Unit,
 ) {
+    val messageQueue = MessageQueue()
+    var submittingMessage: QueuedMessage? = null
+    var hasPersistedConversation: Boolean = false
+
     // 会话状态
     val state = MutableStateFlow(initial)
 
@@ -47,7 +52,7 @@ class ConversationSession(
     private val _generationJob = MutableStateFlow<Job?>(null)
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
     val isGenerating: Boolean get() = _generationJob.value?.isCompleted == false
-    val isInUse: Boolean get() = refCount.get() > 0 || isGenerating
+    val isInUse: Boolean get() = refCount.get() > 0 || isGenerating || messageQueue.state.value.messages.isNotEmpty() || submittingMessage != null
 
     /**
      * 保存互斥锁：保护"读取最新对话状态 -> 修改 messageNodes -> 落库"这一整段操作的原子性。
@@ -140,9 +145,10 @@ class ConversationSession(
     }
 
     fun setJob(job: Job?) = synchronized(claimLock) {
-        _generationJob.value?.cancel()
+        val previous = _generationJob.value
         _generationJob.value = job
-        job?.invokeOnCompletion {
+        if (previous !== job) previous?.cancel()
+        job?.invokeOnCompletion { cause ->
             // Completion of a replaced task must not clear the replacement's ownership.
             val cleared = synchronized(claimLock) {
                 if (_generationJob.value === job) {
@@ -150,6 +156,7 @@ class ConversationSession(
                     true
                 } else false
             }
+            if (cleared) onGenerationFinished(id, cause)
             if (cleared && refCount.get() <= 0) {
                 scheduleIdleCheck()
             }
@@ -159,13 +166,15 @@ class ConversationSession(
 
     fun getJob(): Job? = _generationJob.value
 
+    internal fun <T> withGenerationLock(block: () -> T): T = synchronized(claimLock, block)
+
     /**
      * 原子地尝试把 newJob 注册为当前会话的生成任务，仅当当前没有生成任务在进行时才成功。
      * 用于主动消息/激进模式等"低优先级"生成源：如果已有生成在跑（无论是正常聊天还是
      * 另一路主动消息），直接返回 false，调用方应放弃本次触发，而不是排队等待。
      *
-     * 与 setJob() 的区别：setJob() 是"强制抢占"（会取消旧 job），用于用户主动发消息这种
-     * 应该无条件打断旧生成的场景；tryClaimGeneration() 是"礼貌性尝试"，用于不应该打断
+     * 与 setJob() 的区别：setJob() 是"强制抢占"（会取消旧 job），用于重新生成等
+     * 明确替换旧任务的场景；普通发送通过队列串行执行；tryClaimGeneration() 是"礼貌性尝试"，用于不应该打断
      * 已有生成的低优先级场景。
      *
      * 注意：调用方在拿不到 Job 引用（返回 false）时，应打印包含 conversationId 的 debug
@@ -174,7 +183,9 @@ class ConversationSession(
     private val claimLock = Any()
 
     fun tryClaimGeneration(newJob: Job): Boolean = synchronized(claimLock) {
-        if (isGenerating) return@synchronized false
+        if (isGenerating || messageQueue.state.value.messages.isNotEmpty() || submittingMessage != null) {
+            return@synchronized false
+        }
         setJob(newJob)
         true
     }
@@ -195,6 +206,7 @@ class ConversationSession(
     }
 
     fun cleanup() {
+        messageQueue.pause()
         _generationJob.value?.cancel()
         _generationJob.value = null
         idleCheckJob?.cancel()

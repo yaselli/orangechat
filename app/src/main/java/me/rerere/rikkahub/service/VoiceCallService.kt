@@ -84,6 +84,7 @@ class VoiceCallService : Service(), KoinComponent {
     // 任务协程
     private var vadJob: Job? = null
     private var speakingMonitorJob: Job? = null
+    private var voiceMessageId: kotlin.uuid.Uuid? = null
     private var conversationMonitorJob: Job? = null
     private var asrMonitorJob: Job? = null
     private var interruptDetectJob: Job? = null
@@ -417,14 +418,30 @@ class VoiceCallService : Service(), KoinComponent {
         lastAssistantText = ""
 
         try {
-            chatService.sendMessage(
-                conversationId,
-                listOf(UIMessagePart.Text(transcript))
-            )
+            val queued = chatService.enqueueVoiceMessage(conversationId, transcript)
+            voiceMessageId = queued.id
+            speakingMonitorJob?.cancel()
+            speakingMonitorJob = serviceScope.launch {
+                try {
+                    val result = queued.reply!!.await()
+                    if (voiceMessageId != queued.id) return@launch
+                    if (result == null) {
+                        startListening()
+                    } else {
+                        _uiState.update { it.copy(assistantText = result) }
+                        onGenerationDone()
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    _uiState.update { it.copy(status = VoiceCallStatus.Error,
+                        errorMessage = "生成失败: ${error.message}") }
+                }
+            }
         } catch (e: Exception) {
             Log.e(
                 TAG,
-                "发送消息失败, conversationId=$conversationId, transcript=$transcript",
+                "发送消息失败, conversationId=$conversationId",
                 e
             )
             _uiState.update {
@@ -450,6 +467,8 @@ class VoiceCallService : Service(), KoinComponent {
                     _uiState.value.status != VoiceCallStatus.Speaking
                 ) return@collect
 
+                val userIndex = conv.currentMessages.indexOfFirst { it.id == voiceMessageId }
+                if (userIndex < 0 || conv.currentMessages.lastIndex <= userIndex) return@collect
                 val lastMessage = conv.currentMessages.lastOrNull()
                 if (lastMessage?.role != MessageRole.ASSISTANT) return@collect
 
@@ -483,14 +502,7 @@ class VoiceCallService : Service(), KoinComponent {
             }
         }
 
-        // 监听生成完成 -> 等待 TTS 播放完成 -> 回到 Listening
-        speakingMonitorJob?.cancel()
-        speakingMonitorJob = serviceScope.launch {
-            chatService.generationDoneFlow.collect { convId ->
-                if (convId != conversationId) return@collect
-                onGenerationDone()
-            }
-        }
+        // Completion is observed through this voice message's own deferred result, not another turn's event.
     }
 
     private suspend fun onGenerationDone() {

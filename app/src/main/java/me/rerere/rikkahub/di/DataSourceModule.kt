@@ -9,6 +9,7 @@ package me.rerere.rikkahub.di
 import me.rerere.rikkahub.data.db.migrations.Migration_32_33_StableMemory
 import me.rerere.rikkahub.data.db.migrations.Migration_37_38
 import me.rerere.rikkahub.data.db.migrations.Migration_38_39
+import me.rerere.rikkahub.data.db.migrations.Migration_39_40
 import me.rerere.rikkahub.data.ai.UsageRecorder
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.db.migrations.Migration_31_33_HistoryMemory
@@ -100,6 +101,7 @@ val dataSourceModule = module {
                 Migration_25_26, Migration_29_32_ChatInteractions, Migration_29_30, Migration_30_31, Migration_31_33_HistoryMemory, Migration_33_34,
                 Migration_34_35, Migration_35_36, Migration_36_37, Migration_32_33_StableMemory, Migration_37_38,
                 Migration_38_39,
+                Migration_39_40,
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {

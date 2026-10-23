@@ -78,7 +78,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         MessageReaction::class,
         me.rerere.rikkahub.data.db.entity.UsageRecordEntity::class,
     ],
-    version = 39,
+    version = 40,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),

@@ -70,4 +70,18 @@ class UsageRecordDAOTest {
         assertEquals("2026-10", month.bucket)
         assertEquals(2L * Int.MAX_VALUE, month.promptTokens)
     }
+    @Test
+    fun contextUsesLatestChatRequestAndExcludesAuxiliaryCallsAndOtherConversations() = runBlocking {
+        assertEquals(null, dao.observeContext("chat").first())
+        dao.insert(row(midnight, "CHAT", input = 100))
+        dao.insert(row(midnight + 1, "PROACTIVE", input = 120))
+        dao.insert(row(midnight + 2, "TRANSLATION", input = 900))
+        dao.insert(row(midnight + 3, "CHAT", input = 700).copy(conversationId = "other"))
+        assertEquals(ContextUsage("model", 120), dao.observeContext("chat").first())
+        // Later tool-loop calls replace the displayed request size rather than adding to it.
+        dao.insert(row(midnight + 4, "CHAT", input = 150))
+        assertEquals(ContextUsage("model", 150), dao.observeContext("chat").first())
+        assertEquals(ContextUsage("model", 700), dao.observeContext("other").first())
+    }
+
 }

@@ -34,4 +34,6 @@ data class ConversationEntity(
     val folderId: String = "",
     @ColumnInfo("context_compaction", defaultValue = "''")
     val contextCompaction: String = "",
+    @ColumnInfo("conversation_config", defaultValue = "''")
+    val config: String = "",
 )

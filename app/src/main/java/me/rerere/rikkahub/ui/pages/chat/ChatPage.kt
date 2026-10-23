@@ -84,6 +84,8 @@ import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.BlockedChatState
 import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ai.ChatInput
+import me.rerere.rikkahub.ui.components.ai.MessageQueuePanel
+import me.rerere.rikkahub.ui.components.ai.ConversationRequestBar
 import me.rerere.rikkahub.ui.components.ui.AppUpdatePrompt
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -325,6 +327,8 @@ private fun ChatPageContent(
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
 ) {
+    val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
+    val contextUsage by vm.contextUsage.collectAsStateWithLifecycle()
     val reactions by vm.reactions.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -390,113 +394,132 @@ private fun ChatPageContent(
                         onContinue = vm::continueBlockedReplies,
                         onPause = vm::pauseBlockedReplies,
                     )
-                } else ChatInput(
-                    state = inputState,
-                    loading = loadingJob != null,
-                    settings = setting,
-                    conversation = conversation,
-                    mcpManager = vm.mcpManager,
-                    hazeState = hazeState,
-                    autoStartVoice = autoStartVoice,
-                    onCancelClick = {
-                        vm.stopGeneration()
-                    },
-                    enableSearch = enableWebSearch,
-                    onToggleSearch = {
-                        vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
-                    },
-                    onSendClick = {
-                        if (currentChatModel == null) {
-                            toaster.show("请先选择模型", type = ToastType.Error)
-                            return@ChatInput
-                        }
-                        if (inputState.messageContent.any { it is UIMessagePart.Audio }) {
-                            val audioProvider = currentChatModel?.findProvider(setting.providers)
-                            val supported = supportsRawAudioInput(audioProvider)
-                            if (!supported) {
-                                toaster.show(
-                                    "原始录音需使用 Gemini 或 OpenAI Chat Completions 音频模型",
-                                    type = ToastType.Error,
-                                )
+                } else Column {
+                    ConversationRequestBar(
+                        conversation = conversation,
+                        assistant = setting.getCurrentAssistant(),
+                        model = currentChatModel,
+                        usage = contextUsage,
+                        loading = loadingJob != null,
+                        onSave = vm::updateConversationParameters,
+                        onModelLimit = vm::setModelContextWindow,
+                        onSync = vm::syncConversationDefaults,
+                    )
+                    MessageQueuePanel(
+                        state = messageQueue,
+                        onRemove = vm::removeQueuedMessage,
+                        onBeginEdit = vm::beginEditQueuedMessage,
+                        onFinishEdit = vm::finishEditQueuedMessage,
+                        onResume = vm::resumeMessageQueue,
+                    )
+                    ChatInput(
+                        state = inputState,
+                        loading = loadingJob != null,
+                        settings = setting,
+                        conversation = conversation,
+                        mcpManager = vm.mcpManager,
+                        hazeState = hazeState,
+                        autoStartVoice = autoStartVoice,
+                        onCancelClick = {
+                            vm.stopGeneration()
+                        },
+                        enableSearch = enableWebSearch,
+                        onToggleSearch = {
+                            vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
+                        },
+                        onSendClick = {
+                            if (currentChatModel == null) {
+                                toaster.show("请先选择模型", type = ToastType.Error)
                                 return@ChatInput
                             }
-                        }
-                        if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = inputState.getContents(),
-                                messageId = inputState.editingMessage!!,
+                            if (inputState.messageContent.any { it is UIMessagePart.Audio }) {
+                                val audioProvider = currentChatModel?.findProvider(setting.providers)
+                                val supported = supportsRawAudioInput(audioProvider)
+                                if (!supported) {
+                                    toaster.show(
+                                        "原始录音需使用 Gemini 或 OpenAI Chat Completions 音频模型",
+                                        type = ToastType.Error,
+                                    )
+                                    return@ChatInput
+                                }
+                            }
+                            if (inputState.isEditing()) {
+                                vm.handleMessageEdit(
+                                    parts = inputState.getContents(),
+                                    messageId = inputState.editingMessage!!,
+                                )
+                            } else {
+                                vm.handleMessageSend(inputState.getContents())
+                                scope.launch {
+                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                                }
+                            }
+                            inputState.clearInput()
+                        },
+                        onStickerSend = { markdown ->
+                            if (currentChatModel == null) {
+                                toaster.show("请先选择模型", type = ToastType.Error)
+                                return@ChatInput
+                            }
+                            vm.handleMessageSend(
+                                listOf(UIMessagePart.Text(markdown))
                             )
-                        } else {
-                            vm.handleMessageSend(inputState.getContents())
                             scope.launch {
                                 chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                             }
-                        }
-                        inputState.clearInput()
-                    },
-                    onStickerSend = { markdown ->
-                        if (currentChatModel == null) {
-                            toaster.show("请先选择模型", type = ToastType.Error)
-                            return@ChatInput
-                        }
-                        vm.handleMessageSend(
-                            listOf(UIMessagePart.Text(markdown))
-                        )
-                        scope.launch {
-                            chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                        }
-                    },
-                    onVoiceMessage = { url, duration, transcript ->
-                        if (currentChatModel == null) {
-                            toaster.show("请先选择模型", type = ToastType.Error)
-                            return@ChatInput
-                        }
-                        vm.handleMessageSend(
-                            listOf(
-                                UIMessagePart.VoiceMessage(
-                                    url = url,
-                                    duration = duration,
-                                    transcript = transcript,
+                        },
+                        onVoiceMessage = { url, duration, transcript ->
+                            if (currentChatModel == null) {
+                                toaster.show("请先选择模型", type = ToastType.Error)
+                                return@ChatInput
+                            }
+                            vm.handleMessageSend(
+                                listOf(
+                                    UIMessagePart.VoiceMessage(
+                                        url = url,
+                                        duration = duration,
+                                        transcript = transcript,
+                                    )
                                 )
                             )
-                        )
-                        scope.launch {
-                            chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                        }
-                    },
-                    onLongSendClick = {
-                        if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = inputState.getContents(),
-                                messageId = inputState.editingMessage!!,
-                            )
-                        } else {
-                            vm.handleMessageSend(content = inputState.getContents(), answer = false)
                             scope.launch {
                                 chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                             }
-                        }
-                        inputState.clearInput()
-                    },
-                    onUpdateChatModel = {
-                        vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
-                    },
-                    onUpdateAssistant = { updated ->
-                        setting.assistants.find { it.id == updated.id }?.let { previous ->
-                            vm.updateAssistant(previous, updated)
-                        }
-                    },
-                    onUpdateSearchService = { index ->
-                        vm.updateSettings(
-                            setting.copy(
-                                searchServiceSelected = index
+                        },
+                        onLongSendClick = {
+                            if (inputState.isEditing()) {
+                                vm.handleMessageEdit(
+                                    parts = inputState.getContents(),
+                                    messageId = inputState.editingMessage!!,
+                                )
+                            } else {
+                                vm.handleMessageSend(content = inputState.getContents(), answer = false)
+                                scope.launch {
+                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                                }
+                            }
+                            inputState.clearInput()
+                        },
+                        onUpdateChatModel = {
+                            vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
+                        },
+                        onUpdateAssistant = { updated ->
+                            setting.assistants.find { it.id == updated.id }?.let { previous ->
+                                vm.updateAssistant(previous, updated)
+                            }
+                        },
+                        onUpdateSearchService = { index ->
+                            vm.updateSettings(
+                                setting.copy(
+                                    searchServiceSelected = index
+                                )
                             )
-                        )
-                    },
-                    onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
-                        vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
-                    },
-                )
+                        },
+                        onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
+                            vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
+                        },
+                    )
+                }
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->

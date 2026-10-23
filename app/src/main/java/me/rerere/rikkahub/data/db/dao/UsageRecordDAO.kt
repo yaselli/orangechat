@@ -9,6 +9,10 @@ import me.rerere.rikkahub.data.db.entity.UsageRecordEntity
 
 @Dao
 interface UsageRecordDAO {
+    @Query("SELECT model_id AS modelId, prompt_tokens AS inputTokens FROM usage_record " +
+        "WHERE conversation_id = :conversationId AND source IN ('CHAT', 'PROACTIVE') ORDER BY id DESC LIMIT 1")
+    fun observeContext(conversationId: String): Flow<ContextUsage?>
+
     @Insert
     suspend fun insert(record: UsageRecordEntity)
 
@@ -97,4 +101,6 @@ data class UsageSummary(
     val models: List<ModelUsage>,
     val sources: List<SourceUsage>,
 )
+
+data class ContextUsage(val modelId: String?, val inputTokens: Long)
 

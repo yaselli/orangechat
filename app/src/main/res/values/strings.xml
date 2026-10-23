@@ -1229,4 +1229,14 @@
   <string name="plugin_security_banner">⚠ Plugins can make network requests and access system data you have authorized. Only install plugins from trusted sources.</string>
   <string name="web_server_security_warning_no_jwt">⚠ JWT authentication is not enabled or the password is empty. Anyone who can access this address can read your conversation records. It is strongly recommended to set a password and enable JWT immediately.</string>
     <string name="setting_provider_page_rerank_model">Rerank</string>
+  <string name="chat_page_queue_paused_count">队列已暂停（%1$d）</string>
+  <string name="chat_page_queue_pending_count">待发送（%1$d）</string>
+  <string name="chat_page_queue_resume">继续发送</string>
+  <string name="chat_page_queue_image">[图片]</string>
+  <string name="chat_page_queue_file">[文件]</string>
+  <string name="chat_page_queue_audio">[录音]</string>
+  <string name="chat_page_queue_video">[视频]</string>
+  <string name="chat_page_queue_editing">编辑中</string>
+  <string name="chat_page_queue_remove">撤回</string>
+  <string name="chat_page_queue_edit_title">编辑排队消息</string>
 </resources>
