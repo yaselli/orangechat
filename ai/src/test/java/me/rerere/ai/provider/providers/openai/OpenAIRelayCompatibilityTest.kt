@@ -73,6 +73,25 @@ class OpenAIRelayCompatibilityTest {
     }
 
     @Test
+    fun `missing optional item ID resolves later argument events through output index`() {
+        val state = ResponseToolStreamState()
+        val noId = call.replace("\"id\":\"fc_1\",", "")
+        val events = listOf(
+            obj("""{"type":"response.output_item.added","output_index":3,"item":$noId}"""),
+            obj("""{"type":"response.function_call_arguments.done","item_id":"fc_1","output_index":3,"arguments":"{\"q\":\"Kotlin\"}"}"""),
+            event("response.output_item.done", call),
+            event("response.output_item.done", result),
+        )
+        val message = events.fold(UIMessage.assistant("")) { message, event ->
+            api.parseResponseDelta(event, state)?.let { message + it } ?: message
+        }
+        val tool = message.getTools().single()
+        assertEquals("call_1", tool.toolCallId)
+        assertEquals("""{"q":"Kotlin"}""", tool.input)
+        assertTrue(tool.isExecuted)
+    }
+
+    @Test
     fun `client tools remain pending without a server result and request state is isolated`() {
         val first = ResponseToolStreamState()
         val second = ResponseToolStreamState()

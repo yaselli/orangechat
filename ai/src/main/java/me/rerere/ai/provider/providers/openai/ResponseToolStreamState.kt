@@ -16,15 +16,18 @@ import me.rerere.common.http.jsonPrimitiveOrNull
 /** Adapts the Responses item IDs to the call IDs used by our existing message/tool loop. */
 internal class ResponseToolStreamState {
     private val callIds = mutableMapOf<String, String>()
+    private val callIdsByOutputIndex = mutableMapOf<Int, String>()
     private val arguments = mutableMapOf<String, String>()
     private val outputs = linkedMapOf<String, String>()
     private val emittedOutputs = mutableSetOf<String>()
 
-    fun callId(itemId: String): String = callIds[itemId] ?: itemId
+    fun callId(itemId: String, outputIndex: Int? = null): String =
+        callIds[itemId] ?: outputIndex?.let(callIdsByOutputIndex::get) ?: itemId
 
-    fun functionCall(item: JsonObject): UIMessagePart.Tool {
+    fun functionCall(item: JsonObject, outputIndex: Int? = null): UIMessagePart.Tool {
         val callId = item["call_id"]?.jsonPrimitiveOrNull?.contentOrNull ?: error("call_id not found")
         item["id"]?.jsonPrimitiveOrNull?.contentOrNull?.let { callIds[it] = callId }
+        outputIndex?.let { callIdsByOutputIndex[it] = callId }
         return UIMessagePart.Tool(
             toolCallId = callId,
             toolName = item["name"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty(),

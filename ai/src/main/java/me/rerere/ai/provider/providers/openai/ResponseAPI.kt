@@ -544,7 +544,7 @@ class ResponseAPI(
                 val id = item["id"]?.jsonPrimitive?.contentOrNull
                     ?: item["call_id"]?.jsonPrimitive?.contentOrNull ?: error("chunk id not found")
                 if (type == "function_call") {
-                    val tool = toolState.functionCall(item)
+                    val tool = toolState.functionCall(item, jsonObject["output_index"]?.jsonPrimitive?.intOrNull)
                     return MessageChunk(
                         id = id,
                         model = "",
@@ -624,7 +624,9 @@ class ResponseAPI(
                     return toolState.outputChunk(item["call_id"]?.jsonPrimitive?.contentOrNull)
                 }
                 if (type == "function_call") {
-                    return toolState.chunk(listOf(toolState.functionCall(item)))
+                    return toolState.chunk(listOf(
+                        toolState.functionCall(item, jsonObject["output_index"]?.jsonPrimitive?.intOrNull)
+                    ))
                 }
                 val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
                 if (type == "reasoning") {
@@ -684,7 +686,7 @@ class ResponseAPI(
             "response.function_call_arguments.done" -> {
                 val itemId =
                     jsonObject["item_id"]?.jsonPrimitive?.content ?: error("item_id not found")
-                val toolCallId = toolState.callId(itemId)
+                val toolCallId = toolState.callId(itemId, jsonObject["output_index"]?.jsonPrimitive?.intOrNull)
                 val arguments =
                     jsonObject["arguments"]?.jsonPrimitive?.content ?: error("arguments not found")
                 return MessageChunk(
