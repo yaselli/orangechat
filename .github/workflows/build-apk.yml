@@ -46,6 +46,10 @@ jobs:
         working-directory: web-ui
         run: pnpm install --frozen-lockfile
 
+      - name: Check web types
+        working-directory: web-ui
+        run: pnpm run typecheck
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
