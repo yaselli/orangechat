@@ -9,6 +9,8 @@ import kotlinx.coroutines.withContext
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.rikkahub.data.db.fts.deleteMessageFtsMessage
+import me.rerere.rikkahub.data.db.fts.recordMessageFtsRow
 
 interface HistoryMemoryStorage {
     suspend fun sources(scope: String, nodeIds: List<String>): List<HistoryMemorySource>
@@ -149,18 +151,21 @@ class HistoryMemoryRepository(private val database: AppDatabase) : HistoryMemory
             if (page.isEmpty()) break
             database.withTransaction {
                 val fresh = sources(scope, page.map { it.nodeId })
+                val db = database.openHelper.writableDatabase
                 for (source in fresh) {
-                    database.openHelper.writableDatabase.execSQL(
-                        "DELETE FROM message_fts WHERE node_id = ? AND message_id = ?",
-                        arrayOf(source.nodeId, source.messageId),
-                    )
-                    database.openHelper.writableDatabase.execSQL(
+                    deleteMessageFtsMessage(db, source.conversationId, source.nodeId, source.messageId)
+                    db.execSQL(
                         """INSERT INTO message_fts(text,node_id,message_id,conversation_id,title,update_at)
                             SELECT ?,?,?,?,title,CAST(update_at AS TEXT) FROM conversationentity
                             WHERE id = ? AND assistant_id = ?""",
                         arrayOf(source.text, source.nodeId, source.messageId, source.conversationId,
                             source.conversationId, scope),
                     )
+                    db.query("SELECT changes()").use {
+                        if (it.moveToFirst() && it.getInt(0) > 0) {
+                            recordMessageFtsRow(db, source.conversationId, source.nodeId)
+                        }
+                    }
                 }
                 count += fresh.size
             }

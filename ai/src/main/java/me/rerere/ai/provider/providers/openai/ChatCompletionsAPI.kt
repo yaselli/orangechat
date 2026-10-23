@@ -269,7 +269,7 @@ class ChatCompletionsAPI(
                 // tool_call 的 arguments 含真实换行且被中间链路断行时, 会把完整 JSON
                 // 拆成不完整碎片导致 Unexpected EOF。
                 val chunkJson = try {
-                    json.parseToJsonElement(data).jsonObject
+                    parseOpenAIStreamObject(data) ?: return
                 } catch (e: Throwable) {
                     // Upstream sent malformed data. Record only its size; a preview can contain
                     // private reply/reasoning text or tool output.
@@ -282,7 +282,7 @@ class ChatCompletionsAPI(
                     )
                     return
                 }
-                if (chunkJson["error"] != null) {
+                if (chunkJson["error"] != null && chunkJson["error"] !is kotlinx.serialization.json.JsonNull) {
                     // HTTP can be 200 while the stream itself contains a structured error.
                     val model = chunkJson["model"]?.jsonPrimitive?.contentOrNull ?: "unknown"
                     val error = chunkJson["error"]!!.parseErrorDetail()
@@ -309,12 +309,12 @@ class ChatCompletionsAPI(
                 val id = chunkJson["id"]?.jsonPrimitive?.contentOrNull ?: ""
                 val model = chunkJson["model"]?.jsonPrimitive?.contentOrNull ?: ""
 
-                val choices = chunkJson["choices"]?.jsonArray ?: JsonArray(emptyList())
+                val choices = chunkJson["choices"]?.jsonArrayOrNull ?: JsonArray(emptyList())
                 val choiceList = buildList {
                     if (choices.isNotEmpty()) {
-                        val choice = choices[0].jsonObject
+                        val choice = choices[0].jsonObjectOrNull ?: return
                         val message =
-                            choice["delta"]?.jsonObject ?: choice["message"]?.jsonObject
+                            choice["delta"]?.jsonObjectOrNull ?: choice["message"]?.jsonObjectOrNull
                             ?: throw Exception("delta/message is null")
                         val finishReason =
                             choice["finish_reason"]?.jsonPrimitive?.contentOrNull
@@ -865,7 +865,7 @@ class ChatCompletionsAPI(
         })
     }
 
-    private fun parseMessage(jsonObject: JsonObject): UIMessage {
+    internal fun parseMessage(jsonObject: JsonObject): UIMessage {
         val role = MessageRole.valueOf(
             jsonObject["role"]?.jsonPrimitive?.contentOrNull?.uppercase() ?: "ASSISTANT"
         )
@@ -896,14 +896,15 @@ class ChatCompletionsAPI(
                         )
                     )
                 }
-                toolCalls.forEach { toolCalls ->
-                    val type = toolCalls.jsonObject["type"]?.jsonPrimitive?.contentOrNull
+                toolCalls.forEach { toolCallElement ->
+                    val toolCalls = toolCallElement.jsonObjectOrNull ?: return@forEach
+                    val type = toolCalls["type"]?.jsonPrimitive?.contentOrNull
                     if (!type.isNullOrEmpty() && type != "function") error("tool call type not supported: $type")
-                    val toolCallId = toolCalls.jsonObject["id"]?.jsonPrimitive?.contentOrNull
+                    val toolCallId = toolCalls["id"]?.jsonPrimitive?.contentOrNull
                     val toolName =
-                        toolCalls.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
+                        toolCalls["function"]?.jsonObjectOrNull?.get("name")?.jsonPrimitive?.contentOrNull
                     val arguments =
-                        toolCalls.jsonObject["function"]?.jsonObject?.get("arguments")?.jsonPrimitive?.contentOrNull
+                        toolCalls["function"]?.jsonObjectOrNull?.get("arguments")?.jsonPrimitive?.contentOrNull
                     add(
                         UIMessagePart.Tool(
                             toolCallId = toolCallId ?: "",
@@ -932,15 +933,16 @@ class ChatCompletionsAPI(
     }
 
     private fun parseAnnotations(jsonArray: JsonArray): List<UIMessageAnnotation> {
-        return jsonArray.map { element ->
+        return jsonArray.mapNotNull { element ->
+            val annotation = element.jsonObjectOrNull ?: return@mapNotNull null
             val type =
-                element.jsonObject["type"]?.jsonPrimitive?.contentOrNull ?: error("type is null")
+                annotation["type"]?.jsonPrimitive?.contentOrNull ?: error("type is null")
             when (type) {
                 "url_citation" -> {
                     UIMessageAnnotation.UrlCitation(
-                        title = element.jsonObject["url_citation"]?.jsonObject?.get("title")?.jsonPrimitive?.contentOrNull
+                        title = annotation["url_citation"]?.jsonObjectOrNull?.get("title")?.jsonPrimitive?.contentOrNull
                             ?: "",
-                        url = element.jsonObject["url_citation"]?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+                        url = annotation["url_citation"]?.jsonObjectOrNull?.get("url")?.jsonPrimitive?.contentOrNull
                             ?: "",
                     )
                 }
