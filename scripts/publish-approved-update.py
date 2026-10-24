@@ -59,14 +59,16 @@ def publish(directory, channel, env=os.environ, run=command):
     if plan['notes'] != 'docs/releases/2.3.2.md' or not notes.is_file():
         raise ValueError('Approved release notes are missing')
     repo, tag = env['GITHUB_REPOSITORY'], metadata['tag']
-    tag_commit = run(['gh', 'api', f'repos/{repo}/commits/{tag}', '--jq', '.sha'], check=False)
+    tag_commit = run(['gh', 'api', f'repos/{repo}/git/ref/tags/{tag}'], check=False)
     if tag_commit.returncode:
         if '404' not in tag_commit.stderr:
             raise RuntimeError('Unable to verify release tag')
         run(['gh', 'api', '--method', 'POST', f'repos/{repo}/git/refs',
              '-f', f'ref=refs/tags/{tag}', '-f', f'sha={source}'])
-    elif tag_commit.stdout.strip() != source:
-        raise ValueError('Existing tag points to another source commit')
+    else:
+        existing_source = run(['gh', 'api', f'repos/{repo}/commits/{tag}', '--jq', '.sha']).stdout.strip()
+        if existing_source != source:
+            raise ValueError('Existing tag points to another source commit')
     view = run(['gh', 'release', 'view', tag, '--repo', repo, '--json', 'isDraft,isPrerelease'], check=False)
     if view.returncode:
         if 'not found' not in view.stderr.lower() and '404' not in view.stderr:

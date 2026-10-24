@@ -40,6 +40,11 @@ class FakeGithub:
                 code, error = 1, 'release not found'
         elif args[:3] == ['gh', 'api', '--method']:
             self.tag = True
+        elif args[:2] == ['gh', 'api'] and '/git/ref/tags/' in args[2]:
+            if self.tag:
+                out = json.dumps({'object': {'sha': self.tag_source}})
+            else:
+                code, error = 1, 'HTTP 404 Not Found'
         elif args[:2] == ['gh', 'api'] and '/commits/' in args[2]:
             if self.tag:
                 out = self.tag_source
