@@ -23,6 +23,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -35,6 +36,22 @@ jobs:
     steps:
       - name: Download source code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 8
+      - name: Verify accepted code and prior full checks
+        id: accepted
+        if: github.event_name == 'push' && github.ref == 'refs/heads/build/stable-release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish-approved-update.py --check-rebuild --channel debug >> "$GITHUB_OUTPUT"
+      - name: Reuse the verified 2.3.2 Debug APK
+        if: steps.accepted.outputs.approved == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: OrangeChat-personal-debug
+          path: update-assets/debug
+          run-id: 40113169340
+          github-token: ${{ github.token }}
       - name: Download color utilities
         run: git submodule update --init --depth 1 material3/material-color-utilities
 
@@ -80,6 +97,7 @@ jobs:
           keytool -list -keystore app/debug.keystore -storepass android -alias androiddebugkey
 
       - name: Unit tests
+        if: steps.accepted.outputs.approved != 'true'
         shell: bash
         run: |
           mkdir -p verification-logs
@@ -118,6 +136,7 @@ jobs:
         run: python3 scripts/verify-message-fts.py
 
       - name: Compile memory device tests
+        if: steps.accepted.outputs.approved != 'true'
         run: ./gradlew :app:compileDebugAndroidTestKotlin
 
       - name: Upload unit test diagnostics
@@ -132,7 +151,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Android Lint
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.accepted.outputs.approved != 'true' }}
         run: ./gradlew lintDebug
 
       - name: Upload verification reports
@@ -155,17 +174,21 @@ jobs:
           if-no-files-found: warn
 
       - name: Build APK
+        if: steps.accepted.outputs.approved != 'true'
         run: ./gradlew assembleDebug
 
       - name: Verify removed native dependencies and report APK size
+        if: steps.accepted.outputs.approved != 'true'
         run: python3 scripts/report-apk-size.py --apk-dir app/build/outputs/apk/debug --output app/build/reports/apk-size/debug.json
       - name: Upload APK size report
+        if: steps.accepted.outputs.approved != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: OrangeChat-apk-size-debug
           path: app/build/reports/apk-size/debug.json
           if-no-files-found: error
       - name: Upload APK
+        if: steps.accepted.outputs.approved != 'true'
         run: |
           AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
           python3 scripts/test-prepare-update-assets.py
@@ -187,7 +210,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 4
+          fetch-depth: 8
       - uses: actions/download-artifact@v4
         with:
           name: OrangeChat-personal-debug

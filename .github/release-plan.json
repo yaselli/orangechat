@@ -2,6 +2,19 @@
   "version": "2.3.2",
   "versionCode": 167,
   "testedCommit": "c9028b8aa29a3b1ebf650e949c342cb79712a5e9",
-  "channels": ["release", "debug"],
-  "notes": "docs/releases/2.3.2.md"
+  "channels": [
+    "release",
+    "debug"
+  ],
+  "notes": "docs/releases/2.3.2.md",
+  "verifiedRuns": {
+    "release": 40101957194,
+    "debug": 40101957185
+  },
+  "reuseArtifact": {
+    "debug": {
+      "runId": 40113169340,
+      "source": "b1794a88fa84d0497c2b6c429396f274e16b2c76"
+    }
+  }
 }

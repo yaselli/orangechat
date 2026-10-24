@@ -33,6 +33,12 @@ class FakeGithub:
             out = 'app/build.gradle.kts\nscripts/publish-approved-update.py\n'
         elif args[:2] == ['git', 'diff']:
             out = '-        versionCode = 166\n+        versionCode = 167\n'
+        elif args[:3] == ['gh', 'release', 'view'] and args[-1] == 'assets':
+            out = json.dumps({'assets': [
+                {'name': file.name, 'digest': 'sha256:' + (
+                    'bad' if self.bad_digest else hashlib.sha256(file.read_bytes()).hexdigest())}
+                for file in self.directory.iterdir()
+            ]})
         elif args[:3] == ['gh', 'release', 'view']:
             if self.created:
                 out = json.dumps({'isDraft': not self.published, 'isPrerelease': self.channel == 'debug'})
@@ -74,6 +80,32 @@ class PublishUpdateTest(unittest.TestCase):
                     'sourceCommit': SOURCE, 'assets': [{'name': file.name,
                     'sha256': hashlib.sha256(file.read_bytes()).hexdigest()}]}
         (root / 'release-metadata.json').write_text(json.dumps(metadata))
+
+    def test_rebuild_reuse_requires_both_unchanged_code_and_the_successful_exact_source(self):
+        plan = json.loads((module.ROOT / '.github/release-plan.json').read_text())
+        for channel in ('release', 'debug'):
+            state = {'conclusion': 'success'}
+            def api(args, check=True):
+                if '--name-only' in args:
+                    out = 'app/build.gradle.kts\n'
+                elif args[0] == 'git':
+                    out = ''
+                else:
+                    out = json.dumps(dict(status='completed', conclusion=state['conclusion'],
+                        head_sha=plan['testedCommit'],
+                        path='.github/workflows/' + ('build-isolated-apk.yml' if channel == 'release' else 'build-apk.yml'),
+                        head_repository={'full_name': ENV['GITHUB_REPOSITORY']}))
+                return subprocess.CompletedProcess(args, 0, out, '')
+            self.assertTrue(module.approved_rebuild(channel, ENV, api))
+            state['conclusion'] = 'failure'
+            self.assertFalse(module.approved_rebuild(channel, ENV, api))
+            state['conclusion'] = 'success'
+            def changed_code(args, check=True):
+                if '--name-only' in args:
+                    return subprocess.CompletedProcess(args, 0, 'ai/src/main/Provider.kt\n', '')
+                return api(args, check)
+            self.assertFalse(module.approved_rebuild(channel, ENV, changed_code))
+            self.assertFalse(module.approved_rebuild(channel, dict(ENV, GITHUB_REF='refs/heads/master'), api))
 
     def test_publish_order_channels_and_idempotent_retry(self):
         for channel in ('release', 'debug'):

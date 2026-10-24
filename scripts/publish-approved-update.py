@@ -40,13 +40,45 @@ def verify_source(tested, source, run=command):
         raise ValueError('Only version constants may change in the accepted app build configuration')
 
 
+def approved_rebuild(channel, env=os.environ, run=command):
+    """Reuse full checks only for an unchanged, accepted application and an exact successful CI source."""
+    if (env.get('GITHUB_REPOSITORY') != 'yaselli/orangechat'
+            or env.get('GITHUB_REF') != 'refs/heads/build/stable-release'
+            or env.get('GITHUB_EVENT_NAME') != 'push'):
+        return False
+    plan = json.loads((ROOT / '.github/release-plan.json').read_text())
+    config = (ROOT / 'app/build.gradle.kts').read_text()
+    version = re.search(r'versionName\s*=\s*"([^"\n]+)"', config)
+    code = re.search(r'versionCode\s*=\s*(\d+)', config)
+    if not version or not code or version.group(1) != plan['version'] or int(code.group(1)) != plan['versionCode']:
+        return False
+    try:
+        verify_source(plan['testedCommit'], env['GITHUB_SHA'], run)
+        run_id = plan['verifiedRuns'][channel]
+        if type(run_id) is not int or run_id <= 0:
+            return False
+        previous = json.loads(run(['gh', 'api', f'repos/{env["GITHUB_REPOSITORY"]}/actions/runs/{run_id}']).stdout)
+        expected = '.github/workflows/' + ('build-isolated-apk.yml' if channel == 'release' else 'build-apk.yml')
+        return (previous.get('status') == 'completed' and previous.get('conclusion') == 'success'
+                and previous.get('head_sha') == plan['testedCommit'] and previous.get('path') == expected
+                and previous.get('head_repository', {}).get('full_name') == env['GITHUB_REPOSITORY'])
+    except (RuntimeError, ValueError, KeyError):
+        # No proof means normal full verification, never a successful shortcut.
+        return False
+
+
 def publish(directory, channel, env=os.environ, run=command):
     if (env.get('GITHUB_REPOSITORY') != 'yaselli/orangechat'
             or env.get('GITHUB_REF') != 'refs/heads/build/stable-release'
             or env.get('GITHUB_EVENT_NAME') != 'push'):
         raise ValueError('Publishing is restricted to stable-branch pushes in the approved repository')
     plan = json.loads((ROOT / '.github/release-plan.json').read_text())
-    source = env['GITHUB_SHA']
+    source = json.loads((Path(directory) / 'release-metadata.json').read_text())['sourceCommit']
+    if source != env['GITHUB_SHA']:
+        reuse = plan.get('reuseArtifact', {}).get(channel, {})
+        if source != reuse.get('source'):
+            raise ValueError('Artifact is not the approved reusable build')
+        verify_source(source, env['GITHUB_SHA'], run)
     verify = runpy.run_path(str(ROOT / 'scripts/prepare-update-assets.py'))['verify_artifact']
     metadata = verify(directory, channel, source)
     version = plan['version'] + ('-debug.1' if channel == 'debug' else '')
@@ -92,7 +124,7 @@ def publish(directory, channel, env=os.environ, run=command):
     assets = [root / item['name'] for item in metadata['assets']] + [root / 'release-metadata.json']
     if draft:
         run(['gh', 'release', 'upload', tag, '--repo', repo, '--clobber', *map(str, assets)])
-    uploaded = json.loads(run(['gh', 'api', f'repos/{repo}/releases/tags/{tag}']).stdout)
+    uploaded = json.loads(run(['gh', 'release', 'view', tag, '--repo', repo, '--json', 'assets']).stdout)
     remote = {item['name']: item for item in uploaded['assets']}
     if set(remote) != {asset.name for asset in assets}:
         raise ValueError('Release assets do not match the verified artifact')
@@ -118,7 +150,13 @@ def publish(directory, channel, env=os.environ, run=command):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--directory', required=True)
+    parser.add_argument('--directory')
+    parser.add_argument('--check-rebuild', action='store_true')
     parser.add_argument('--channel', choices=['release', 'debug'], required=True)
     args = parser.parse_args()
-    publish(args.directory, args.channel)
+    if args.check_rebuild:
+        print('approved=' + str(approved_rebuild(args.channel)).lower())
+    else:
+        if not args.directory:
+            parser.error('--directory is required for publication')
+        publish(args.directory, args.channel)
