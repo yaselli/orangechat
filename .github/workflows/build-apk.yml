@@ -78,14 +78,6 @@ jobs:
           mkdir -p verification-logs
           ./gradlew testDebugUnitTest --continue 2>&1 | tee verification-logs/unit-tests.txt
 
-      - name: Print generated Room schema
-        if: ${{ !cancelled() }}
-        run: |
-          if [ -f app/schemas/me.rerere.rikkahub.data.db.AppDatabase/42.json ]; then
-            echo ROOM_V42_SCHEMA_BEGIN
-            cat app/schemas/me.rerere.rikkahub.data.db.AppDatabase/42.json
-            echo ROOM_V42_SCHEMA_END
-          fi
       - name: Upload generated Room schema
         uses: actions/upload-artifact@v4
         with:

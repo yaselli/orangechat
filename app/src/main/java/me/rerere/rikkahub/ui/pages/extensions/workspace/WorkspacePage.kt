@@ -180,7 +180,9 @@ fun WorkspacePage() {
         },
         onDismiss = { deleteTarget = null },
     ) {
-        Text(stringResource(R.string.workspace_page_delete_message, deleteTarget?.name ?: ""))
+        Text(if (deleteTarget?.isSsh() == true) {
+            "只移除本机保存的 SSH 连接配置，不会删除服务器上的文件。"
+        } else stringResource(R.string.workspace_page_delete_message, deleteTarget?.name ?: ""))
     }
 }
 
