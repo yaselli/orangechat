@@ -1181,4 +1181,11 @@
   <string name="translator_page_clear_history">清空歷史</string>
   <string name="translator_page_clear_history_title">清空翻譯歷史？</string>
   <string name="translator_page_clear_history_message">刪除所有已儲存的翻譯記錄？此操作無法復原。</string>
+
+    <string name="image_crop_rotate">旋轉</string>
+    <string name="image_crop_reset">重設</string>
+    <string name="image_crop_free">自由</string>
+    <string name="image_crop_original">原圖</string>
+    <string name="image_crop_load_failed">無法載入圖片</string>
+    <string name="image_crop_failed">無法裁切圖片</string>
 </resources>

@@ -1108,4 +1108,11 @@
   <string name="translator_page_clear_history">Очистить историю</string>
   <string name="translator_page_clear_history_title">Очистить историю переводов?</string>
   <string name="translator_page_clear_history_message">Все сохранённые переводы будут удалены. Это действие нельзя отменить.</string>
+
+    <string name="image_crop_rotate">Повернуть</string>
+    <string name="image_crop_reset">Сбросить</string>
+    <string name="image_crop_free">Свободно</string>
+    <string name="image_crop_original">Оригинал</string>
+    <string name="image_crop_load_failed">Не удалось загрузить изображение</string>
+    <string name="image_crop_failed">Не удалось обрезать изображение</string>
 </resources>

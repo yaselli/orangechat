@@ -288,7 +288,7 @@ fun ChatInput(
     // Camera launcher
     var cameraOutputUri by remember { mutableStateOf<Uri?>(null) }
     var cameraOutputFile by remember { mutableStateOf<File?>(null) }
-    val (_, launchCameraCrop) = useCropLauncher(
+    val launchCameraCrop = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
             state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
             dismissExpand()
@@ -326,7 +326,7 @@ fun ChatInput(
 
     // Image picker launcher
     var preCropTempFile by remember { mutableStateOf<File?>(null) }
-    val (_, launchImageCrop) = useCropLauncher(
+    val launchImageCrop = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
             state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
             dismissExpand()

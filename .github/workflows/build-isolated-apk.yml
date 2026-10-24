@@ -91,11 +91,13 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest,me.rerere.rikkahub.data.db.fts.MessageFtsManagerTest,me.rerere.rikkahub.data.db.dao.UsageRecordDAOTest,me.rerere.rikkahub.data.db.dao.TranslationHistoryDAOTest
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest,me.rerere.rikkahub.data.db.fts.MessageFtsManagerTest,me.rerere.rikkahub.data.db.dao.UsageRecordDAOTest,me.rerere.rikkahub.data.db.dao.TranslationHistoryDAOTest,me.rerere.rikkahub.ui.components.crop.ImageCropDeviceTest
       - name: Release lint
         run: ./gradlew lintRelease
       - name: Build signed release APK
         run: ./gradlew assembleRelease
+      - name: Verify removed native dependencies and report APK size
+        run: python3 scripts/report-apk-size.py --apk-dir app/build/outputs/apk/release --output app/build/reports/apk-size/release.json
       - name: Verify APK identity and debug flag
         run: |
           AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
@@ -134,6 +136,7 @@ jobs:
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/38.json
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/39.json
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/41.json
+            app/build/reports/apk-size/*.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**
           if-no-files-found: warn

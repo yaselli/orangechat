@@ -167,9 +167,6 @@
       android:name=".ui.activity.BiometricPromptActivity"
       android:exported="false"
       android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-    <activity
-      android:name="com.yalantis.ucrop.UCropActivity"
-      android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
     <!-- Shizuku provider for Gadgetbridge data access -->
     <provider

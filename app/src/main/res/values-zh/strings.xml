@@ -1241,4 +1241,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="translator_page_clear_history">清空历史</string>
   <string name="translator_page_clear_history_title">清空翻译历史？</string>
   <string name="translator_page_clear_history_message">删除所有已保存的翻译记录？此操作无法撤销。</string>
+
+    <string name="image_crop_rotate">旋转</string>
+    <string name="image_crop_reset">重置</string>
+    <string name="image_crop_free">自由</string>
+    <string name="image_crop_original">原图</string>
+    <string name="image_crop_load_failed">无法加载图片</string>
+    <string name="image_crop_failed">无法裁剪图片</string>
 </resources>

@@ -147,6 +147,14 @@ jobs:
       - name: Build APK
         run: ./gradlew assembleDebug
 
+      - name: Verify removed native dependencies and report APK size
+        run: python3 scripts/report-apk-size.py --apk-dir app/build/outputs/apk/debug --output app/build/reports/apk-size/debug.json
+      - name: Upload APK size report
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrangeChat-apk-size-debug
+          path: app/build/reports/apk-size/debug.json
+          if-no-files-found: error
       - name: Upload APK
         run: |
           AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
