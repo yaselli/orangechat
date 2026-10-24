@@ -1,0 +1,7 @@
+{
+  "version": "2.3.2",
+  "versionCode": 167,
+  "testedCommit": "c9028b8aa29a3b1ebf650e949c342cb79712a5e9",
+  "channels": ["release", "debug"],
+  "notes": "docs/releases/2.3.2.md"
+}

@@ -286,6 +286,14 @@ class RouteActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        intent.getStringExtra(me.rerere.rikkahub.service.MediaCreationForegroundService.EXTRA_MEDIA_SESSION_ID)
+            ?.takeIf { runCatching { Uuid.parse(it) }.isSuccess }?.let { id ->
+                navStack?.let { stack ->
+                    Snapshot.withMutableSnapshot {
+                        if (stack.lastOrNull() != Screen.MediaCreation(id)) stack.add(Screen.MediaCreation(id))
+                    }
+                }
+            }
         // Navigate to the chat screen if a conversation ID is provided
         intent.getStringExtra("conversationId")?.let { text ->
             val autoStartVoice = intent.getBooleanExtra("autoStartVoice", false)
@@ -373,6 +381,13 @@ class RouteActivity : ComponentActivity() {
         SideEffect { this@RouteActivity.navStack = backStack }
 
         ShareHandler(backStack)
+        LaunchedEffect(backStack) {
+            intent.getStringExtra(me.rerere.rikkahub.service.MediaCreationForegroundService.EXTRA_MEDIA_SESSION_ID)
+                ?.takeIf { runCatching { Uuid.parse(it) }.isSuccess }?.let { id ->
+                    backStack.add(Screen.MediaCreation(id))
+                    intent.removeExtra(me.rerere.rikkahub.service.MediaCreationForegroundService.EXTRA_MEDIA_SESSION_ID)
+                }
+        }
 
         // 监听 App 事件: TTS 朗读 / AI 主动发起语音通话
         LaunchedEffect(tts) {
@@ -533,6 +548,15 @@ class RouteActivity : ComponentActivity() {
                                 BackupPage()
                             }
 
+                            entry<Screen.MediaCreationSessions> {
+                                me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationSessionsPage()
+                            }
+                            entry<Screen.MediaCreation> { key ->
+                                me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationPage(key.id)
+                            }
+                            entry<Screen.SettingMedia> {
+                                me.rerere.rikkahub.ui.pages.setting.SettingMediaPage()
+                            }
                             entry<Screen.ImageGen> {
                                 ImageGenPage()
                             }
@@ -956,6 +980,15 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Backup : Screen
+
+    @Serializable
+    data object MediaCreationSessions : Screen
+
+    @Serializable
+    data class MediaCreation(val id: String) : Screen
+
+    @Serializable
+    data object SettingMedia : Screen
 
     @Serializable
     data object ImageGen : Screen

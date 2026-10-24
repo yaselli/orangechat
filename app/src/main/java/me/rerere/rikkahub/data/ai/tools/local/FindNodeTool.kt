@@ -19,7 +19,6 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.ai.AgentTurnTracker
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.ActionLogEntry
 
@@ -165,7 +164,6 @@ fun clickNodeTool(
         )
     },
     execute = { input ->
-        AgentTurnTracker.recordAutomationAction()
         me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val (by, value, pkgFilter) = parseSelector(input)
         val nth = input.jsonObject["nth"]?.jsonPrimitive?.intOrNull ?: 0
@@ -286,7 +284,6 @@ fun setTextTool(
         )
     },
     execute = { input ->
-        AgentTurnTracker.recordAutomationAction()
         me.rerere.rikkahub.service.RikkaAccessibilityService.instance?.let { wakeScreenIfNeeded(it) }
         val (by, value, pkgFilter) = parseSelector(input)
         val nth = input.jsonObject["nth"]?.jsonPrimitive?.intOrNull ?: 0

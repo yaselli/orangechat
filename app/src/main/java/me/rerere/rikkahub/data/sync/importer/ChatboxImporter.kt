@@ -397,6 +397,7 @@ object ChatboxImporter {
     }
 
     private fun ProviderSetting.providerTypeName(): String = when (this) {
+        is ProviderSetting.Account -> "account"
         is ProviderSetting.OpenAI -> "openai"
         is ProviderSetting.Google -> "gemini"
         is ProviderSetting.Claude -> "claude"

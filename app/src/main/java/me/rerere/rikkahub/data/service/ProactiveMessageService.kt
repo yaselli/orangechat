@@ -6,6 +6,14 @@
 
 package me.rerere.rikkahub.data.service
 
+import me.rerere.rikkahub.data.ai.UsageRecorder
+import me.rerere.rikkahub.data.model.withConversationConfig
+import me.rerere.rikkahub.data.model.getAssistantOf
+import me.rerere.rikkahub.data.model.getChatModelOf
+import me.rerere.rikkahub.data.ai.UsageSource
+import me.rerere.rikkahub.data.ai.UsageTag
+
+import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -43,7 +51,10 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.rikkahub.data.ai.buildGenerationRequestParameters
 import me.rerere.rikkahub.data.ai.GenerationScene
+import me.rerere.rikkahub.data.memory.MemoryRecallService
 import me.rerere.rikkahub.data.ai.buildGenerationMemoryPrompt
+import me.rerere.rikkahub.data.model.selectCompactedContext
+import me.rerere.rikkahub.data.ai.contextSummaryMessage
 import me.rerere.rikkahub.data.ai.selectGenerationHistory
 import me.rerere.rikkahub.data.ai.selectGenerationSystemPrompt
 import me.rerere.ai.ui.UIMessage
@@ -306,9 +317,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val settingsStore: SettingsStore by inject()
     private val conversationRepository: ConversationRepository by inject()
     private val memoryRepository: MemoryRepository by inject()
+    private val memoryRecallService: MemoryRecallService by inject()
     private val providerManager: ProviderManager by inject()
+    private val usageRecorder: UsageRecorder by inject()
     private val json: Json by inject()
     private val chatService: ChatService by inject()
+    private val chatInteractionRepository: ChatInteractionRepository by inject()
     private val extraInfoCollector: me.rerere.rikkahub.data.ai.transformers.ExtraInfoInjectionCollector by inject()
     private val proactiveMessageService = ProactiveMessageService()
     private val serviceScope = CoroutineScope(
@@ -390,8 +404,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             val runAssistantMessageIds = linkedSetOf<Uuid>()
             val protectedMessageIds = linkedSetOf<Uuid>()
             try {
-                val settings = settingsStore.settingsFlowRaw.first()
-                val proactiveSetting = settings.proactiveMessageSetting
+                val rawSettings = settingsStore.settingsFlowRaw.first()
+                val proactiveSetting = rawSettings.proactiveMessageSetting
                 trace.event("settings", "enabled=${proactiveSetting.enabled}")
 
                 if (!proactiveSetting.enabled) {
@@ -431,17 +445,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 // 获取助手
-                val assistant = settings.assistants.find { it.id.toString() == proactiveSetting.assistantId }
-                    ?: settings.getCurrentAssistant()
-                val assistantUuid = assistant.id
-                val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
-
-                if (model == null) {
-                    outcome = "no_model"
-                    Log.e(ProactiveMessageService.TAG, "No model found for proactive message")
-                    return@launch
-                }
-
+                val storedAssistant = rawSettings.assistants.find { it.id.toString() == proactiveSetting.assistantId }
+                    ?: rawSettings.getCurrentAssistant()
+                val assistantUuid = storedAssistant.id
                 // 找到最近的对话。分段记录可以区分鸿蒙究竟冻结在列表查询还是正文读取。
                 trace.event("database_recent_start")
                 val recentConversationId = conversationRepository.getMostRecentConversationId(assistantUuid)
@@ -449,6 +455,18 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 trace.event("database_load_start")
                 val conversation = recentConversationId?.let { conversationRepository.getConversationById(it) }
                 trace.conversation("database_load_end", conversation)
+                val settings = if (conversation == null) rawSettings else rawSettings.withConversationConfig(conversation)
+                val assistant = if (conversation == null) storedAssistant else settings.getAssistantOf(conversation)
+                val model = if (conversation == null) settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
+                    else settings.getChatModelOf(conversation)
+
+                if (model == null) {
+                    outcome = "no_model"
+                    Log.e(ProactiveMessageService.TAG, "No model found for proactive message")
+                    return@launch
+                }
+
+
 
                 if (conversation != null && chatService.isChatBlocked(conversation.id)) {
                     outcome = "blocked_chat"
@@ -549,8 +567,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     "idleIncluded=true currentTimeIncluded=${settings.systemToolsSetting.timeContextInjectionEnabled}",
                 )
 
+                val compacted = selectCompactedContext(
+                    conversation?.currentMessages.orEmpty(), conversation?.contextCompaction
+                )
                 val rawHistoryMessages = selectGenerationHistory(
-                    conversation?.currentMessages.orEmpty(),
+                    compacted.messages,
                     assistant.contextMessageSize,
                     GenerationScene.PROACTIVE,
                 )
@@ -656,12 +677,16 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             role = MessageRole.SYSTEM,
                             parts = listOf(UIMessagePart.Text(systemPrompt))
                         ))
+                        compacted.summary?.let { add(contextSummaryMessage(it)) }
                         addAll(historyMessages)
                     }
                 )
                 trace.messages("request", messages)
 
-                val providerImpl = providerManager.getProviderByType(providerSetting)
+                val providerImpl = usageRecorder.wrap(
+                    providerManager.getProviderByType(providerSetting),
+                    UsageTag(UsageSource.PROACTIVE, assistant.id, conversationId),
+                )
 
                 // 主动消息场景：支持工具调用，但限制最大步数
                 // temperature 不强制默认 0.8f，保持与 GenerationHandler 一致（assistant.temperature 为 null 时不传），
@@ -1035,7 +1060,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             }
 
             // 记忆（设备事件上下文移到最后面，避免被网关注入的内容淹没）
-            if (assistant.enableMemory) {
+            if (assistant.enableMemory && !assistant.memoryRecallEnabled) {
                 val memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
@@ -1345,6 +1370,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         runAssistantMessageIds: MutableSet<Uuid>,
         protectedMessageIds: Set<Uuid>,
     ): Triple<List<UIMessage>, Boolean, Boolean> {
+        val recallTurn = memoryRecallService.prepare(
+            assistant, settings, conversationId.toString(), initialMessages,
+        )
         var hasToolCalls = false
         var hasJumpFlag = false
         val messages = runGenerationToolLoop(
@@ -1362,7 +1390,15 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // The provider-only copy may merge adjacent roles for API compatibility. Never merge
                 // the local streaming list: doing so can fold this run's assistant into the previous
                 // persisted assistant and transfer ownership back to the old message id.
-                val requestMessages = mergeAdjacentSameRoleMessages(currentMessages)
+                val requestMessages = mergeAdjacentSameRoleMessages(
+                    memoryRecallService.apply(recallTurn, chatInteractionRepository.decorate(
+                        currentMessages, conversationId.toString(), assistant,
+                        sourceMessages = chatService.getConversationFlow(conversationId).value.currentMessages.let { source ->
+                            val requested = currentMessages.mapTo(hashSetOf()) { it.id }
+                            source.take(source.indexOfLast { it.id in requested } + 1)
+                        },
+                    ))
+                )
                 // A proactive request may legitimately end with an existing ASSISTANT message. Seed a
                 // fresh assistant placeholder locally so handleMessageChunk cannot append the new
                 // stream to that old message and reuse its id. Do not send the placeholder upstream.
@@ -1388,7 +1424,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         // 用 id 匹配就地更新（保留 node id，避免思考链闪烁 / 覆盖上一条 assistant）
                         updateOrAppendAiMessage(
                             conversationId,
-                            currentAiMessage,
+                            recallTurn.annotate(currentAiMessage),
                             trace,
                             runAssistantMessageIds,
                             protectedMessageIds,
@@ -1411,13 +1447,13 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     Log.d(TAG, "[JUMP] flag detected in raw AI output")
                 }
                 // 应用输出转换器
-                val processedMessage = listOf(aiMessage).transforms(
+                val processedMessage = recallTurn.annotate(listOf(aiMessage).transforms(
                     transformers = outputTransformers,
                     context = this@ProactiveMessageTriggerService,
                     model = model,
                     assistant = assistant,
                     settings = settings
-                ).first()
+                ).first())
                 turnMessages[turnMessages.lastIndex] = processedMessage
 
                 // 检查是否有工具调用

@@ -26,6 +26,10 @@ import org.koin.dsl.module
 import java.io.File
 
 val repositoryModule = module {
+    single { get<me.rerere.rikkahub.data.db.AppDatabase>().mediaCreationDao() }
+    single { me.rerere.rikkahub.data.repository.MediaCreationRepository(get(), get(), get(), get()) }
+    single { me.rerere.rikkahub.data.remote.RemoteFileStore(get(), get(), get<me.rerere.rikkahub.AppScope>()) }
+
     single {
         ConversationRepository(get(), get(), get(), get(), get(), get())
     }
@@ -70,12 +74,14 @@ val repositoryModule = module {
         )
     }
 
+    single { me.rerere.workspace.ssh.SshConnectionPool() }
+
     single {
         RootfsInstaller(get())
     }
 
     single {
-        WorkspaceRepository(get(), get(), get(), get())
+        WorkspaceRepository(get(), get(), get(), get(), get())
     }
 
     single {

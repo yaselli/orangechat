@@ -24,6 +24,9 @@ import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
 
 val appModule = module {
+    single { me.rerere.mediagen.provider.MediaGenerationManager(get()) }
+    single { me.rerere.rikkahub.service.MediaCreationService(get(), get(), get(), get(), get(), get(), get()) }
+
     single<Json> { JsonInstant }
 
     single {
@@ -42,8 +45,7 @@ val appModule = module {
         AppEventBus()
     }
 
-    // Workflows: AgentRun ledger (no-op stub), repository, engine, trigger registry.
-    single { me.rerere.rikkahub.data.agentrun.AgentRunRepository() }
+    // Workflows: repository, engine, trigger registry.
     single {
         me.rerere.rikkahub.data.repository.SshHostRepository(
             get<me.rerere.rikkahub.data.db.AppDatabase>().sshHostDao()
@@ -139,9 +141,13 @@ val appModule = module {
             settingsStore = get(),
             conversationRepo = get(),
             memoryRepository = get(),
+            memoryOrganization = get(),
+            memoryAutoIndex = get(),
+            chatInteractionRepository = get(),
             generationHandler = get(),
             templateTransformer = get(),
             providerManager = get(),
+            usageRecorder = get(),
             toolSurfaceBuilder = get(),
             mcpManager = get(),
             filesManager = get(),

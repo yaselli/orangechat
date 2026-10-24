@@ -10,6 +10,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import me.rerere.rikkahub.data.model.SshWorkspaceSettings
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.workspace.Workspace
 import me.rerere.workspace.WorkspaceShellStatus
@@ -39,7 +40,19 @@ data class WorkspaceEntity(
     // 工具审批的用户覆盖项 (toolName -> needsApproval)，未覆盖的工具沿用默认值
     @ColumnInfo("tool_approvals", defaultValue = "{}")
     val toolApprovals: String = "{}",
+    @ColumnInfo("type", defaultValue = "LOCAL")
+    val type: String = "LOCAL",
+    @ColumnInfo("ssh_config")
+    val sshConfig: String? = null,
 ) {
+    fun isSsh(): Boolean = type == "SSH"
+
+    fun sshSettings(): SshWorkspaceSettings? = sshConfig?.let {
+        runCatching { JsonInstant.decodeFromString<SshWorkspaceSettings>(it) }.getOrNull()
+    }
+
+    fun workspaceDir(): String = if (isSsh()) sshSettings()?.remoteDir ?: "/" else "/workspace"
+
     fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
         JsonInstant.decodeFromString<Map<String, Boolean>>(toolApprovals)
     }.getOrDefault(emptyMap())

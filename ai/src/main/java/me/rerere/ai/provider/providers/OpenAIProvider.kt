@@ -26,6 +26,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.openai.parseEmbeddingVectors
 import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.ui.ImageAspectRatio
@@ -189,16 +190,38 @@ class OpenAIProvider(
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
         val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: params.model.modelId
 
-        val embeddings = data.map { embeddingJson ->
-            val embeddingArray = embeddingJson.jsonObject["embedding"]?.jsonArray
-                ?: error("No embedding in response")
-            embeddingArray.map { it.jsonPrimitive.content.toFloat() }
-        }
+        val embeddings = parseEmbeddingVectors(data, params.input.size)
 
         EmbeddingGenerationResult(
             model = model,
             embeddings = embeddings
         )
+    }
+
+    /** SiliconFlow/Jina-style /rerank contract; callers own timeouts and one-call budgets. */
+    suspend fun rerank(
+        providerSetting: ProviderSetting.OpenAI, model: Model, query: String, documents: List<String>,
+    ): List<me.rerere.ai.provider.providers.openai.RerankScore> = withContext(Dispatchers.IO) {
+        require(query.isNotBlank() && documents.size in 1..12)
+        require(model.customBodies.none { it.key in setOf("model", "query", "documents", "top_n", "return_documents") })
+        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val payload = buildJsonObject {
+            put("model", model.modelId)
+            put("query", query)
+            putJsonArray("documents") { documents.forEach { add(JsonPrimitive(it)) } }
+            put("top_n", documents.size)
+            put("return_documents", false)
+        }.mergeCustomBody(model.customBodies)
+        val request = Request.Builder().url("${providerSetting.baseUrl.trimEnd('/')}/rerank")
+            .headers(model.customHeaders.toHeaders()).header("Authorization", "Bearer $key")
+            .header("Content-Type", "application/json")
+            .post(json.encodeToString(payload).toRequestBody("application/json".toMediaType())).build()
+        client.newCall(request).await().use { response ->
+            check(response.isSuccessful) { "Rerank HTTP ${response.code}" }
+            val source = requireNotNull(response.body).source()
+            check(!source.request(65_537)) { "Rerank response too large" }
+            me.rerere.ai.provider.providers.openai.parseRerankScores(source.readUtf8(), documents.size)
+        }
     }
 
     override suspend fun generateImage(

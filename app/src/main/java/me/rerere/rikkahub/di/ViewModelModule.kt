@@ -35,8 +35,13 @@ import me.rerere.rikkahub.workflow.ui.WorkflowsViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
+import me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationSessionsVM
+import me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationVM
 
 val viewModelModule = module {
+    viewModelOf(::MediaCreationSessionsVM)
+    viewModel<MediaCreationVM> { params -> MediaCreationVM(params.get(), get(), get(), get(), get(), get(), get()) }
+
     viewModel<ChatVM> { params ->
         ChatVM(
             id = params.get(),
@@ -47,6 +52,7 @@ val viewModelModule = module {
             updateChecker = get(),
             filesManager = get(),
             favoriteRepository = get(),
+            chatInteractionRepository = get(),
         )
     }
     viewModelOf(::ChatDrawerVM)

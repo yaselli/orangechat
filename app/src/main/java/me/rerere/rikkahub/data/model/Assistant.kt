@@ -29,7 +29,33 @@ data class Assistant(
     val topP: Float? = null,
     val contextMessageSize: Int = 0,
     val streamOutput: Boolean = true,
+    val enableAvatarInteractions: Boolean = true,
+    val enableMessageReactions: Boolean = true,
+    val userInteractionAction: String = "拍了拍",
+    val userInteractionSuffix: String = "",
+    val assistantInteractionAction: String = "拍了拍",
+    val assistantInteractionSuffix: String = "",
     val enableMemory: Boolean = false,
+    val memoryRecallEnabled: Boolean = false,
+    val memoryHistoryRecallEnabled: Boolean = false,
+    // A fresh opt-in: an old installation's history switch must not enable independent raw-text injection.
+    val memoryIndependentHistoryRecallEnabled: Boolean = false,
+    val memoryEmbeddingModelId: Uuid? = null,
+    val memoryRerankEnabled: Boolean = false,
+    val memoryRerankModelId: Uuid? = null,
+    val memoryRerankThreshold: Double = 0.5,
+    val memoryRerankLimit: Int = 3,
+    val memoryAutoIndexEnabled: Boolean = false,
+    val memoryAutoIndexSinceMillis: Long = 0,
+    val memoryAutoIndexDailyLimit: Int = 20,
+    // Decode-only compatibility with old exports. No retention/decay behavior uses these values anymore.
+    val memoryRetentionEnabled: Boolean = false,
+    val memoryRetentionDays: Int = 30,
+    val memoryDecayHalfLifeDays: Int = 7,
+    val memoryAutoOrganizeEnabled: Boolean = false,
+    val memoryOrganizationModelId: Uuid? = null,
+    val memoryOrganizationInterval: Int = 10,
+    val memoryOrganizationSinceMillis: Long = 0,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val enableRecentChatsReference: Boolean = false,
     val messageTemplate: String = "{{ message }}",
@@ -67,6 +93,8 @@ data class QuickMessage(
 data class AssistantMemory(
     val id: Int,
     val content: String = "",
+    @kotlinx.serialization.Transient
+    val hasOriginalEvidence: Boolean = false,
 )
  
 @Serializable

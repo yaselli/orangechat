@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.components.ui
 
+import me.rerere.rikkahub.data.ai.account.withoutAccountCredentials
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -96,7 +97,7 @@ fun ProviderSetting.encodeForShare(): String {
         append("ai-provider:")
         append("v1:")
 
-        val value = JsonInstant.encodeToString(this@encodeForShare.copyProvider(models = emptyList()))
+        val value = JsonInstant.encodeToString(this@encodeForShare.copyProvider(models = emptyList()).withoutAccountCredentials())
         append(Base64.encode(value.encodeToByteArray()))
     }
 }

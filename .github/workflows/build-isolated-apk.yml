@@ -1,0 +1,174 @@
+name: Build Stable Release APK
+
+on:
+  push:
+    branches:
+      - build/stable-release
+      - test/memory-release-v164
+      - feature/chat-interactions
+      - fix/workflow-mcp-release-diagnostics
+      - fix/upstream-alignment-batch1
+      - feature/upstream-usage-stats
+      - feature/upstream-usage-dashboard
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/build/stable-release' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download color utilities
+        run: git submodule update --init --depth 1 material3/material-color-utilities
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+      - name: Install web dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+      - name: Verify announcement authorization
+        working-directory: functions
+        run: npm test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Restore release signing
+        env:
+          KEY_BASE64: ${{ secrets.KEY_BASE64 }}
+          SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG }}
+        run: |
+          if [ -z "$KEY_BASE64" ] || [ -z "$SIGNING_CONFIG" ]; then
+            echo '::error::Release requires KEY_BASE64 and SIGNING_CONFIG secrets (same keys as release.yml). Never use the public debug key for release.'
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$KEY_BASE64" | base64 --decode > app/app.key
+          printf '%s\n' "$SIGNING_CONFIG" > local.properties
+      - name: Unit tests
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest
+      - name: Upload generated Room schema
+        uses: actions/upload-artifact@v4
+        with:
+          name: room-v43-release
+          path: app/schemas/me.rerere.rikkahub.data.db.AppDatabase/43.json
+          if-no-files-found: error
+      - name: Compile database device tests
+        run: ./gradlew :app:compileDebugAndroidTestKotlin
+      - name: Verify usage accounting SQL and migration
+        run: |
+          python3 scripts/verify-usage-stats.py
+          python3 scripts/verify-conversation-config.py
+          python3 scripts/verify-ssh-workspace.py --require-schema
+          python3 scripts/verify-media-creation.py
+          python3 scripts/verify-translation-history.py
+
+      - name: Verify interaction migration
+        run: python3 scripts/verify-chat-interactions.py
+      - name: Verify stable and memory migration routes
+        run: |
+          python3 scripts/verify-stable-memory-upgrade.py
+          python3 scripts/verify-memory-migration.py
+          python3 scripts/verify-history-memory.py
+          python3 scripts/verify-memory-organization.py
+          python3 scripts/verify-memory-graph.py
+          python3 scripts/verify-message-fts.py
+      - name: Enable KVM for migration tests
+        run: sudo chmod 666 /dev/kvm
+      - name: Run memory migration and native message search device tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest,me.rerere.rikkahub.data.db.fts.MessageFtsManagerTest,me.rerere.rikkahub.data.db.dao.UsageRecordDAOTest,me.rerere.rikkahub.data.db.dao.TranslationHistoryDAOTest,me.rerere.rikkahub.ui.components.crop.ImageCropDeviceTest,me.rerere.rikkahub.data.repository.MediaCreationRepositoryTest,me.rerere.rikkahub.data.files.MediaCreationFilesDeviceTest,me.rerere.rikkahub.ui.components.sketch.SketchDeviceTest
+      - name: Release lint
+        run: ./gradlew lintRelease
+      - name: Build signed release APK
+        run: ./gradlew assembleRelease
+      - name: Verify removed native dependencies and report APK size
+        run: python3 scripts/report-apk-size.py --apk-dir app/build/outputs/apk/release --output app/build/reports/apk-size/release.json
+      - name: Verify APK identity and debug flag
+        run: |
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
+          test -n "$AAPT"
+          EXPECTED_PACKAGE=me.rerere.orangechat
+          count=0
+          for apk in app/build/outputs/apk/release/*.apk; do
+            test -f "$apk"
+            "$AAPT" dump badging "$apk" > "$RUNNER_TEMP/apk-badging.txt"
+            grep -q "^package: name='$EXPECTED_PACKAGE' " "$RUNNER_TEMP/apk-badging.txt"
+            if grep -q '^application-debuggable' "$RUNNER_TEMP/apk-badging.txt"; then exit 1; fi
+            count=$((count + 1))
+          done
+          test "$count" -gt 0
+      - name: Upload APK
+        run: |
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
+          python3 scripts/test-prepare-update-assets.py
+          python3 scripts/prepare-update-assets.py --apk-dir app/build/outputs/apk/release --output-dir update-assets/release --channel release --aapt "$AAPT"
+      - name: Upload versioned APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiguaban-release
+          path: update-assets/release/*
+          if-no-files-found: error
+      - name: Upload verification reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiguaban-release-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+            **/build/reports/lint-results*.*
+            app/schemas/me.rerere.rikkahub.data.db.AppDatabase/32.json
+            app/schemas/me.rerere.rikkahub.data.db.AppDatabase/38.json
+            app/schemas/me.rerere.rikkahub.data.db.AppDatabase/39.json
+            app/schemas/me.rerere.rikkahub.data.db.AppDatabase/41.json
+            app/schemas/me.rerere.rikkahub.data.db.AppDatabase/43.json
+            app/build/reports/apk-size/*.json
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**
+          if-no-files-found: warn
+      - name: Remove signing files
+        if: always()
+        run: rm -f app/app.key local.properties
+
+  publish-approved-update:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/build/stable-release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Xiguaban-release
+          path: approved-update
+      - name: Verify release automation regressions
+        run: python3 scripts/test-publish-approved-update.py
+      - name: Publish the accepted version after checksum and source verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish-approved-update.py --directory approved-update --channel release

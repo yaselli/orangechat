@@ -15,7 +15,9 @@ import okhttp3.OkHttpClient
 /**
  * Provider管理器，负责注册和获取Provider实例
  */
-class ProviderManager(client: OkHttpClient, context: Context) {
+class ProviderManager(client: OkHttpClient, context: Context,
+    credentials: AccountCredentialProvider = AccountCredentialProvider { _, _ -> error("Account login is unavailable") },
+) {
     // 存储已注册的Provider实例
     private val providers = mutableMapOf<String, Provider<*>>()
 
@@ -24,6 +26,8 @@ class ProviderManager(client: OkHttpClient, context: Context) {
         registerProvider("openai", OpenAIProvider(client, context))
         registerProvider("google", GoogleProvider(client, context))
         registerProvider("claude", ClaudeProvider(client, context))
+        registerProvider("chatgpt", me.rerere.ai.provider.providers.chatgpt.ChatGPTProvider(client, credentials))
+        registerProvider("grok", me.rerere.ai.provider.providers.grok.GrokProvider(client, credentials))
     }
 
     /**
@@ -58,6 +62,8 @@ class ProviderManager(client: OkHttpClient, context: Context) {
             is ProviderSetting.OpenAI -> getProvider("openai")
             is ProviderSetting.Google -> getProvider("google")
             is ProviderSetting.Claude -> getProvider("claude")
+            is ProviderSetting.ChatGPT -> getProvider("chatgpt")
+            is ProviderSetting.Grok -> getProvider("grok")
         } as Provider<T>
     }
 }

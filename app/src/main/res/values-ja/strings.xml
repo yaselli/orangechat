@@ -264,12 +264,12 @@
   <string name="chat_page_compress_additional_prompt">追加指示（オプション）</string>
   <string name="chat_page_compress_additional_prompt_hint">保持または重点的に扱う内容を指定</string>
   <string name="chat_page_compress_context">履歴を圧縮</string>
-  <string name="chat_page_compress_context_desc">会話を要約して圧縮し、トークンを節約します</string>
+  <string name="chat_page_compress_context_desc">次回以降のリクエスト用に過去の会話を要約します。履歴はそのまま残ります</string>
   <string name="chat_page_compress_context_title">会話履歴を圧縮</string>
-  <string name="chat_page_compress_keep_recent">最近のメッセージを保持</string>
+  <string name="chat_page_compress_keep_recent">原文のまま送る最近のメッセージ数</string>
   <string name="chat_page_compress_not_enough_messages">圧縮するためのメッセージが不足しています。保持するメッセージ数を減らすか、メッセージを追加してください。</string>
   <string name="chat_page_compress_target_tokens">ターゲットトークンサイズ</string>
-  <string name="chat_page_compress_warning">⚠️ コンテキストを圧縮すると、現在の会話のすべてのメッセージがリセットされます</string>
+  <string name="chat_page_compress_warning">元のメッセージ、分岐、添付は保持されます。要約には選択した圧縮モデルを使用します。</string>
   <string name="chat_page_compressing">圧縮中…</string>
   <string name="chat_page_conversation_system_prompt">会話システムプロンプト</string>
   <string name="chat_page_conversation_system_prompt_clear">クリア</string>
@@ -1089,4 +1089,30 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_folder_add">新規</string>
   <string name="chat_page_delete_folder_confirm">フォルダ "%1$s" を削除しますか？内部の会話は削除されず、フォルダから取り除かれるだけです。</string>
   <string name="chat_page_delete_folder_generating">フォルダ内の一部の会話がまだ生成中です。削除する前にそれらを停止してください。</string>
+  <string name="setting_provider_page_rerank_model">再ランキング</string>
+  <string name="chat_page_queue_paused_count">キュー一時停止（%1$d）</string>
+  <string name="chat_page_queue_pending_count">送信待ち（%1$d）</string>
+  <string name="chat_page_queue_resume">送信を再開</string>
+  <string name="chat_page_queue_image">[画像]</string>
+  <string name="chat_page_queue_file">[ファイル]</string>
+  <string name="chat_page_queue_audio">[録音]</string>
+  <string name="chat_page_queue_video">[動画]</string>
+  <string name="chat_page_queue_editing">編集中</string>
+  <string name="chat_page_queue_remove">取り消す</string>
+  <string name="chat_page_queue_edit_title">送信待ちのメッセージを編集</string>
+  <string name="chart_series">系列</string>
+  <string name="chart_series_name">系列 %1$d</string>
+  <string name="chart_mode_chart">グラフ</string>
+  <string name="chart_mode_table">表</string>
+  <string name="translator_page_history">履歴</string>
+  <string name="translator_page_clear_history">履歴を消去</string>
+  <string name="translator_page_clear_history_title">翻訳履歴を消去しますか？</string>
+  <string name="translator_page_clear_history_message">保存した翻訳をすべて削除します。この操作は元に戻せません。</string>
+
+    <string name="image_crop_rotate">回転</string>
+    <string name="image_crop_reset">リセット</string>
+    <string name="image_crop_free">自由</string>
+    <string name="image_crop_original">オリジナル</string>
+    <string name="image_crop_load_failed">画像を読み込めませんでした</string>
+    <string name="image_crop_failed">画像をトリミングできませんでした</string>
 </resources>

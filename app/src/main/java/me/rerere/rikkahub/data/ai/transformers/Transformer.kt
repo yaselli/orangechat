@@ -72,6 +72,7 @@ suspend fun List<UIMessage>.transforms(
     settings: Settings,
     processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     workspaceCwd: String? = null,
+    onTransformed: ((MessageTransformer, List<UIMessage>, List<UIMessage>) -> Unit)? = null,
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -82,7 +83,7 @@ suspend fun List<UIMessage>.transforms(
         workspaceCwd = workspaceCwd,
     )
     return transformers.fold(this) { acc, transformer ->
-        transformer.transform(ctx, acc)
+        transformer.transform(ctx, acc).also { result -> onTransformed?.invoke(transformer, acc, result) }
     }
 }
 

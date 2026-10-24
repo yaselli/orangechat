@@ -6,6 +6,8 @@
 
 package me.rerere.rikkahub.data.sync
 
+import me.rerere.rikkahub.data.ai.account.withoutAccountCredentials
+import me.rerere.rikkahub.data.backup.BackupIoLock
 import android.content.Context
 import android.util.Log
 import io.ktor.client.HttpClient
@@ -127,7 +129,7 @@ class S3Sync(
             addVirtualFileToZip(
                 zipOut = zipOut,
                 name = "settings.json",
-                content = json.encodeToString(settingsStore.settingsFlow.value)
+                content = json.encodeToString(settingsStore.settingsFlow.value.withoutAccountCredentials())
             )
 
             // Backup database files
@@ -150,6 +152,7 @@ class S3Sync(
 
             // Backup app files
             if (config.items.contains(S3Config.BackupItem.FILES)) {
+                me.rerere.rikkahub.data.files.MediaCreationArchive.write(context.filesDir, zipOut)
                 val uploadFolder = File(context.filesDir, FileFolders.UPLOAD)
                 if (uploadFolder.exists() && uploadFolder.isDirectory) {
                     Log.i(TAG, "prepareBackupFile: Backing up files from ${uploadFolder.absolutePath}")
@@ -185,82 +188,53 @@ class S3Sync(
     }
 
     private suspend fun restoreFromBackupFile(backupFile: File, config: S3Config) = withContext(Dispatchers.IO) {
-        Log.i(TAG, "restoreFromBackupFile: Starting restore from ${backupFile.absolutePath}")
+        BackupIoLock.run {
+            Log.i(TAG, "restoreFromBackupFile: Starting restore from ${backupFile.absolutePath}")
 
-        ZipInputStream(FileInputStream(backupFile)).use { zipIn ->
-            var entry: ZipEntry?
-            while (zipIn.nextEntry.also { entry = it } != null) {
-                entry?.let { zipEntry ->
-                    Log.i(TAG, "restoreFromBackupFile: Processing entry ${zipEntry.name}")
+            ZipInputStream(FileInputStream(backupFile)).use { zipIn ->
+                var entry: ZipEntry?
+                while (zipIn.nextEntry.also { entry = it } != null) {
+                    entry?.let { zipEntry ->
+                        Log.i(TAG, "restoreFromBackupFile: Processing entry ${zipEntry.name}")
 
-                    when (zipEntry.name) {
-                        "settings.json" -> {
-                            val settingsJson = zipIn.readBytes().toString(Charsets.UTF_8)
-                            Log.i(TAG, "restoreFromBackupFile: Restoring settings")
-                            try {
-                                val migratedJson = SettingsJsonMigrator.migrate(settingsJson)
-                                val settings = json.decodeFromString<Settings>(migratedJson)
-                                settingsStore.update(settings)
-                                Log.i(TAG, "restoreFromBackupFile: Settings restored successfully")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "restoreFromBackupFile: Failed to restore settings", e)
-                                throw Exception("Failed to restore settings: ${e.message}")
-                            }
-                        }
-
-                        "rikka_hub.db", "rikka_hub-wal", "rikka_hub-shm" -> {
-                            if (config.items.contains(S3Config.BackupItem.DATABASE)) {
-                                val dbFile = when (zipEntry.name) {
-                                    "rikka_hub.db" -> context.getDatabasePath("rikka_hub")
-                                    "rikka_hub-wal" -> File(
-                                        context.getDatabasePath("rikka_hub").parentFile,
-                                        "rikka_hub-wal"
-                                    )
-
-                                    "rikka_hub-shm" -> File(
-                                        context.getDatabasePath("rikka_hub").parentFile,
-                                        "rikka_hub-shm"
-                                    )
-
-                                    else -> null
-                                }
-
-                                dbFile?.let { targetFile ->
-                                    Log.i(
-                                        TAG,
-                                        "restoreFromBackupFile: Restoring ${zipEntry.name} to ${targetFile.absolutePath}"
-                                    )
-                                    targetFile.parentFile?.mkdirs()
-                                    FileOutputStream(targetFile).use { outputStream ->
-                                        zipIn.copyTo(outputStream)
-                                    }
-                                    Log.i(
-                                        TAG,
-                                        "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
-                                    )
+                        when (zipEntry.name) {
+                            "settings.json" -> {
+                                val settingsJson = zipIn.readBytes().toString(Charsets.UTF_8)
+                                Log.i(TAG, "restoreFromBackupFile: Restoring settings")
+                                try {
+                                    val migratedJson = SettingsJsonMigrator.migrate(settingsJson)
+                                    val settings = json.decodeFromString<Settings>(migratedJson)
+                                    settingsStore.update(settings)
+                                    Log.i(TAG, "restoreFromBackupFile: Settings restored successfully")
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "restoreFromBackupFile: Failed to restore settings", e)
+                                    throw Exception("Failed to restore settings: ${e.message}")
                                 }
                             }
-                        }
 
-                        else -> {
-                            if (config.items.contains(S3Config.BackupItem.FILES) &&
-                                zipEntry.name.startsWith("${FileFolders.UPLOAD}/")
-                            ) {
-                                val fileName = zipEntry.name.substringAfter("${FileFolders.UPLOAD}/")
-                                if (fileName.isNotEmpty()) {
-                                    val uploadFolder = File(context.filesDir, FileFolders.UPLOAD)
-                                    if (!uploadFolder.exists()) {
-                                        uploadFolder.mkdirs()
-                                        Log.i(TAG, "restoreFromBackupFile: Created upload directory")
+                            "rikka_hub.db", "rikka_hub-wal", "rikka_hub-shm" -> {
+                                if (config.items.contains(S3Config.BackupItem.DATABASE)) {
+                                    val dbFile = when (zipEntry.name) {
+                                        "rikka_hub.db" -> context.getDatabasePath("rikka_hub")
+                                        "rikka_hub-wal" -> File(
+                                            context.getDatabasePath("rikka_hub").parentFile,
+                                            "rikka_hub-wal"
+                                        )
+
+                                        "rikka_hub-shm" -> File(
+                                            context.getDatabasePath("rikka_hub").parentFile,
+                                            "rikka_hub-shm"
+                                        )
+
+                                        else -> null
                                     }
 
-                                    val targetFile = File(uploadFolder, fileName)
-                                    Log.i(
-                                        TAG,
-                                        "restoreFromBackupFile: Restoring file ${zipEntry.name} to ${targetFile.absolutePath}"
-                                    )
-
-                                    try {
+                                    dbFile?.let { targetFile ->
+                                        Log.i(
+                                            TAG,
+                                            "restoreFromBackupFile: Restoring ${zipEntry.name} to ${targetFile.absolutePath}"
+                                        )
+                                        targetFile.parentFile?.mkdirs()
                                         FileOutputStream(targetFile).use { outputStream ->
                                             zipIn.copyTo(outputStream)
                                         }
@@ -268,27 +242,62 @@ class S3Sync(
                                             TAG,
                                             "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
                                         )
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "restoreFromBackupFile: Failed to restore file ${zipEntry.name}", e)
-                                        throw Exception("Failed to restore file ${zipEntry.name}: ${e.message}")
                                     }
                                 }
-                            } else if (config.items.contains(S3Config.BackupItem.FILES) &&
-                                zipEntry.name.startsWith("${FileFolders.SKILLS}/")
-                            ) {
-                                restoreSkillEntry(zipIn, zipEntry.name)
-                            } else {
-                                Log.i(TAG, "restoreFromBackupFile: Skipping entry ${zipEntry.name}")
+                            }
+
+                            else -> {
+                                if (config.items.contains(S3Config.BackupItem.FILES) &&
+                                    zipEntry.name.startsWith("${FileFolders.UPLOAD}/")
+                                ) {
+                                    val fileName = zipEntry.name.substringAfter("${FileFolders.UPLOAD}/")
+                                    if (fileName.isNotEmpty()) {
+                                        val uploadFolder = File(context.filesDir, FileFolders.UPLOAD)
+                                        if (!uploadFolder.exists()) {
+                                            uploadFolder.mkdirs()
+                                            Log.i(TAG, "restoreFromBackupFile: Created upload directory")
+                                        }
+
+                                        val targetFile = File(uploadFolder, fileName)
+                                        Log.i(
+                                            TAG,
+                                            "restoreFromBackupFile: Restoring file ${zipEntry.name} to ${targetFile.absolutePath}"
+                                        )
+
+                                        try {
+                                            FileOutputStream(targetFile).use { outputStream ->
+                                                zipIn.copyTo(outputStream)
+                                            }
+                                            Log.i(
+                                                TAG,
+                                                "restoreFromBackupFile: Restored ${zipEntry.name} (${targetFile.length()} bytes)"
+                                            )
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "restoreFromBackupFile: Failed to restore file ${zipEntry.name}", e)
+                                            throw Exception("Failed to restore file ${zipEntry.name}: ${e.message}")
+                                        }
+                                    }
+                                } else if (config.items.contains(S3Config.BackupItem.FILES) &&
+                                    zipEntry.name.startsWith("${FileFolders.SKILLS}/")
+                                ) {
+                                    restoreSkillEntry(zipIn, zipEntry.name)
+                                } else if (config.items.contains(S3Config.BackupItem.FILES) &&
+                                    zipEntry.name.startsWith("${FileFolders.MEDIA_CREATION}/")
+                                ) {
+                                    me.rerere.rikkahub.data.files.MediaCreationArchive.restore(context.filesDir, zipEntry.name, zipIn)
+                                } else {
+                                    Log.i(TAG, "restoreFromBackupFile: Skipping entry ${zipEntry.name}")
+                                }
                             }
                         }
-                    }
 
-                    zipIn.closeEntry()
+                        zipIn.closeEntry()
+                    }
                 }
             }
-        }
 
-        Log.i(TAG, "restoreFromBackupFile: Restore completed successfully")
+            Log.i(TAG, "restoreFromBackupFile: Restore completed successfully")
+        }
     }
 
     private fun addFileToZip(zipOut: ZipOutputStream, file: File, entryName: String) {

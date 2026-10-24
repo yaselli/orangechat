@@ -15,5 +15,6 @@ export interface UIMessage {
   finishedAt?: string | null;
   modelId?: string | null;
   usage?: TokenUsage | null;
+  generationTimeMs?: number | null;
   translation?: string | null;
 }

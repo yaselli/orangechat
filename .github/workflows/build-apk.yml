@@ -13,6 +13,20 @@ on:
       - fix/assistant-settings-writes
       - fix/plugin-file-boundaries
       - feature/raw-audio-messages
+      - feature/memory-system
+      - fix/memory-evidence-recall
+      - fix/workflow-mcp-release-diagnostics
+      - build/stable-release
+      - fix/upstream-alignment-batch1
+      - feature/upstream-usage-stats
+      - feature/upstream-usage-dashboard
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/build/stable-release' }}
 
 jobs:
   build:
@@ -39,6 +53,10 @@ jobs:
       - name: Install web dependencies
         working-directory: web-ui
         run: pnpm install --frozen-lockfile
+
+      - name: Check web types
+        working-directory: web-ui
+        run: pnpm run typecheck
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -67,6 +85,41 @@ jobs:
           mkdir -p verification-logs
           ./gradlew testDebugUnitTest --continue 2>&1 | tee verification-logs/unit-tests.txt
 
+      - name: Upload generated Room schema
+        uses: actions/upload-artifact@v4
+        with:
+          name: room-v43-debug
+          path: app/schemas/me.rerere.rikkahub.data.db.AppDatabase/43.json
+          if-no-files-found: error
+      - name: Verify usage accounting SQL and migration
+        run: |
+          python3 scripts/verify-usage-stats.py
+          python3 scripts/verify-conversation-config.py
+          python3 scripts/verify-ssh-workspace.py --require-schema
+          python3 scripts/verify-media-creation.py
+          python3 scripts/verify-translation-history.py
+
+      - name: Verify memory database migration SQL
+        run: python3 scripts/verify-memory-migration.py
+
+      - name: Verify history memory SQL and source isolation
+        run: python3 scripts/verify-history-memory.py
+
+      - name: Verify automatic memory claims and evidence
+        run: python3 scripts/verify-memory-organization.py
+
+      - name: Verify recall evidence and vector maintenance
+        run: python3 scripts/verify-memory-recall-evidence.py
+
+      - name: Verify graph retirement and incremental index claims
+        run: python3 scripts/verify-memory-graph.py
+
+      - name: Verify message search index upgrade
+        run: python3 scripts/verify-message-fts.py
+
+      - name: Compile memory device tests
+        run: ./gradlew :app:compileDebugAndroidTestKotlin
+
       - name: Upload unit test diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -91,14 +144,57 @@ jobs:
             **/build/reports/tests/**
             **/build/test-results/**
             **/build/reports/lint-results*.*
+            app/schemas/**/30.json
+            app/schemas/**/31.json
+            app/schemas/**/33.json
+            app/schemas/**/36.json
+            app/schemas/**/37.json
+            app/schemas/**/39.json
+            app/schemas/**/41.json
+            app/schemas/**/43.json
           if-no-files-found: warn
 
       - name: Build APK
         run: ./gradlew assembleDebug
 
+      - name: Verify removed native dependencies and report APK size
+        run: python3 scripts/report-apk-size.py --apk-dir app/build/outputs/apk/debug --output app/build/reports/apk-size/debug.json
+      - name: Upload APK size report
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrangeChat-apk-size-debug
+          path: app/build/reports/apk-size/debug.json
+          if-no-files-found: error
       - name: Upload APK
+        run: |
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
+          python3 scripts/test-prepare-update-assets.py
+          python3 scripts/prepare-update-assets.py --apk-dir app/build/outputs/apk/debug --output-dir update-assets/debug --channel debug --aapt "$AAPT"
+      - name: Upload versioned APK
         uses: actions/upload-artifact@v4
         with:
           name: OrangeChat-personal-debug
-          path: app/build/outputs/apk/debug/*.apk
+          path: update-assets/debug/*
           if-no-files-found: error
+
+  publish-approved-update:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/build/stable-release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 4
+      - uses: actions/download-artifact@v4
+        with:
+          name: OrangeChat-personal-debug
+          path: approved-update
+      - name: Verify release automation regressions
+        run: python3 scripts/test-publish-approved-update.py
+      - name: Publish the accepted version after checksum and source verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish-approved-update.py --directory approved-update --channel debug

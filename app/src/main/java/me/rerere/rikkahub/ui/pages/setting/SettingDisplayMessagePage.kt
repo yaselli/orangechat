@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.ChatFontFamily
 import me.rerere.rikkahub.data.datastore.DisplaySetting
@@ -179,6 +180,20 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                             )
                         },
                     )
+                    if (BuildConfig.DEBUG) {
+                        item(
+                            headlineContent = { Text("显示记忆引用") },
+                            supportingContent = { Text("在新回复统计旁显示召回查看入口；仅控制显示，不影响记忆召回。") },
+                            trailingContent = {
+                                Switch(
+                                    checked = displaySetting.showMemoryRecallReferences,
+                                    onCheckedChange = {
+                                        updateDisplaySetting(displaySetting.copy(showMemoryRecallReferences = it))
+                                    },
+                                )
+                            },
+                        )
+                    }
                     item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_show_thinking_content_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_show_thinking_content_desc)) },

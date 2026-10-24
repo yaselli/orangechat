@@ -30,6 +30,9 @@ data class S3Config(
     val isHttps: Boolean
         get() = endpoint.startsWith("https://")
 
+    fun withHttpsByDefault(): S3Config =
+        if (endpoint.isBlank() || "://" in endpoint) this else copy(endpoint = "https://$endpoint")
+
     fun bucketUrl(): String {
         return if (pathStyle) {
             "${endpoint.trimEnd('/')}/$bucket"

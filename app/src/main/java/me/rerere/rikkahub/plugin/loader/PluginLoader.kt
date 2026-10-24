@@ -223,12 +223,20 @@ class PluginLoader(
                     val model = settings.findModelById(modelUuid) ?: return@forEach
                     val provider = model.findProvider(settings.providers) ?: return@forEach
  
+                    if (provider is ProviderSetting.Account) {
+                        config[field.name] = JsonPrimitive(model.modelId)
+                        config.remove("${field.name}_base_url")
+                        config.remove("${field.name}_api_key")
+                        return@forEach
+                    }
                     val baseUrl = when (provider) {
+                        is ProviderSetting.Account -> error("Subscription credentials are not exposed to plugins")
                         is ProviderSetting.OpenAI -> provider.baseUrl
                         is ProviderSetting.Google -> provider.baseUrl
                         is ProviderSetting.Claude -> provider.baseUrl
                     }
                     val apiKey = when (provider) {
+                        is ProviderSetting.Account -> error("Subscription credentials are not exposed to plugins")
                         is ProviderSetting.OpenAI -> provider.apiKey
                         is ProviderSetting.Google -> provider.apiKey
                         is ProviderSetting.Claude -> provider.apiKey

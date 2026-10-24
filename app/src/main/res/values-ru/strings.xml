@@ -264,12 +264,12 @@
   <string name="chat_page_compress_additional_prompt">Дополнительные инструкции (по желанию)</string>
   <string name="chat_page_compress_additional_prompt_hint">Укажите, что сохранить или на чём сосредоточиться</string>
   <string name="chat_page_compress_context">Сжать историю</string>
-  <string name="chat_page_compress_context_desc">Сжать переписку в краткое резюме, чтобы сэкономить токены</string>
+  <string name="chat_page_compress_context_desc">Сводка ранней переписки для будущих запросов. Полная история остаётся в чате</string>
   <string name="chat_page_compress_context_title">Сжать историю чата</string>
-  <string name="chat_page_compress_keep_recent">Сохранять недавние сообщения</string>
+  <string name="chat_page_compress_keep_recent">Недавние сообщения, отправляемые целиком</string>
   <string name="chat_page_compress_not_enough_messages">Недостаточно сообщений для сжатия. Уменьшите количество сохраняемых сообщений или добавьте больше сообщений.</string>
   <string name="chat_page_compress_target_tokens">Целевой размер токенов</string>
-  <string name="chat_page_compress_warning">⚠️ Сжатие контекста приведёт к сбросу всех сообщений в текущем диалоге</string>
+  <string name="chat_page_compress_warning">Сообщения, ветки и вложения сохраняются. Сводку создаёт выбранная модель сжатия.</string>
   <string name="chat_page_compressing">Сжатие...</string>
   <string name="chat_page_conversation_system_prompt">Системный запрос для беседы</string>
   <string name="chat_page_conversation_system_prompt_clear">Очистить</string>
@@ -1089,4 +1089,30 @@
   <string name="chat_page_folder_add">Новая</string>
   <string name="chat_page_delete_folder_confirm">Удалить папку "%1$s"? Беседы внутри не будут удалены, только исключены из папки.</string>
   <string name="chat_page_delete_folder_generating">Некоторые беседы в этой папке все еще генерируются. Пожалуйста, остановите их перед удалением.</string>
+  <string name="setting_provider_page_rerank_model">Реранк</string>
+  <string name="chat_page_queue_paused_count">Очередь приостановлена (%1$d)</string>
+  <string name="chat_page_queue_pending_count">В очереди (%1$d)</string>
+  <string name="chat_page_queue_resume">Продолжить</string>
+  <string name="chat_page_queue_image">[Изображение]</string>
+  <string name="chat_page_queue_file">[Файл]</string>
+  <string name="chat_page_queue_audio">[Запись]</string>
+  <string name="chat_page_queue_video">[Видео]</string>
+  <string name="chat_page_queue_editing">Редактирование</string>
+  <string name="chat_page_queue_remove">Убрать</string>
+  <string name="chat_page_queue_edit_title">Изменить сообщение в очереди</string>
+  <string name="chart_series">Ряд</string>
+  <string name="chart_series_name">Ряд %1$d</string>
+  <string name="chart_mode_chart">График</string>
+  <string name="chart_mode_table">Таблица</string>
+  <string name="translator_page_history">История</string>
+  <string name="translator_page_clear_history">Очистить историю</string>
+  <string name="translator_page_clear_history_title">Очистить историю переводов?</string>
+  <string name="translator_page_clear_history_message">Все сохранённые переводы будут удалены. Это действие нельзя отменить.</string>
+
+    <string name="image_crop_rotate">Повернуть</string>
+    <string name="image_crop_reset">Сбросить</string>
+    <string name="image_crop_free">Свободно</string>
+    <string name="image_crop_original">Оригинал</string>
+    <string name="image_crop_load_failed">Не удалось загрузить изображение</string>
+    <string name="image_crop_failed">Не удалось обрезать изображение</string>
 </resources>

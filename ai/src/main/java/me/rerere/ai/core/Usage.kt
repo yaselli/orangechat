@@ -16,6 +16,7 @@ data class TokenUsage(
     val totalTokens: Int = 0,
 )
 
+/** Merge cumulative snapshots from the same API request, without counting a snapshot twice. */
 fun TokenUsage?.merge(other: TokenUsage): TokenUsage {
     val promptTokens = if (other.promptTokens > 0) {
         other.promptTokens
@@ -38,5 +39,17 @@ fun TokenUsage?.merge(other: TokenUsage): TokenUsage {
         completionTokens = completionTokens,
         totalTokens = totalTokens,
         cachedTokens = cachedTokens
+    )
+}
+
+/** Add usage from separate API requests (for example, successive tool-loop turns). */
+fun TokenUsage?.sum(other: TokenUsage?): TokenUsage? {
+    if (this == null) return other
+    if (other == null) return this
+    return TokenUsage(
+        promptTokens = promptTokens + other.promptTokens,
+        completionTokens = completionTokens + other.completionTokens,
+        cachedTokens = cachedTokens + other.cachedTokens,
+        totalTokens = totalTokens + other.totalTokens,
     )
 }

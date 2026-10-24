@@ -6,7 +6,24 @@
 
 package me.rerere.rikkahub.di
 
+import me.rerere.rikkahub.data.db.migrations.Migration_32_33_StableMemory
+import me.rerere.rikkahub.data.db.migrations.Migration_37_38
+import me.rerere.rikkahub.data.db.migrations.Migration_38_39
+import me.rerere.rikkahub.data.db.migrations.Migration_41_42
+import me.rerere.rikkahub.data.db.migrations.Migration_40_41
+import me.rerere.rikkahub.data.db.migrations.Migration_39_40
+import me.rerere.rikkahub.data.ai.UsageRecorder
+import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.db.migrations.Migration_31_33_HistoryMemory
+import me.rerere.rikkahub.data.memory.HistoryMemoryStorage
+import me.rerere.rikkahub.data.memory.HistoryMemoryRepository
+import me.rerere.rikkahub.data.db.migrations.Migration_29_32_ChatInteractions
+import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import androidx.room.Room
+import me.rerere.rikkahub.data.backup.AutoBackupStore
+import me.rerere.rikkahub.data.backup.AutoBackupService
+import me.rerere.rikkahub.data.backup.AutoBackupScheduler
+import me.rerere.rikkahub.data.backup.SafBackupFolder
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
@@ -30,6 +47,7 @@ import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
+import me.rerere.rikkahub.data.db.fts.createMessageFtsTables
 import me.rerere.rikkahub.data.db.fts.SimpleDictManager
 import me.rerere.rikkahub.data.db.migrations.Migration_6_7
 import me.rerere.rikkahub.data.db.migrations.Migration_11_12
@@ -42,6 +60,15 @@ import me.rerere.rikkahub.data.db.migrations.Migration_21_22
 import me.rerere.rikkahub.data.db.migrations.Migration_23_24
 import me.rerere.rikkahub.data.db.migrations.Migration_24_25
 import me.rerere.rikkahub.data.db.migrations.Migration_25_26
+import me.rerere.rikkahub.data.db.migrations.Migration_30_31
+import me.rerere.rikkahub.data.memory.MemoryOrganizationService
+import me.rerere.rikkahub.data.db.migrations.Migration_33_34
+import me.rerere.rikkahub.data.db.migrations.Migration_34_35
+import me.rerere.rikkahub.data.memory.MemoryAutoIndexService
+import me.rerere.rikkahub.data.db.migrations.Migration_35_36
+import me.rerere.rikkahub.data.db.migrations.Migration_36_37
+import me.rerere.rikkahub.data.memory.MemoryRecallService
+import me.rerere.rikkahub.data.db.migrations.Migration_29_30
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
@@ -57,6 +84,11 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 val dataSourceModule = module {
+    single { AutoBackupStore(get()) }
+    single { SafBackupFolder(get()) }
+    single { AutoBackupScheduler(get()) }
+    single { AutoBackupService(get(), get(), get()) }
+
     single {
         SettingsStore(context = get(), scope = get())
     }
@@ -65,7 +97,17 @@ val dataSourceModule = module {
         val context: Context = get()
         Room.databaseBuilder(context, AppDatabase::class.java, "rikka_hub")
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16, Migration_19_20, Migration_20_21, Migration_21_22, Migration_23_24, Migration_24_25, Migration_25_26)
+            .addMigrations(
+                Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16,
+                Migration_19_20, Migration_20_21, Migration_21_22, Migration_23_24, Migration_24_25,
+                Migration_25_26, Migration_29_32_ChatInteractions, Migration_29_30, Migration_30_31, Migration_31_33_HistoryMemory, Migration_33_34,
+                Migration_34_35, Migration_35_36, Migration_36_37, Migration_32_33_StableMemory, Migration_37_38,
+                Migration_38_39,
+                Migration_39_40,
+                Migration_40_41,
+                Migration_41_42,
+                me.rerere.rikkahub.data.db.migrations.Migration_42_43,
+            )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     val dictDir = SimpleDictManager.extractDict(context)
@@ -82,19 +124,7 @@ val dataSourceModule = module {
                             }
                         }
                     }
-                    db.execSQL(
-                        """
-                        CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
-                            text,
-                            node_id UNINDEXED,
-                            message_id UNINDEXED,
-                            conversation_id UNINDEXED,
-                            title UNINDEXED,
-                            update_at UNINDEXED,
-                            tokenize = 'simple'
-                        )
-                        """.trimIndent()
-                    )
+                    createMessageFtsTables(db)
                 }
             })
             .openHelperFactory(
@@ -112,6 +142,18 @@ val dataSourceModule = module {
             )))
             .build()
     }
+
+    single { get<AppDatabase>().memoryIndexDao() }
+    single { get<AppDatabase>().usageRecordDao() }
+    single { get<AppDatabase>().translationHistoryDao() }
+    single { me.rerere.rikkahub.data.repository.TranslationHistoryRepository(get()) }
+    single { UsageRecorder(get(), get<AppScope>()) }
+
+    single<HistoryMemoryStorage> { HistoryMemoryRepository(get()) }
+    single { MemoryRecallService(get(), get(), get(), get<Context>(), get(), get<AppDatabase>().memoryOrganizationDao()) }
+    single { get<AppDatabase>().memoryAutoIndexDao() }
+    single { MemoryAutoIndexService(get(), { get<SettingsStore>().settingsFlow.value }, get()) }
+    single { MemoryOrganizationService(get(), get(), get(), get(), get(), get()) }
 
     single {
         AssistantTemplateLoader(settingsStore = get())
@@ -177,6 +219,8 @@ val dataSourceModule = module {
         )
     }
 
+    single { ChatInteractionRepository(get(), get()) }
+
     single {
         GenerationHandler(
             context = get(),
@@ -185,7 +229,10 @@ val dataSourceModule = module {
             memoryRepo = get(),
             conversationRepo = get(),
             aiLoggingManager = get(),
-            memoryBankService = get()
+            memoryBankService = get(),
+            memoryRecallService = get(),
+            chatInteractionRepository = get(),
+            usageRecorder = get(),
         )
     }
 
@@ -253,8 +300,13 @@ val dataSourceModule = module {
         SponsorAPI.create(get())
     }
 
+    single<me.rerere.rikkahub.data.ai.account.ProviderAccountStore> {
+        me.rerere.rikkahub.data.ai.account.SettingsAccountStore(get())
+    }
+    single { me.rerere.rikkahub.data.ai.account.ProviderAccountManager(get(), get<AppScope>(), get()) }
     single {
-        ProviderManager(client = get(), context = get())
+        ProviderManager(client = get(), context = get(),
+            credentials = get<me.rerere.rikkahub.data.ai.account.ProviderAccountManager>())
     }
 
     single {
@@ -263,7 +315,8 @@ val dataSourceModule = module {
             json = get(),
             context = get(),
             httpClient = get(),
-            pluginRepository = get()
+            pluginRepository = get(),
+            database = get()
         )
     }
 

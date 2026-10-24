@@ -23,6 +23,8 @@ data class Model(
     val abilities: List<ModelAbility> = emptyList(),
     val tools: Set<BuiltInTools> = emptySet(),
     val providerOverwrite: ProviderSetting? = null,
+    // User-supplied metadata; never sent as a model API parameter.
+    val contextWindow: Int? = null,
 )
 
 @Serializable
@@ -30,6 +32,7 @@ enum class ModelType {
     CHAT,
     IMAGE,
     EMBEDDING,
+    RERANK,
 }
 
 @Serializable

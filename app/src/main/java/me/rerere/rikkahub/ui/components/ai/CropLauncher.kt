@@ -1,63 +1,72 @@
-﻿/*
- * 橘瓣 OrangeChat
- * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
- * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
- */
-
 package me.rerere.rikkahub.ui.components.ai
 
-import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.net.toFile
-import com.yalantis.ucrop.UCrop
-import com.yalantis.ucrop.UCropActivity
+import androidx.core.net.toUri
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.common.android.appTempFolder
+import me.rerere.rikkahub.ui.components.crop.ImageCropDialog
+import me.rerere.rikkahub.ui.context.LocalToaster
+import com.dokar.sonner.ToastType
 import java.io.File
+import kotlin.uuid.Uuid
 
+/** Cropping stays in Compose; the result is copied by the caller before its temporary file is removed. */
 @Composable
 internal fun useCropLauncher(
-    onCroppedImageReady: (Uri) -> Unit, onCleanup: (() -> Unit)? = null
-): Pair<ActivityResultLauncher<Intent>, (Uri) -> Unit> {
+    onCroppedImageReady: (Uri) -> Unit,
+    onCleanup: (() -> Unit)? = null,
+): (Uri) -> Unit {
     val context = LocalContext.current
-    var cropOutputUri by remember { mutableStateOf<Uri?>(null) }
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+    val currentOnReady by rememberUpdatedState(onCroppedImageReady)
+    val currentCleanup by rememberUpdatedState(onCleanup)
+    var source by remember { mutableStateOf<Uri?>(null) }
+    var saving by remember { mutableStateOf(false) }
 
-    val cropActivityLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            cropOutputUri?.let { croppedUri ->
-                onCroppedImageReady(croppedUri)
-            }
-        }
-        cropOutputUri?.toFile()?.delete()
-        cropOutputUri = null
-        onCleanup?.invoke()
+    fun finish() {
+        source = null
+        currentCleanup?.invoke()
     }
 
-    val launchCrop: (Uri) -> Unit = { sourceUri ->
-        val outputFile = File(context.appTempFolder, "crop_output_${System.currentTimeMillis()}.jpg")
-        cropOutputUri = Uri.fromFile(outputFile)
-
-        val cropIntent = UCrop.of(sourceUri, cropOutputUri!!).withOptions(UCrop.Options().apply {
-            setFreeStyleCropEnabled(true)
-            setAllowedGestures(
-                UCropActivity.SCALE, UCropActivity.ROTATE, UCropActivity.NONE
-            )
-            setCompressionFormat(Bitmap.CompressFormat.PNG)
-        }).withMaxResultSize(4096, 4096).getIntent(context)
-
-        cropActivityLauncher.launch(cropIntent)
+    source?.let { uri ->
+        ImageCropDialog(
+            image = uri,
+            onDismiss = { if (!saving) finish() },
+            onConfirm = { bitmap ->
+                if (saving) return@ImageCropDialog
+                saving = true
+                scope.launch {
+                    val output = File(context.appTempFolder, "crop_${Uuid.random()}.png")
+                    try {
+                        withContext(Dispatchers.IO) {
+                            output.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+                        }
+                        currentOnReady(output.toUri())
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        toaster.show("图片裁剪失败，请重试", type = ToastType.Error)
+                    } finally {
+                        output.delete()
+                        saving = false
+                        finish()
+                    }
+                }
+            },
+        )
     }
-
-    return Pair(cropActivityLauncher, launchCrop)
+    return { uri -> if (!saving) source = uri }
 }
