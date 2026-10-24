@@ -28,7 +28,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
-import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -54,8 +53,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.RefreshCcw
-import me.rerere.hugeicons.stroke.RotateCwSquare
+import me.rerere.hugeicons.stroke.Refresh03
+import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.rikkahub.R
 
@@ -187,10 +186,10 @@ private fun CropTopBar(
         }
         Spacer(Modifier.weight(1f))
         IconButton(onClick = { state?.rotate() }, enabled = state != null && !cropping) {
-            Icon(HugeIcons.RotateCwSquare, contentDescription = stringResource(R.string.image_crop_rotate))
+            Icon(HugeIcons.Refresh01, contentDescription = stringResource(R.string.image_crop_rotate))
         }
         IconButton(onClick = { state?.reset() }, enabled = state?.modified == true && !cropping) {
-            Icon(HugeIcons.RefreshCcw, contentDescription = stringResource(R.string.image_crop_reset))
+            Icon(HugeIcons.Refresh03, contentDescription = stringResource(R.string.image_crop_reset))
         }
         Spacer(Modifier.weight(1f))
         FilledIconButton(onClick = onConfirm, enabled = state != null && !cropping) {
@@ -215,9 +214,6 @@ private fun CropAspectBar(state: ImageCropState) {
             ToggleButton(
                 checked = state.aspect == aspect,
                 onCheckedChange = { state.selectAspect(aspect) },
-                colors = ToggleButtonDefaults.colors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                ),
             ) {
                 Text(
                     text = when (aspect) {
