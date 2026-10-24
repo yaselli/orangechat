@@ -166,3 +166,5 @@ Interactions 的原始服务端工具调用／结果保存在其命名空间 met
 - 尚待本组最新 JVM／Lint／设备回归与双 APK；未使用真实媒体提供商或付费 Key。其余分词词典／前端依赖瘦身和 Gemini/K3 旧接口长上下文排查仍未完成；保持草稿，不合并、不发布。
 
 媒体补充检查：S3/WebDAV 的 FILES 备份包含新创作目录，排除未完成 `.part`，恢复逐项限制目录并拒绝穿越；JVM 回归验证草稿／二进制输出往返。图片导入单独处理 EXIF 全八种方向，设备回归检查各角颜色、透明度及尺寸上限。
+
+首轮媒体 CI 在 VideoPlayerDialog 编译处发现本项目未声明 Media3 UI（已使用 ExoPlayer 但没有 PlayerView 依赖）；已补目录中现有同版本 `androidx.media3.ui`，不替换播放器或关闭检查。媒体组验收仍以修复后的最新 CI 为准。
