@@ -40,7 +40,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
         val result = MatrixCursor(projection ?: DEFAULT_ROOT_PROJECTION)
         val context = context ?: return result
         val workspaces = runCatching { runBlocking { dao.getAll() } }.getOrDefault(emptyList())
-        for (workspace in workspaces) {
+        for (workspace in workspaces.filterNot { it.isSsh() }) {
             result.newRow().apply {
                 add(Root.COLUMN_ROOT_ID, workspace.root)
                 add(Root.COLUMN_DOCUMENT_ID, workspace.root)

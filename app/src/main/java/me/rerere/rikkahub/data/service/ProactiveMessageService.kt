@@ -6,6 +6,13 @@
 
 package me.rerere.rikkahub.data.service
 
+import me.rerere.rikkahub.data.ai.UsageRecorder
+import me.rerere.rikkahub.data.model.withConversationConfig
+import me.rerere.rikkahub.data.model.getAssistantOf
+import me.rerere.rikkahub.data.model.getChatModelOf
+import me.rerere.rikkahub.data.ai.UsageSource
+import me.rerere.rikkahub.data.ai.UsageTag
+
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -312,6 +319,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val memoryRepository: MemoryRepository by inject()
     private val memoryRecallService: MemoryRecallService by inject()
     private val providerManager: ProviderManager by inject()
+    private val usageRecorder: UsageRecorder by inject()
     private val json: Json by inject()
     private val chatService: ChatService by inject()
     private val chatInteractionRepository: ChatInteractionRepository by inject()
@@ -396,8 +404,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             val runAssistantMessageIds = linkedSetOf<Uuid>()
             val protectedMessageIds = linkedSetOf<Uuid>()
             try {
-                val settings = settingsStore.settingsFlowRaw.first()
-                val proactiveSetting = settings.proactiveMessageSetting
+                val rawSettings = settingsStore.settingsFlowRaw.first()
+                val proactiveSetting = rawSettings.proactiveMessageSetting
                 trace.event("settings", "enabled=${proactiveSetting.enabled}")
 
                 if (!proactiveSetting.enabled) {
@@ -437,17 +445,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 // 获取助手
-                val assistant = settings.assistants.find { it.id.toString() == proactiveSetting.assistantId }
-                    ?: settings.getCurrentAssistant()
-                val assistantUuid = assistant.id
-                val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
-
-                if (model == null) {
-                    outcome = "no_model"
-                    Log.e(ProactiveMessageService.TAG, "No model found for proactive message")
-                    return@launch
-                }
-
+                val storedAssistant = rawSettings.assistants.find { it.id.toString() == proactiveSetting.assistantId }
+                    ?: rawSettings.getCurrentAssistant()
+                val assistantUuid = storedAssistant.id
                 // 找到最近的对话。分段记录可以区分鸿蒙究竟冻结在列表查询还是正文读取。
                 trace.event("database_recent_start")
                 val recentConversationId = conversationRepository.getMostRecentConversationId(assistantUuid)
@@ -455,6 +455,18 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 trace.event("database_load_start")
                 val conversation = recentConversationId?.let { conversationRepository.getConversationById(it) }
                 trace.conversation("database_load_end", conversation)
+                val settings = if (conversation == null) rawSettings else rawSettings.withConversationConfig(conversation)
+                val assistant = if (conversation == null) storedAssistant else settings.getAssistantOf(conversation)
+                val model = if (conversation == null) settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
+                    else settings.getChatModelOf(conversation)
+
+                if (model == null) {
+                    outcome = "no_model"
+                    Log.e(ProactiveMessageService.TAG, "No model found for proactive message")
+                    return@launch
+                }
+
+
 
                 if (conversation != null && chatService.isChatBlocked(conversation.id)) {
                     outcome = "blocked_chat"
@@ -671,7 +683,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 )
                 trace.messages("request", messages)
 
-                val providerImpl = providerManager.getProviderByType(providerSetting)
+                val providerImpl = usageRecorder.wrap(
+                    providerManager.getProviderByType(providerSetting),
+                    UsageTag(UsageSource.PROACTIVE, assistant.id, conversationId),
+                )
 
                 // 主动消息场景：支持工具调用，但限制最大步数
                 // temperature 不强制默认 0.8f，保持与 GenerationHandler 一致（assistant.temperature 为 null 时不传），

@@ -281,7 +281,13 @@ private fun WorkspaceBasicPage(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            RootfsCard(
+            if (state.workspace?.isSsh() == true) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("远程 SSH 工作区", style = MaterialTheme.typography.titleMedium)
+                    Text(state.workspace.workspaceDir(), style = MaterialTheme.typography.bodySmall)
+                    Text("无需安装本地 Linux 环境。连接设置可在工作区列表的菜单中编辑。")
+                }
+            } else RootfsCard(
                 status = state.shellStatus,
                 installing = state.installing,
                 progressStageText = installProgressText(state),

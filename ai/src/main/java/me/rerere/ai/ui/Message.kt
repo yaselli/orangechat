@@ -50,6 +50,7 @@ data class UIMessage(
         val choice = chunk.choices.getOrNull(0)
         val message = choice?.delta ?: choice?.message
         return message?.let { delta ->
+            if (chunk.replaceContent) return@let copy(parts = delta.parts, annotations = delta.annotations)
             // Handle Parts
             var newParts = delta.parts.fold(parts) { acc, deltaPart ->
                 when (deltaPart) {
@@ -819,6 +820,10 @@ data class MessageChunk(
     val model: String,
     val choices: List<UIMessageChoice>,
     val usage: TokenUsage? = null,
+    // Interactions delivers authoritative indexed-step snapshots. Never concatenate these as deltas.
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val replaceContent: Boolean = false,
 )
 
 @Serializable

@@ -56,6 +56,7 @@ import me.rerere.rikkahub.utils.JsonInstant
 
 @Database(
     entities = [
+        me.rerere.rikkahub.data.db.entity.TranslationHistoryEntity::class,
         ConversationEntity::class,
         MemoryVectorEntity::class,
         HistoryMemoryVector::class,
@@ -65,6 +66,9 @@ import me.rerere.rikkahub.utils.JsonInstant
         MemoryEvidence::class,
         me.rerere.rikkahub.data.memory.MemoryIndexAttempt::class,
         GenMediaEntity::class,
+        me.rerere.rikkahub.data.db.entity.MediaCreationSessionEntity::class,
+        me.rerere.rikkahub.data.db.entity.MediaCreationNodeEntity::class,
+        me.rerere.rikkahub.data.db.entity.MediaCreationRecordEntity::class,
         MessageNodeEntity::class,
         ManagedFileEntity::class,
         FavoriteEntity::class,
@@ -76,8 +80,9 @@ import me.rerere.rikkahub.utils.JsonInstant
         SshHostEntity::class,
         SecurityAuditEntity::class,
         MessageReaction::class,
+        me.rerere.rikkahub.data.db.entity.UsageRecordEntity::class,
     ],
-    version = 38,
+    version = 43,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -100,6 +105,10 @@ import me.rerere.rikkahub.utils.JsonInstant
 )
 @TypeConverters(TokenUsageConverter::class)
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun translationHistoryDao(): me.rerere.rikkahub.data.db.dao.TranslationHistoryDAO
+
+    abstract fun usageRecordDao(): me.rerere.rikkahub.data.db.dao.UsageRecordDAO
+
     abstract fun memoryAutoIndexDao(): me.rerere.rikkahub.data.memory.MemoryAutoIndexDAO
 
     abstract fun memoryOrganizationDao(): MemoryOrganizationDAO
@@ -112,6 +121,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun conversationDao(): ConversationDAO
 
     abstract fun memoryDao(): MemoryDAO
+
+    abstract fun mediaCreationDao(): me.rerere.rikkahub.data.db.dao.MediaCreationDAO
 
     abstract fun genMediaDao(): GenMediaDAO
 

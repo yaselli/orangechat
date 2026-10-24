@@ -108,7 +108,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.FullScreen
+import me.rerere.hugeicons.stroke.Fullscreen
 import me.rerere.hugeicons.stroke.Voice
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
@@ -170,6 +170,7 @@ fun ChatInput(
     onStickerSend: (markdown: String) -> Unit,
     onVoiceMessage: ((url: String, duration: Long, transcript: String) -> Unit)? = null,
     autoStartVoice: Boolean = false,
+    onConversationSettings: () -> Unit = {},
 ) {
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
@@ -181,13 +182,13 @@ fun ChatInput(
     fun sendMessage() {
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
-        if (loading) onCancelClick() else onSendClick()
+        if (loading && state.isEmpty()) onCancelClick() else onSendClick()
     }
 
     fun sendMessageWithoutAnswer() {
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
-        if (loading) onCancelClick() else onLongSendClick()
+        if (loading && state.isEmpty()) onCancelClick() else onLongSendClick()
     }
 
     var expand by remember { mutableStateOf(ExpandState.Collapsed) }
@@ -287,7 +288,7 @@ fun ChatInput(
     // Camera launcher
     var cameraOutputUri by remember { mutableStateOf<Uri?>(null) }
     var cameraOutputFile by remember { mutableStateOf<File?>(null) }
-    val (_, launchCameraCrop) = useCropLauncher(
+    val launchCameraCrop = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
             state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
             dismissExpand()
@@ -325,7 +326,7 @@ fun ChatInput(
 
     // Image picker launcher
     var preCropTempFile by remember { mutableStateOf<File?>(null) }
-    val (_, launchImageCrop) = useCropLauncher(
+    val launchImageCrop = useCropLauncher(
         onCroppedImageReady = { croppedUri ->
             state.addImages(filesManager.createChatFilesByContents(listOf(croppedUri)))
             dismissExpand()
@@ -689,6 +690,7 @@ fun ChatInput(
                                     },
                                     onUpdateSearchService = onUpdateSearchService,
                                     model = chatModel,
+                                    onUpdateModel = onUpdateChatModel,
                                     modifier = Modifier.size(40.dp),
                                 )
 
@@ -791,12 +793,12 @@ fun ChatInput(
                                             )
                                     ) {
                                         val containerColor = when {
-                                            loading -> MaterialTheme.colorScheme.errorContainer
+                                            loading && state.isEmpty() -> MaterialTheme.colorScheme.errorContainer
                                             state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh
                                             else -> MaterialTheme.colorScheme.primary
                                         }
                                         val contentColor = when {
-                                            loading -> MaterialTheme.colorScheme.onErrorContainer
+                                            loading && state.isEmpty() -> MaterialTheme.colorScheme.onErrorContainer
                                             state.isEmpty() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                             else -> MaterialTheme.colorScheme.onPrimary
                                         }
@@ -805,7 +807,7 @@ fun ChatInput(
                                             shape = CircleShape,
                                             color = containerColor,
                                             content = {})
-                                        if (loading) {
+                                        if (loading && state.isEmpty()) {
                                             KeepScreenOn()
                                             Icon(
                                                 imageVector = HugeIcons.Cancel01,
@@ -868,6 +870,11 @@ fun ChatInput(
                             state = state,
                             assistant = assistant,
                             mcpManager = mcpManager,
+                            onConversationSettings = {
+                                dismissExpand()
+                                onConversationSettings()
+                            },
+                            conversationSettingsEnabled = !loading,
                             onCompressContext = onCompressContext,
                             onUpdateAssistant = onUpdateAssistant,
                             showInjectionSheet = showInjectionSheet,
@@ -1033,7 +1040,7 @@ private fun TextInputRow(
                         onClick = {
                             isFullScreen = !isFullScreen
                         }) {
-                        Icon(HugeIcons.FullScreen, null)
+                        Icon(HugeIcons.Fullscreen, null)
                     }
                 }
             },

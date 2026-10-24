@@ -54,6 +54,7 @@ import org.koin.core.context.startKoin
 
 private const val TAG = "RikkaHubApp"
 
+const val MEDIA_CREATION_NOTIFICATION_CHANNEL_ID = "media_creation"
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
@@ -78,6 +79,11 @@ class RikkaHubApp : Application() {
             modules(appModule, viewModelModule, dataSourceModule, repositoryModule, pluginModule)
         }
         this.createNotificationChannel()
+        // Resume polling only after preferences are decoded, without re-submitting interrupted requests.
+        get<me.rerere.rikkahub.AppScope>().launch {
+            get<SettingsStore>().settingsFlowRaw.first()
+            get<me.rerere.rikkahub.service.MediaCreationService>().resumePending()
+        }
 
         // 预热 ChatService 单例: 强制在主线程(Application.onCreate 由 Android 保证
         // 在主线程执行, 且先于同一进程内任何 Service/BroadcastReceiver/Activity 回调)
@@ -259,6 +265,9 @@ class RikkaHubApp : Application() {
 
     private fun createNotificationChannel() {
         val notificationManager = NotificationManagerCompat.from(this)
+        notificationManager.createNotificationChannel(NotificationChannelCompat
+            .Builder(MEDIA_CREATION_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+            .setName("图片与视频创作").build())
         val chatCompletedChannel = NotificationChannelCompat
             .Builder(
                 CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID,

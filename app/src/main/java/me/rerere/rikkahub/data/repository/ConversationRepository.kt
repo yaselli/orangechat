@@ -31,6 +31,7 @@ import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ConversationConfig
 import me.rerere.rikkahub.data.model.ContextCompaction
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
@@ -285,6 +286,12 @@ class ConversationRepository(
         }
     }
 
+    suspend fun updateConfig(id: Uuid, value: ConversationConfig?): Boolean =
+        conversationDAO.updateConfig(id.toString(), value?.let { JsonInstant.encodeToString(it) }.orEmpty()) > 0
+
+    suspend fun isFileReferenced(url: String): Boolean =
+        messageNodeDAO.isFileReferenced(JsonInstant.encodeToString(url).removeSurrounding("\""))
+
     /**
      * 更新对话。
      *
@@ -302,11 +309,12 @@ class ConversationRepository(
     suspend fun updateConversation(conversation: Conversation) {
         try {
             database.withTransaction {
+                val stored = conversationDAO.getConversationById(conversation.id.toString())
                 conversationDAO.update(
                     conversationToConversationEntity(conversation).copy(
                         // Only updateCompaction owns this column. An older streaming snapshot must not erase it.
-                        contextCompaction = conversationDAO.getConversationById(conversation.id.toString())
-                            ?.contextCompaction.orEmpty(),
+                        contextCompaction = stored?.contextCompaction.orEmpty(),
+                        config = stored?.config.orEmpty(),
                     )
                 )
 
@@ -434,6 +442,7 @@ class ConversationRepository(
             customSystemPrompt = conversation.customSystemPrompt ?: "",
             folderId = conversation.folderId?.toString() ?: "",
             contextCompaction = conversation.contextCompaction?.let { JsonInstant.encodeToString(it) }.orEmpty(),
+            config = conversation.config?.let { JsonInstant.encodeToString(it) }.orEmpty(),
         )
     }
 
@@ -453,6 +462,9 @@ class ConversationRepository(
             customSystemPrompt = conversationEntity.customSystemPrompt.ifEmpty { null },
             folderId = conversationEntity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
             contextCompaction = decodeCompaction(conversationEntity.contextCompaction),
+            config = conversationEntity.config.takeIf { it.isNotBlank() }?.let {
+                JsonInstant.decodeFromString<ConversationConfig>(it)
+            },
         )
     }
 

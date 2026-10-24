@@ -140,6 +140,7 @@ class ChatInputState {
             is UIMessagePart.Image -> this.url
             is UIMessagePart.Video -> this.url
             is UIMessagePart.Audio -> this.url
+            is UIMessagePart.VoiceMessage -> this.url
             is UIMessagePart.Document -> this.url
             else -> null
         }

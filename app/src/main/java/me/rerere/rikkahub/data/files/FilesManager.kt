@@ -638,6 +638,7 @@ data class ZipExtractResult(
 )
 
 object FileFolders {
+    const val MEDIA_CREATION = "media_creation"
     const val UPLOAD = "upload"
     const val SKILLS = "skills"
 }

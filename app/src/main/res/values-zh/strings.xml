@@ -1223,4 +1223,29 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="plugin_security_banner">⚠ 插件可执行网络请求并访问您已授权的系统数据。请仅从可信来源安装插件。</string>
   <string name="web_server_security_warning_no_jwt">⚠ 未启用 JWT 鉴权或密码为空。当前任何可访问该地址的人都能读取您的对话记录，强烈建议立即设置密码并开启 JWT。</string>
   <string name="setting_provider_page_rerank_model">重排</string>
+  <string name="chat_page_queue_paused_count">队列已暂停（%1$d）</string>
+  <string name="chat_page_queue_pending_count">待发送（%1$d）</string>
+  <string name="chat_page_queue_resume">继续发送</string>
+  <string name="chat_page_queue_image">[图片]</string>
+  <string name="chat_page_queue_file">[文件]</string>
+  <string name="chat_page_queue_audio">[录音]</string>
+  <string name="chat_page_queue_video">[视频]</string>
+  <string name="chat_page_queue_editing">编辑中</string>
+  <string name="chat_page_queue_remove">撤回</string>
+  <string name="chat_page_queue_edit_title">编辑排队消息</string>
+  <string name="chart_series">系列</string>
+  <string name="chart_series_name">系列 %1$d</string>
+  <string name="chart_mode_chart">图表</string>
+  <string name="chart_mode_table">表格</string>
+  <string name="translator_page_history">历史</string>
+  <string name="translator_page_clear_history">清空历史</string>
+  <string name="translator_page_clear_history_title">清空翻译历史？</string>
+  <string name="translator_page_clear_history_message">删除所有已保存的翻译记录？此操作无法撤销。</string>
+
+    <string name="image_crop_rotate">旋转</string>
+    <string name="image_crop_reset">重置</string>
+    <string name="image_crop_free">自由</string>
+    <string name="image_crop_original">原图</string>
+    <string name="image_crop_load_failed">无法加载图片</string>
+    <string name="image_crop_failed">无法裁剪图片</string>
 </resources>

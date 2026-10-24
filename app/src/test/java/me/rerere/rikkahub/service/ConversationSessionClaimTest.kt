@@ -55,4 +55,42 @@ class ConversationSessionClaimTest {
             session.cleanup()
         }
     }
+    @Test
+    fun `queued input and submitting input both block proactive claims`() = runBlocking {
+        val id = Uuid.random()
+        val session = ConversationSession(id, Conversation(id, Uuid.random(), messageNodes = emptyList()), this,
+            debugLog = {}) {}
+        val candidate = launch(start = CoroutineStart.LAZY) {}
+        try {
+            session.messageQueue.enqueue(listOf(me.rerere.ai.ui.UIMessagePart.Text("waiting")))
+            assertTrue(session.isInUse)
+            assertFalse(session.tryClaimGeneration(candidate))
+            session.submittingMessage = session.messageQueue.takeNext()
+            assertFalse(session.tryClaimGeneration(candidate))
+            session.submittingMessage = null
+            assertTrue(session.tryClaimGeneration(candidate))
+        } finally {
+            candidate.cancel()
+            session.cleanup()
+        }
+    }
+
+    @Test
+    fun `immediate cancellation of replaced task does not report replacement finished`() = runBlocking {
+        val id = Uuid.random()
+        val finished = mutableListOf<Throwable?>()
+        val session = ConversationSession(id, Conversation(id, Uuid.random(), messageNodes = emptyList()), this,
+            debugLog = {}, onGenerationFinished = { _, cause -> finished.add(cause) }) {}
+        val old = launch(start = CoroutineStart.LAZY) {}
+        val replacement = launch(start = CoroutineStart.LAZY) {}
+        session.setJob(old)
+        session.setJob(replacement)
+        assertTrue(finished.isEmpty())
+        assertSame(replacement, session.getJob())
+        replacement.start()
+        replacement.join()
+        assertTrue(finished.size == 1 && finished.single() == null)
+        session.cleanup()
+    }
+
 }

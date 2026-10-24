@@ -121,6 +121,8 @@ class SettingsStore(
         val COMPRESS_PROMPT = stringPreferencesKey("compress_prompt")
 
         // 提供商
+        val MEDIA_GENERATION_PROVIDERS = stringPreferencesKey("media_generation_providers")
+        val UPLOAD_S3_CONFIG = stringPreferencesKey("upload_s3_config")
         val PROVIDERS = stringPreferencesKey("providers")
 
         // 助手
@@ -209,6 +211,8 @@ class SettingsStore(
             MCP_SERVERS,
             WEBDAV_CONFIG,
             S3_CONFIG,
+            MEDIA_GENERATION_PROVIDERS,
+            UPLOAD_S3_CONFIG,
             TTS_PROVIDERS,
             ASR_PROVIDERS,
             WEB_SERVER_ACCESS_PASSWORD,
@@ -282,6 +286,9 @@ class SettingsStore(
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                mediaGenerationProviders = JsonInstant.decodeFromString(
+                    preferences.getSecret(MEDIA_GENERATION_PROVIDERS) ?: "[]"),
+                uploadS3Config = JsonInstant.decodeFromString(preferences.getSecret(UPLOAD_S3_CONFIG) ?: "{}"),
                 providers = JsonInstant.decodeFromString(preferences.getSecret(PROVIDERS) ?: "[]"),
                 assistants = JsonInstant.decodeFromString(preferences.getSecret(ASSISTANTS) ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
@@ -401,6 +408,7 @@ class SettingsStore(
             settings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
+                        is ProviderSetting.Account -> provider.copyProvider(models = provider.models.distinctBy { model -> model.id })
                         is ProviderSetting.OpenAI -> provider.copy(
                             models = provider.models.distinctBy { model -> model.id }
                         )
@@ -473,7 +481,9 @@ class SettingsStore(
         }
     }
 
-    private suspend fun persistSettings(settings: Settings, previous: Settings) {
+    private suspend fun persistSettings(desired: Settings, previous: Settings, allowAccountCredentials: Boolean = false) {
+        val settings = if (allowAccountCredentials) desired else desired.copy(providers =
+            me.rerere.rikkahub.data.ai.account.preserveAccountCredentials(desired.providers, previous.providers))
         if(settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
             return
@@ -507,6 +517,12 @@ class SettingsStore(
                 preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
                 preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
+                preferences.putSecretIfChanged(MEDIA_GENERATION_PROVIDERS,
+                    settings.mediaGenerationProviders != previous.mediaGenerationProviders,
+                ) { JsonInstant.encodeToString(settings.mediaGenerationProviders) }
+                preferences.putSecretIfChanged(UPLOAD_S3_CONFIG,
+                    settings.uploadS3Config != previous.uploadS3Config,
+                ) { JsonInstant.encodeToString(settings.uploadS3Config) }
                 preferences.putSecretIfChanged(
                     PROVIDERS,
                     settings.providers != previous.providers,
@@ -588,6 +604,13 @@ class SettingsStore(
                 preferences[WORKFLOW_HEADLESS_BLOCK_SENSITIVE] = settings.workflowHeadlessBlockSensitive
                 preferences[AUTO_APPROVE_ALL_TOOLS] = settings.autoApproveAllTools
             }
+        }
+    }
+
+    internal suspend fun updateAccountCredentials(fn: (Settings) -> Settings) {
+        updateMutex.withLock {
+            val previous = settingsFlowRaw.first()
+            persistSettings(fn(previous), previous, allowAccountCredentials = true)
         }
     }
 
@@ -729,6 +752,7 @@ data class Settings(
     val imageGenerationModelId: Uuid = Uuid.random(),
     val titlePrompt: String = DEFAULT_TITLE_PROMPT,
     val translateModeId: Uuid = Uuid.random(),
+    val translateTargetLanguage: String = "zh-CN",
     val translatePrompt: String = DEFAULT_TRANSLATION_PROMPT,
     val translateThinkingBudget: Int = 0,
     val suggestionModelId: Uuid = Uuid.random(),
@@ -738,6 +762,8 @@ data class Settings(
     val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
+    val mediaGenerationProviders: List<me.rerere.mediagen.provider.MediaGenerationProviderSetting> = emptyList(),
+    val uploadS3Config: S3Config = S3Config(),
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
     val assistantTags: List<Tag> = emptyList(),
@@ -751,6 +777,7 @@ data class Settings(
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val asrProviders: List<ASRProviderSetting> = emptyList(),
     val selectedASRProviderId: Uuid? = null,
+    val voiceCallListenWhileReplying: Boolean = true,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),

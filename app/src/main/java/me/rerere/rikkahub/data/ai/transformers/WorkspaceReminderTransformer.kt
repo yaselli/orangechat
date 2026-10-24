@@ -46,6 +46,16 @@ class WorkspaceReminderTransformer(
 }
 
 private fun buildWorkspacePrompt(workspace: WorkspaceEntity, cwd: String? = null): String = buildString {
+    if (workspace.isSsh()) {
+        appendLine("<workspace>")
+        appendLine("You have access to the remote SSH workspace \"${workspace.name}\".")
+        appendLine("Its working directory is `${workspace.workspaceDir()}`. Use absolute paths on that remote host.")
+        appendLine("workspace_read_file, workspace_write_file, workspace_edit_file and workspace_shell run remotely.")
+        appendLine("This is a real remote host, not a local sandbox. Local /skills and /upload are not mounted there.")
+        if (!cwd.isNullOrBlank()) appendLine("Current working directory: `$cwd`.")
+        append("</workspace>")
+        return@buildString
+    }
     appendLine("<workspace>")
     appendLine("You have access to a persistent Linux workspace named \"${workspace.name}\", running in a sandboxed proot rootfs environment.")
     appendLine("- The workspace files area is mounted at `/workspace`. Use it as your working directory; files written there persist across turns of this conversation.")

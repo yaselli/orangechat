@@ -213,7 +213,12 @@ dependencies {
 
     // BiometricPrompt (fingerprint/face verify_fingerprint tool)
     implementation(libs.androidx.biometric)
-    implementation(libs.termux.terminal.view)
+    implementation(libs.termux.terminal.view) {
+        exclude(group = "com.termux.termux-app", module = "terminal-emulator")
+    }
+    implementation(project(":terminal"))
+    implementation(project(":oauth"))
+    implementation(project(":mediagen"))
     implementation(libs.guava.listenablefuture)
 
     // Workflow feature: cron parsing + geofence triggers
@@ -221,7 +226,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // SSH feature: JSch (mwiede fork) for remote shell + SFTP
-    implementation("com.github.mwiede:jsch:0.2.21")
+    implementation(libs.jsch)
 
     // Compose
     implementation(libs.androidx.activity.compose)
@@ -276,8 +281,6 @@ dependencies {
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.core)
 
-    // ucrop
-    implementation(libs.ucrop)
 
     // pebble (template engine)
     implementation(libs.pebble)
@@ -298,11 +301,11 @@ dependencies {
     // zxing
     implementation(libs.zxing.core)
 
-    // quickie (qrcode scanner)
-    implementation(libs.quickie.bundled)
-    implementation(libs.barcode.scanning)
+    // CameraX + ZXing QR scanner; text recognition remains for OCR.
     implementation(libs.text.recognition)
     implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.compose)
 
     // Room
     implementation(libs.androidx.room.runtime)
@@ -353,8 +356,16 @@ dependencies {
     // sqlite-android (requery SQLite for Android)
     implementation(libs.sqlite.android)
 
+    // Upstream sketch input and stroke rendering; kept separate from chat generation.
+    implementation(libs.androidx.ink.authoring.compose)
+    implementation(libs.androidx.ink.brush)
+    implementation(libs.androidx.ink.geometry)
+    implementation(libs.androidx.ink.rendering)
+    implementation(libs.androidx.ink.strokes)
+
     // media3 (ExoPlayer)
     implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
 
     // modules
     implementation(project(":ai"))

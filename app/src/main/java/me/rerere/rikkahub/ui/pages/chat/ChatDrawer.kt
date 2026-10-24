@@ -478,6 +478,14 @@ fun ChatDrawerContent(
                             }
                         )
                         DropdownMenuItem(
+                            text = { Text("图片与视频创作") },
+                            leadingIcon = { Icon(HugeIcons.Image02, null) },
+                            onClick = {
+                                showMenuPopup = false
+                                navController.navigate(Screen.MediaCreationSessions)
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text(stringResource(R.string.chat_page_menu_image_generation)) },
                             leadingIcon = { Icon(HugeIcons.Image02, null) },
                             onClick = {

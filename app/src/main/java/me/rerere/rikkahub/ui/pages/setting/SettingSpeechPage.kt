@@ -156,12 +156,23 @@ fun SettingSpeechPage(vm: SettingVM = koinViewModel()) {
                 modifier = Modifier.padding(innerPadding)
             )
 
-            1 -> ASRProviderList(
-                settings = settings,
-                onUpdateSettings = vm::updateSettings,
-                onEdit = { editingASRProvider = it },
-                modifier = Modifier.padding(innerPadding)
-            )
+            1 -> Column(Modifier.padding(innerPadding)) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("AI 回复时继续监听", style = MaterialTheme.typography.titleSmall)
+                        Text("关闭后会暂停麦克风；仍可手动打断，回复结束后恢复聆听。",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = settings.voiceCallListenWhileReplying,
+                        onCheckedChange = { vm.updateSettings(settings.copy(voiceCallListenWhileReplying = it)) })
+                }
+                ASRProviderList(
+                    settings = settings,
+                    onUpdateSettings = vm::updateSettings,
+                    onEdit = { editingASRProvider = it },
+                    modifier = Modifier.weight(1f),
+                )
+            }
 
         }
     }
