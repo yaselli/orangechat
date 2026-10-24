@@ -10,7 +10,7 @@ root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--require-schema", action="store_true")
 args = parser.parse_args()
-assert re.search(r"version\s*=\s*42", (root / "app/src/main/java/me/rerere/rikkahub/data/db/AppDatabase.kt").read_text())
+assert re.search(r"version\s*=\s*(?:42|43)", (root / "app/src/main/java/me/rerere/rikkahub/data/db/AppDatabase.kt").read_text())
 assert "Migration_41_42," in (root / "app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt").read_text()
 schemas = root / "app/schemas/me.rerere.rikkahub.data.db.AppDatabase"
 before = json.loads((schemas / "41.json").read_text())["database"]

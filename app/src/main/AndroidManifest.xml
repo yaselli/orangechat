@@ -78,6 +78,10 @@
     android:theme="@style/Theme.Rikkahub"
     android:usesCleartextTraffic="true"
     tools:targetApi="33">
+    <service
+      android:name=".service.MediaCreationForegroundService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
     <activity
       android:name=".ui.activity.SafeModeActivity"
       android:exported="false"

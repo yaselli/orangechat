@@ -106,6 +106,7 @@ val dataSourceModule = module {
                 Migration_39_40,
                 Migration_40_41,
                 Migration_41_42,
+                me.rerere.rikkahub.data.db.migrations.Migration_42_43,
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {

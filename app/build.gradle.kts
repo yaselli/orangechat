@@ -218,6 +218,7 @@ dependencies {
     }
     implementation(project(":terminal"))
     implementation(project(":oauth"))
+    implementation(project(":mediagen"))
     implementation(libs.guava.listenablefuture)
 
     // Workflow feature: cron parsing + geofence triggers

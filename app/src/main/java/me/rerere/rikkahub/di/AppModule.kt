@@ -24,6 +24,9 @@ import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
 
 val appModule = module {
+    single { me.rerere.mediagen.provider.MediaGenerationManager(get()) }
+    single { me.rerere.rikkahub.service.MediaCreationService(get(), get(), get(), get(), get(), get(), get()) }
+
     single<Json> { JsonInstant }
 
     single {

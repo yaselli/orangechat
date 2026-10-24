@@ -66,6 +66,9 @@ import me.rerere.rikkahub.utils.JsonInstant
         MemoryEvidence::class,
         me.rerere.rikkahub.data.memory.MemoryIndexAttempt::class,
         GenMediaEntity::class,
+        me.rerere.rikkahub.data.db.entity.MediaCreationSessionEntity::class,
+        me.rerere.rikkahub.data.db.entity.MediaCreationNodeEntity::class,
+        me.rerere.rikkahub.data.db.entity.MediaCreationRecordEntity::class,
         MessageNodeEntity::class,
         ManagedFileEntity::class,
         FavoriteEntity::class,
@@ -79,7 +82,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         MessageReaction::class,
         me.rerere.rikkahub.data.db.entity.UsageRecordEntity::class,
     ],
-    version = 42,
+    version = 43,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -118,6 +121,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun conversationDao(): ConversationDAO
 
     abstract fun memoryDao(): MemoryDAO
+
+    abstract fun mediaCreationDao(): me.rerere.rikkahub.data.db.dao.MediaCreationDAO
 
     abstract fun genMediaDao(): GenMediaDAO
 

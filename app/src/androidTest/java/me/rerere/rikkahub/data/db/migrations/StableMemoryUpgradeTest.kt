@@ -21,7 +21,7 @@ class StableMemoryUpgradeTest {
 
     @Test
     fun releasedStableAndMemoryDatabasesUpgradeWithoutLosingSourcesOrReactions() {
-        for (version in listOf(29, 30, 31, 32, 36, 37, 38, 39, 40, 41)) {
+        for (version in listOf(29, 30, 31, 32, 36, 37, 38, 39, 40, 41, 42)) {
             val name = "stable-memory-upgrade-$version"
             val original = """[{"id":"old"},{"id":"selected","annotations":[{"type":"avatar_interaction","actor":"user","target":"assistant"}]}]"""
             helper.createDatabase(name, version).apply {
@@ -40,10 +40,10 @@ class StableMemoryUpgradeTest {
                     "VALUES('local','旧工作区','local-root','READY',1,2,'{\"workspace_shell\":true}')")
                 close()
             }
-            val db = helper.runMigrationsAndValidate(name, 42, true,
+            val db = helper.runMigrationsAndValidate(name, 43, true,
                 Migration_29_30, Migration_30_31, Migration_29_32_ChatInteractions,
                 Migration_31_33_HistoryMemory, Migration_32_33_StableMemory,
-                Migration_33_34, Migration_34_35, Migration_35_36, Migration_36_37, Migration_37_38, Migration_38_39, Migration_39_40, Migration_40_41, Migration_41_42)
+                Migration_33_34, Migration_34_35, Migration_35_36, Migration_36_37, Migration_37_38, Migration_38_39, Migration_39_40, Migration_40_41, Migration_41_42, Migration_42_43)
             try {
                 db.query("SELECT messages,select_index FROM message_node WHERE id='node'").use {
                     assertTrue(it.moveToFirst())
