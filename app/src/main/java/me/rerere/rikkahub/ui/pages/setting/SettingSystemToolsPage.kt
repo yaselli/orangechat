@@ -57,7 +57,7 @@ import me.rerere.hugeicons.stroke.SmartphoneWifi
 import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Share05
 import me.rerere.hugeicons.stroke.Image02
-import me.rerere.hugeicons.stroke.FullScreen
+import me.rerere.hugeicons.stroke.Fullscreen
 import me.rerere.hugeicons.stroke.Scan
 import me.rerere.hugeicons.stroke.Notification02
 import me.rerere.hugeicons.stroke.HardDrive
@@ -913,7 +913,7 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
             item {
             CardGroup(title = { Text("唤醒屏幕") }, modifier = Modifier.padding(horizontal = 8.dp)) {
                 item(
-                    leadingContent = { Icon(imageVector = HugeIcons.FullScreen, contentDescription = null) },
+                    leadingContent = { Icon(imageVector = HugeIcons.Fullscreen, contentDescription = null) },
                     headlineContent = { Text("启用唤醒屏幕工具") },
                     supportingContent = { Text("允许AI唤醒黑屏设备，无需额外权限") },
                     trailingContent = {
