@@ -21,6 +21,13 @@ on:
       - feature/upstream-usage-stats
       - feature/upstream-usage-dashboard
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/build/stable-release' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -169,3 +176,25 @@ jobs:
           name: OrangeChat-personal-debug
           path: update-assets/debug/*
           if-no-files-found: error
+
+  publish-approved-update:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/build/stable-release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 4
+      - uses: actions/download-artifact@v4
+        with:
+          name: OrangeChat-personal-debug
+          path: approved-update
+      - name: Verify release automation regressions
+        run: python3 scripts/test-publish-approved-update.py
+      - name: Publish the accepted version after checksum and source verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish-approved-update.py --directory approved-update --channel debug
