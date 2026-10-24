@@ -143,6 +143,8 @@
   <string name="setting_media_page_models_desc">Model IDs are sent to the API as-is</string>
   <string name="setting_media_page_model_id">Model ID</string>
   <string name="setting_media_page_add_model">Add model</string>
+  <string name="video_player_error">Unable to play this video</string>
+  <string name="video_player_open_with">Open with another app</string>
   <string name="setting_media_page_asset_storage">Asset Storage</string>
   <string name="media_creation_page_selected_count">%1$d selected</string>
   <string name="media_creation_page_select">Select</string>
@@ -155,6 +157,4 @@
   <string name="media_creation_page_nothing_to_save">The selected items have no images or videos to save</string>
   <string name="media_creation_page_saved_files">Saved %1$d files to gallery</string>
   <string name="media_creation_page_saved_files_partial">Saved %1$d files, %2$d failed: %3$s</string>
-  <string name="video_player_error">Unable to play this video</string>
-  <string name="video_player_open_with">Open with another app</string>
 </resources>

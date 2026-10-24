@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.mediacreation
 
 import android.Manifest
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -336,4 +337,42 @@ internal fun RenameSessionDialog(
             }
         },
     )
+}
+
+
+internal fun shareMediaBatch(context: Context, files: List<Pair<File, String>>) {
+    require(files.isNotEmpty())
+    val uris = ArrayList(files.map { (file, _) ->
+        check(file.isFile) { "素材文件不存在" }
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    })
+    val mimeTypes = files.map { it.second }.distinct()
+    val mime = when {
+        mimeTypes.size == 1 -> mimeTypes.single()
+        mimeTypes.all { it.startsWith("image/") } -> "image/*"
+        mimeTypes.all { it.startsWith("video/") } -> "video/*"
+        else -> "*/*"
+    }
+    val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+        type = mime
+        putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        clipData = ClipData.newUri(context.contentResolver, "媒体创作", uris.first()).apply {
+            uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+        }
+    }
+    context.startActivity(Intent.createChooser(intent, null))
+}
+
+/** Prefer the requested image size, otherwise the requested video/paper ratio. */
+internal fun MediaCreationParams.sketchAspectRatio(): Float? {
+    fun parse(value: String?): Float? {
+        val parts = value?.trim()?.lowercase()?.split(Regex("[x*:×]")) ?: return null
+        if (parts.size != 2) return null
+        val width = parts[0].trim().toFloatOrNull() ?: return null
+        val height = parts[1].trim().toFloatOrNull() ?: return null
+        val ratio = width / height
+        return ratio.takeIf { width > 0 && height > 0 && it.isFinite() && it in 0.1f..10f }
+    }
+    return parse(resolution) ?: parse(aspectRatio)
 }

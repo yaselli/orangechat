@@ -1,7 +1,13 @@
 package me.rerere.rikkahub.ui.pages.mediacreation
 
+import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.animateDp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -18,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.mediagen.model.ImageRole
@@ -26,6 +33,8 @@ import me.rerere.mediagen.provider.MediaGenerationParameter
 import me.rerere.mediagen.provider.capabilities
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.*
+import me.rerere.rikkahub.ui.components.sketch.SketchDialog
+import me.rerere.rikkahub.ui.hooks.heroContainer
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
 import me.rerere.rikkahub.ui.components.ui.VideoPlayerDialog
@@ -59,7 +68,9 @@ fun MediaCreationSessionsPage(vm: MediaCreationSessionsVM = koinViewModel()) {
             if (sessions == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             if (sessions?.isEmpty() == true) item { Text("添加媒体提供商后，新建创作即可生成图片或视频。") }
             items(sessions.orEmpty(), key = { it.id.toString() }) { session ->
-                Card(Modifier.fillMaxWidth().clickable { nav.navigate(Screen.MediaCreation(session.id.toString())) }) {
+                Card(Modifier.fillMaxWidth()
+                    .heroContainer(mediaCreationHeroKey(session.id.toString()), RoundedCornerShape(12.dp))
+                    .clickable { nav.navigate(Screen.MediaCreation(session.id.toString())) }) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(session.title.ifBlank { "新的创作" }, style = MaterialTheme.typography.titleMedium)
                         Text("${session.nodeCount} 项 · ${session.activeCount} 项进行中")
@@ -99,8 +110,16 @@ fun MediaCreationPage(id: String) {
     val draft by vm.draft.collectAsStateWithLifecycle()
     val selection by vm.selection.collectAsStateWithLifecycle()
     val nodes = vm.nodes.collectAsLazyPagingItems()
+    val selectedNodes by vm.selectedNodes.collectAsStateWithLifecycle()
+    val heroCorner by LocalNavAnimatedContentScope.current.transition.animateDp(label = "mediaCorner") {
+        if (it == EnterExitState.Visible) 0.dp else 12.dp
+    }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var sketching by remember { mutableStateOf<MediaSketchRequest?>(null) }
+    var confirmDeleteSelected by remember { mutableStateOf(false) }
+    var exporting by remember { mutableStateOf(false) }
+    BackHandler(enabled = selectedNodes != null) { vm.endSelection() }
     var models by remember { mutableStateOf(false) }
     var parameters by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
@@ -122,17 +141,60 @@ fun MediaCreationPage(id: String) {
             }
         }
     }
-    Scaffold(topBar = {
+    Scaffold(modifier = Modifier.heroContainer(mediaCreationHeroKey(id), RoundedCornerShape(heroCorner)), topBar = {
         TopAppBar(title = {
-            Text(session?.title?.ifBlank { "新的创作" } ?: "加载中", Modifier.clickable { renaming = true }, maxLines = 1)
+            Text(selectedNodes?.let { "已选择 ${it.size} 项" } ?: session?.title?.ifBlank { "新的创作" } ?: "加载中",
+                Modifier.clickable(enabled = selectedNodes == null) { renaming = true }, maxLines = 1)
         }, navigationIcon = { BackButton() }, actions = {
-            TextButton(onClick = { nav.navigate(Screen.SettingMedia) }) { Text("提供商") }
+            if (selectedNodes == null) {
+                TextButton(onClick = { vm.startSelection() }, enabled = nodes.itemCount > 0) { Text("多选") }
+                TextButton(onClick = { nav.navigate(Screen.SettingMedia) }) { Text("提供商") }
+            } else {
+                TextButton(onClick = vm::endSelection, enabled = !exporting) { Text("完成") }
+            }
         })
     }) { padding ->
         // One lazy timeline owns scrolling; the composer scrolls with the latest records on small screens.
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item("composer") {
+            if (selectedNodes != null) item("selection") {
+                Column {
+                    Row(Modifier.horizontalScroll(rememberScrollState())) {
+                        TextButton(onClick = vm::selectAll, enabled = !exporting) { Text("全选") }
+                        TextButton(onClick = vm::clearSelection, enabled = !exporting) { Text("清空选择") }
+                        TextButton(enabled = !exporting && !selectedNodes.isNullOrEmpty(), onClick = {
+                            exporting = true
+                            scope.launch {
+                                try {
+                                    val outputs = vm.getSelectedOutputs()
+                                    if (outputs.isEmpty()) toaster.show("所选记录没有可导出的成品")
+                                    else {
+                                        var saved = 0
+                                        outputs.forEach { output ->
+                                            runCatching { saveMediaToGallery(context, vm.resolve(output.path), output.mimeType) }
+                                                .onSuccess { saved++ }
+                                                .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+                                        }
+                                        toaster.show("已保存 $saved / ${outputs.size} 个文件")
+                                    }
+                                } finally { exporting = false }
+                            }
+                        }) { Text(if (exporting) "保存中…" else "保存所选") }
+                        TextButton(enabled = !exporting && !selectedNodes.isNullOrEmpty(), onClick = {
+                            scope.launch {
+                                val outputs = vm.getSelectedOutputs()
+                                if (outputs.isEmpty()) toaster.show("所选记录没有可分享的成品")
+                                else runCatching { shareMediaBatch(context, outputs.map { vm.resolve(it.path) to it.mimeType }) }
+                                    .onFailure { toaster.show("无法打开分享应用", type = ToastType.Error) }
+                            }
+                        }) { Text("分享所选") }
+                        TextButton(enabled = !exporting && !selectedNodes.isNullOrEmpty(),
+                            onClick = { confirmDeleteSelected = true }) { Text("删除所选") }
+                    }
+                    HorizontalDivider()
+                }
+            }
+            if (selectedNodes == null) item("composer") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.horizontalScroll(rememberScrollState())) {
                         OutlinedButton(onClick = { models = true }) {
@@ -165,7 +227,12 @@ fun MediaCreationPage(id: String) {
                                             }
                                         }
                                     }
-                                    TextButton(onClick = { vm.removeAsset(asset) }) { Text("移除") }
+                                    Row {
+                                        if (asset.type == MediaCreationAssetType.IMAGE) {
+                                            TextButton(onClick = { sketching = MediaSketchRequest(asset.role, asset) }) { Text("涂画") }
+                                        }
+                                        TextButton(onClick = { vm.removeAsset(asset) }) { Text("移除") }
+                                    }
                                 }
                             }
                         }
@@ -173,6 +240,10 @@ fun MediaCreationPage(id: String) {
                     Row(Modifier.horizontalScroll(rememberScrollState())) {
                         if (selection?.capabilities?.imageRoles?.isNotEmpty() == true) {
                             TextButton(onClick = { images.launch("image/*") }) { Text("添加图片") }
+                            TextButton(onClick = {
+                                val roles = selection?.capabilities?.imageRoles.orEmpty()
+                                sketching = MediaSketchRequest(if (ImageRole.REFERENCE in roles) ImageRole.REFERENCE else roles.firstOrNull() ?: ImageRole.REFERENCE)
+                            }) { Text("画板") }
                         }
                         if (selection?.capabilities?.videoInput == true) {
                             TextButton(onClick = { videos.launch("video/*") }) { Text("添加视频") }
@@ -191,7 +262,10 @@ fun MediaCreationPage(id: String) {
             }
             items(nodes.itemCount, key = { index -> nodes.peek(index)?.id?.toString() ?: "placeholder-$index" }) { index ->
                 val node = nodes[index]
-                if (node != null) MediaCreationRecordCard(node, vm, onPreview = { preview = it },
+                if (node != null) MediaCreationRecordCard(node, vm,
+                    selecting = selectedNodes != null, selected = node.id in selectedNodes.orEmpty(),
+                    onToggle = { vm.toggleSelection(node.id) }, onStartSelection = { vm.startSelection(node.id) },
+                    onPreview = { preview = it },
                     onDelete = { deleting = it }, onSave = { output ->
                         scope.launch {
                             runCatching { saveMediaToGallery(context, vm.resolve(output.path), output.mimeType) }
@@ -202,6 +276,19 @@ fun MediaCreationPage(id: String) {
             }
         }
     }
+    sketching?.let { request ->
+        SketchDialog(
+            onDismiss = { sketching = null },
+            onConfirm = { result -> vm.addSketch(result, request.role, request.asset); sketching = null },
+            image = request.asset?.let { Uri.fromFile(vm.resolve(it.path)) },
+            aspectRatio = draft.params.sketchAspectRatio(),
+        )
+    }
+    if (confirmDeleteSelected) ConfirmMediaDelete(
+        "删除所选的 ${selectedNodes.orEmpty().size} 项及全部版本、素材和成品？已提交给服务商的任务无法撤回。",
+        onDismiss = { confirmDeleteSelected = false },
+        onConfirm = { vm.deleteSelected(); confirmDeleteSelected = false },
+    )
     if (models) AlertDialog(onDismissRequest = { models = false }, title = { Text("选择模型") }, text = {
         Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
             settings.mediaGenerationProviders.forEach { provider ->
@@ -238,14 +325,21 @@ fun MediaCreationPage(id: String) {
 
 @Composable
 private fun MediaCreationRecordCard(
-    node: MediaCreationNode, vm: MediaCreationVM, onPreview: (MediaCreationOutput) -> Unit,
+    node: MediaCreationNode, vm: MediaCreationVM,
+    selecting: Boolean, selected: Boolean, onToggle: () -> Unit, onStartSelection: () -> Unit,
+    onPreview: (MediaCreationOutput) -> Unit,
     onDelete: (MediaCreationRecord) -> Unit, onSave: (MediaCreationOutput) -> Unit,
 ) {
     val record = node.record
     val context = LocalContext.current
-    Card(Modifier.fillMaxWidth()) {
+    Card(Modifier.fillMaxWidth().combinedClickable(
+        onClick = { if (selecting) onToggle() }, onLongClick = onStartSelection,
+    )) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(record.prompt.ifBlank { "素材创作" }, style = MaterialTheme.typography.titleMedium)
+            Row {
+                if (selecting) Checkbox(checked = selected, onCheckedChange = { onToggle() })
+                Text(record.prompt.ifBlank { "素材创作" }, style = MaterialTheme.typography.titleMedium)
+            }
             Text("${record.providerName} · ${record.modelId} · ${record.status.label}")
             record.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (record.status.isActive) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -253,7 +347,7 @@ private fun MediaCreationRecordCard(
                 val video = output.mimeType.startsWith("video/")
                 MediaThumbnail(vm.resolve(output.path), video, Modifier.fillMaxWidth().height(220.dp)
                     .clickable { onPreview(output) }, output.posterPath?.let(vm::resolve))
-                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                if (!selecting) Row(Modifier.horizontalScroll(rememberScrollState())) {
                     TextButton(onClick = { onSave(output) }) { Text("保存") }
                     TextButton(onClick = { shareMedia(context, vm.resolve(output.path), output.mimeType) }) { Text("分享") }
                     if (video) {
@@ -265,7 +359,7 @@ private fun MediaCreationRecordCard(
                     }
                 }
             }
-            Row(Modifier.horizontalScroll(rememberScrollState())) {
+            if (!selecting) Row(Modifier.horizontalScroll(rememberScrollState())) {
                 if (record.status.isActive) TextButton(onClick = { vm.cancel(record) }) { Text("停止等待") }
                 else {
                     if (record.status != MediaCreationStatus.SUCCEEDED) TextButton(onClick = { vm.retry(record) }) { Text("重试／继续查询") }
@@ -274,7 +368,7 @@ private fun MediaCreationRecordCard(
                 }
                 TextButton(onClick = { onDelete(record) }) { Text("删除") }
             }
-            if (node.versionCount > 1) Row {
+            if (!selecting && node.versionCount > 1) Row {
                 TextButton(onClick = { vm.switchVersion(node, -1) }, enabled = node.versionIndex > 0) { Text("上一版") }
                 Text("${node.versionIndex + 1}/${node.versionCount}", Modifier.padding(12.dp))
                 TextButton(onClick = { vm.switchVersion(node, 1) }, enabled = node.versionIndex + 1 < node.versionCount) { Text("下一版") }
@@ -289,3 +383,7 @@ private fun ConfirmMediaDelete(message: String, onDismiss: () -> Unit, onConfirm
         confirmButton = { TextButton(onClick = onConfirm) { Text("删除") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
 }
+
+private fun mediaCreationHeroKey(id: String): String = "media-creation-session-$id"
+
+private data class MediaSketchRequest(val role: ImageRole, val asset: MediaCreationAsset? = null)
