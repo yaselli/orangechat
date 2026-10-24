@@ -27,6 +27,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 8
+      - name: Allow Gradle to run
+        run: chmod +x gradlew
       - name: Verify accepted code and prior full checks
         id: accepted
         if: github.event_name == 'push' && github.ref == 'refs/heads/build/stable-release'
