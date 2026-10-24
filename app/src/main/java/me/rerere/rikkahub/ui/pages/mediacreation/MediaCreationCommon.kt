@@ -281,12 +281,8 @@ internal suspend fun saveMediaToGallery(context: Context, file: File, mimeType: 
         }
     } else {
         // Android 9 及以下直接写公共目录，需要存储权限
-        val permission = Manifest.permission.WRITE_EXTERNAL_STORAGE
-        if (ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
-            withContext(Dispatchers.Main) {
-                context.getActivity()?.let { ActivityCompat.requestPermissions(it, arrayOf(permission), 1) }
-            }
-            error(context.getString(R.string.media_creation_page_storage_permission_required))
+        check(ensureMediaGalleryPermission(context)) {
+            context.getString(R.string.media_creation_page_storage_permission_required)
         }
         // 批量保存时同一毫秒里会有好几个文件，重名的另取一个名字，不能互相覆盖（Android 10 起由 MediaStore 处理）
         val dir = Environment.getExternalStoragePublicDirectory(directory)
@@ -375,4 +371,16 @@ internal fun MediaCreationParams.sketchAspectRatio(): Float? {
         return ratio.takeIf { width > 0 && height > 0 && it.isFinite() && it in 0.1f..10f }
     }
     return parse(resolution) ?: parse(aspectRatio)
+}
+
+
+/** Ask once before a batch, so Android 8/9 cannot receive one permission request per output. */
+internal suspend fun ensureMediaGalleryPermission(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return true
+    val permission = Manifest.permission.WRITE_EXTERNAL_STORAGE
+    if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) return true
+    withContext(Dispatchers.Main) {
+        context.getActivity()?.let { ActivityCompat.requestPermissions(it, arrayOf(permission), 1) }
+    }
+    return false
 }

@@ -169,6 +169,10 @@ fun MediaCreationPage(id: String) {
                                     val outputs = vm.getSelectedOutputs()
                                     if (outputs.isEmpty()) toaster.show("所选记录没有可导出的成品")
                                     else {
+                                        if (!ensureMediaGalleryPermission(context)) {
+                                            toaster.show("请授予存储权限后再次保存", type = ToastType.Error)
+                                            return@launch
+                                        }
                                         var saved = 0
                                         outputs.forEach { output ->
                                             runCatching { saveMediaToGallery(context, vm.resolve(output.path), output.mimeType) }
@@ -346,7 +350,7 @@ private fun MediaCreationRecordCard(
             record.outputs.forEach { output ->
                 val video = output.mimeType.startsWith("video/")
                 MediaThumbnail(vm.resolve(output.path), video, Modifier.fillMaxWidth().height(220.dp)
-                    .clickable { onPreview(output) }, output.posterPath?.let(vm::resolve))
+                    .clickable { if (selecting) onToggle() else onPreview(output) }, output.posterPath?.let(vm::resolve))
                 if (!selecting) Row(Modifier.horizontalScroll(rememberScrollState())) {
                     TextButton(onClick = { onSave(output) }) { Text("保存") }
                     TextButton(onClick = { shareMedia(context, vm.resolve(output.path), output.mimeType) }) { Text("分享") }
