@@ -93,7 +93,7 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest,me.rerere.rikkahub.data.db.fts.MessageFtsManagerTest,me.rerere.rikkahub.data.db.dao.UsageRecordDAOTest,me.rerere.rikkahub.data.db.dao.TranslationHistoryDAOTest,me.rerere.rikkahub.ui.components.crop.ImageCropDeviceTest,me.rerere.rikkahub.data.repository.MediaCreationRepositoryTest
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.db.migrations.StableMemoryUpgradeTest,me.rerere.rikkahub.data.db.fts.MessageFtsManagerTest,me.rerere.rikkahub.data.db.dao.UsageRecordDAOTest,me.rerere.rikkahub.data.db.dao.TranslationHistoryDAOTest,me.rerere.rikkahub.ui.components.crop.ImageCropDeviceTest,me.rerere.rikkahub.data.repository.MediaCreationRepositoryTest,me.rerere.rikkahub.data.files.MediaCreationFilesDeviceTest
       - name: Release lint
         run: ./gradlew lintRelease
       - name: Build signed release APK

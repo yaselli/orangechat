@@ -3,10 +3,11 @@ package me.rerere.rikkahub.data.files
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import androidx.exifinterface.media.ExifInterface
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
-import me.rerere.rikkahub.utils.ImageUtils
 import java.io.File
 import kotlin.uuid.Uuid
 
@@ -33,7 +34,7 @@ object MediaCreationFiles {
         val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
         val decoded = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
             ?: error("无法读取图片")
-        val bitmap = ImageUtils.correctImageOrientation(context, uri, decoded)
+        val bitmap = runCatching { orientImage(context, uri, decoded) }.getOrElse { decoded }
         try {
             // 带透明通道的图片保留 PNG，其余用 JPEG 控制体积
             val (format, extension) = if (bitmap.hasAlpha()) {
@@ -47,6 +48,27 @@ object MediaCreationFiles {
             }
         } finally {
             bitmap.recycle()
+        }
+    }
+
+    private fun orientImage(context: Context, uri: Uri, source: Bitmap): Bitmap {
+        val orientation = context.contentResolver.openInputStream(uri)?.use {
+            ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        } ?: ExifInterface.ORIENTATION_NORMAL
+        val matrix = Matrix().apply {
+            when (orientation) {
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> setScale(-1f, 1f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> setRotate(180f)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> setScale(1f, -1f)
+                ExifInterface.ORIENTATION_TRANSPOSE -> { setRotate(90f); postScale(-1f, 1f) }
+                ExifInterface.ORIENTATION_ROTATE_90 -> setRotate(90f)
+                ExifInterface.ORIENTATION_TRANSVERSE -> { setRotate(270f); postScale(-1f, 1f) }
+                ExifInterface.ORIENTATION_ROTATE_270 -> setRotate(270f)
+                else -> return source
+            }
+        }
+        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true).also {
+            if (it !== source) source.recycle()
         }
     }
 

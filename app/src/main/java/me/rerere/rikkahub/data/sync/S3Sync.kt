@@ -152,6 +152,7 @@ class S3Sync(
 
             // Backup app files
             if (config.items.contains(S3Config.BackupItem.FILES)) {
+                me.rerere.rikkahub.data.files.MediaCreationArchive.write(context.filesDir, zipOut)
                 val uploadFolder = File(context.filesDir, FileFolders.UPLOAD)
                 if (uploadFolder.exists() && uploadFolder.isDirectory) {
                     Log.i(TAG, "prepareBackupFile: Backing up files from ${uploadFolder.absolutePath}")
@@ -280,6 +281,10 @@ class S3Sync(
                                     zipEntry.name.startsWith("${FileFolders.SKILLS}/")
                                 ) {
                                     restoreSkillEntry(zipIn, zipEntry.name)
+                                } else if (config.items.contains(S3Config.BackupItem.FILES) &&
+                                    zipEntry.name.startsWith("${FileFolders.MEDIA_CREATION}/")
+                                ) {
+                                    me.rerere.rikkahub.data.files.MediaCreationArchive.restore(context.filesDir, zipEntry.name, zipIn)
                                 } else {
                                     Log.i(TAG, "restoreFromBackupFile: Skipping entry ${zipEntry.name}")
                                 }

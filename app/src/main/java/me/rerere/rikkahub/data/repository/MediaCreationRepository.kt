@@ -49,6 +49,7 @@ class MediaCreationRepository(
 
     fun resolve(path: String): File {
         val root = File(context.filesDir, FileFolders.MEDIA_CREATION).canonicalFile
+        require(root.parentFile == context.filesDir.canonicalFile) { "Invalid media directory" }
         val file = File(context.filesDir, path).canonicalFile
         require(file.path.startsWith(root.path + File.separator)) { "Invalid media file path" }
         return file
