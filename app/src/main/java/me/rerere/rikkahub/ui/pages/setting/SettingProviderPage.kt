@@ -252,6 +252,7 @@ private fun ImportProviderButton(
 ) {
     val toaster = LocalToaster.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     var showImportDialog by remember { mutableStateOf(false) }
 
     var showScanner by remember { mutableStateOf(false) }
@@ -263,12 +264,12 @@ private fun ImportProviderButton(
             },
             onPermissionDenied = {
                 showScanner = false
-                toaster.show(context.getString(R.string.setting_provider_page_no_permission), type = ToastType.Error)
+                toaster.show(resources.getString(R.string.setting_provider_page_no_permission), type = ToastType.Error)
             },
             onDismissRequest = { showScanner = false },
             onError = {
                 showScanner = false
-                toaster.show(context.getString(R.string.setting_provider_page_scan_error, "Camera unavailable"),
+                toaster.show(resources.getString(R.string.setting_provider_page_scan_error, "Camera unavailable"),
                     type = ToastType.Error)
             },
         )
