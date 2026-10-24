@@ -70,12 +70,14 @@ val repositoryModule = module {
         )
     }
 
+    single { me.rerere.workspace.ssh.SshConnectionPool() }
+
     single {
         RootfsInstaller(get())
     }
 
     single {
-        WorkspaceRepository(get(), get(), get(), get())
+        WorkspaceRepository(get(), get(), get(), get(), get())
     }
 
     single {

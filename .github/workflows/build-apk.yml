@@ -78,16 +78,25 @@ jobs:
           mkdir -p verification-logs
           ./gradlew testDebugUnitTest --continue 2>&1 | tee verification-logs/unit-tests.txt
 
+      - name: Print generated Room schema
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f app/schemas/me.rerere.rikkahub.data.db.AppDatabase/42.json ]; then
+            echo ROOM_V42_SCHEMA_BEGIN
+            cat app/schemas/me.rerere.rikkahub.data.db.AppDatabase/42.json
+            echo ROOM_V42_SCHEMA_END
+          fi
       - name: Upload generated Room schema
         uses: actions/upload-artifact@v4
         with:
-          name: room-v41-debug
-          path: app/schemas/me.rerere.rikkahub.data.db.AppDatabase/41.json
+          name: room-v42-debug
+          path: app/schemas/me.rerere.rikkahub.data.db.AppDatabase/42.json
           if-no-files-found: error
       - name: Verify usage accounting SQL and migration
         run: |
           python3 scripts/verify-usage-stats.py
           python3 scripts/verify-conversation-config.py
+          python3 scripts/verify-ssh-workspace.py --require-schema
           python3 scripts/verify-translation-history.py
 
       - name: Verify memory database migration SQL
@@ -142,6 +151,7 @@ jobs:
             app/schemas/**/37.json
             app/schemas/**/39.json
             app/schemas/**/41.json
+            app/schemas/**/42.json
           if-no-files-found: warn
 
       - name: Build APK

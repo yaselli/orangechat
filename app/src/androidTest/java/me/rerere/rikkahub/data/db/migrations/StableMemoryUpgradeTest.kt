@@ -21,7 +21,7 @@ class StableMemoryUpgradeTest {
 
     @Test
     fun releasedStableAndMemoryDatabasesUpgradeWithoutLosingSourcesOrReactions() {
-        for (version in listOf(29, 30, 31, 32, 36, 37, 38, 39, 40)) {
+        for (version in listOf(29, 30, 31, 32, 36, 37, 38, 39, 40, 41)) {
             val name = "stable-memory-upgrade-$version"
             val original = """[{"id":"old"},{"id":"selected","annotations":[{"type":"avatar_interaction","actor":"user","target":"assistant"}]}]"""
             helper.createDatabase(name, version).apply {
@@ -36,12 +36,14 @@ class StableMemoryUpgradeTest {
                         "VALUES(1,'CHAT',42,3,0)")
                 if (version == 40) execSQL("UPDATE ConversationEntity SET conversation_config='{" +
                     "\"enableWebSearch\":true}' WHERE id='chat'")
+                execSQL("INSERT INTO workspaces(id,name,root,shell_status,created_at,updated_at,tool_approvals) " +
+                    "VALUES('local','旧工作区','local-root','READY',1,2,'{\"workspace_shell\":true}')")
                 close()
             }
-            val db = helper.runMigrationsAndValidate(name, 41, true,
+            val db = helper.runMigrationsAndValidate(name, 42, true,
                 Migration_29_30, Migration_30_31, Migration_29_32_ChatInteractions,
                 Migration_31_33_HistoryMemory, Migration_32_33_StableMemory,
-                Migration_33_34, Migration_34_35, Migration_35_36, Migration_36_37, Migration_37_38, Migration_38_39, Migration_39_40, Migration_40_41)
+                Migration_33_34, Migration_34_35, Migration_35_36, Migration_36_37, Migration_37_38, Migration_38_39, Migration_39_40, Migration_40_41, Migration_41_42)
             try {
                 db.query("SELECT messages,select_index FROM message_node WHERE id='node'").use {
                     assertTrue(it.moveToFirst())
@@ -67,6 +69,18 @@ class StableMemoryUpgradeTest {
                     assertEquals(if (version == 40) "{\"enableWebSearch\":true}" else "", it.getString(0))
                 }
                 db.query("SELECT COUNT(*) FROM translation_history").use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(0, it.getInt(0))
+                }
+                db.query("SELECT name,shell_status,tool_approvals,type,ssh_config FROM workspaces WHERE id='local'").use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals("旧工作区", it.getString(0))
+                    assertEquals("READY", it.getString(1))
+                    assertEquals("{\"workspace_shell\":true}", it.getString(2))
+                    assertEquals("LOCAL", it.getString(3))
+                    assertTrue(it.isNull(4))
+                }
+                db.query("SELECT COUNT(*) FROM workspaces WHERE type != 'LOCAL' OR ssh_config IS NOT NULL").use {
                     assertTrue(it.moveToFirst())
                     assertEquals(0, it.getInt(0))
                 }

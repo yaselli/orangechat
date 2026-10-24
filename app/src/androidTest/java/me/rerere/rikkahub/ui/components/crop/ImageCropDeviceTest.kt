@@ -43,7 +43,7 @@ class ImageCropDeviceTest {
         for (y in 0 until 40) for (x in 0 until 40) source.setPixel(x, y, Color.RED)
         try {
             file.outputStream().use { assertTrue(source.compress(Bitmap.CompressFormat.JPEG, 100, it)) }
-            ExifInterface(file).apply {
+            ExifInterface(file.absolutePath).apply {
                 setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_90.toString())
                 saveAttributes()
             }

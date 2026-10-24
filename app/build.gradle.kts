@@ -213,7 +213,10 @@ dependencies {
 
     // BiometricPrompt (fingerprint/face verify_fingerprint tool)
     implementation(libs.androidx.biometric)
-    implementation(libs.termux.terminal.view)
+    implementation(libs.termux.terminal.view) {
+        exclude(group = "com.termux.termux-app", module = "terminal-emulator")
+    }
+    implementation(project(":terminal"))
     implementation(libs.guava.listenablefuture)
 
     // Workflow feature: cron parsing + geofence triggers
@@ -221,7 +224,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // SSH feature: JSch (mwiede fork) for remote shell + SFTP
-    implementation("com.github.mwiede:jsch:0.2.21")
+    implementation(libs.jsch)
 
     // Compose
     implementation(libs.androidx.activity.compose)

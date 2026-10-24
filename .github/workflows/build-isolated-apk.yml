@@ -57,11 +57,19 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew testDebugUnitTest
+      - name: Print generated Room schema
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f app/schemas/me.rerere.rikkahub.data.db.AppDatabase/42.json ]; then
+            echo ROOM_V42_SCHEMA_BEGIN
+            cat app/schemas/me.rerere.rikkahub.data.db.AppDatabase/42.json
+            echo ROOM_V42_SCHEMA_END
+          fi
       - name: Upload generated Room schema
         uses: actions/upload-artifact@v4
         with:
-          name: room-v41-release
-          path: app/schemas/me.rerere.rikkahub.data.db.AppDatabase/41.json
+          name: room-v42-release
+          path: app/schemas/me.rerere.rikkahub.data.db.AppDatabase/42.json
           if-no-files-found: error
       - name: Compile database device tests
         run: ./gradlew :app:compileDebugAndroidTestKotlin
@@ -69,6 +77,7 @@ jobs:
         run: |
           python3 scripts/verify-usage-stats.py
           python3 scripts/verify-conversation-config.py
+          python3 scripts/verify-ssh-workspace.py --require-schema
           python3 scripts/verify-translation-history.py
 
       - name: Verify interaction migration
@@ -136,6 +145,7 @@ jobs:
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/38.json
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/39.json
             app/schemas/me.rerere.rikkahub.data.db.AppDatabase/41.json
+            app/schemas/me.rerere.rikkahub.data.db.AppDatabase/42.json
             app/build/reports/apk-size/*.json
             **/build/reports/androidTests/**
             **/build/outputs/androidTest-results/**

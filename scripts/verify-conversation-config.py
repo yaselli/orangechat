@@ -29,7 +29,7 @@ before = {t: (list(db.execute(f'PRAGMA table_info("{t}")')), list(db.execute(f'S
 statements = re.findall(r'db\.execSQL\("([^"\n]+)"\)', (source / 'data/db/migrations/Migration_39_40.kt').read_text())
 assert len(statements) == 2
 assert 'Migration_39_40,' in (source / 'di/DataSourceModule.kt').read_text()
-assert re.search(r'version\s*=\s*41', (source / 'data/db/AppDatabase.kt').read_text())
+assert int(re.search(r'version\s*=\s*(\d+)', (source / 'data/db/AppDatabase.kt').read_text()).group(1)) >= 41
 db.commit()
 db.execute('BEGIN')
 for sql in statements:

@@ -43,3 +43,5 @@ include(":document")
 include(":web")
 include(":workspace")
 include(":material3")
+
+include(":terminal")

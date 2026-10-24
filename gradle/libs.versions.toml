@@ -1,4 +1,7 @@
 [versions]
+jsch = "2.28.0"
+apache-sshd = "2.16.0"
+bouncycastle = "1.83"
 agp = "9.1.1"
 barcodeScanning = "17.3.0"
 textRecognition = "16.0.1"
@@ -71,6 +74,11 @@ termux = "0.118.0"
 diffutils = "4.17"
 
 [libraries]
+jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
+apache-sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "apache-sshd" }
+apache-sshd-sftp = { module = "org.apache.sshd:sshd-sftp", version.ref = "apache-sshd" }
+bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "cameraCore" }
 androidx-camera-compose = { module = "androidx.camera:camera-compose", version.ref = "cameraCore" }
 androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCore" }

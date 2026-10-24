@@ -11,13 +11,8 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
         # List C/C++ source files with relative paths to this CMakeLists.txt.
         workspace.cpp)
 
-add_library(termux SHARED
-        termux_pty.cpp)
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
         # List libraries link to the target library
         android
-        log)
-
-target_link_libraries(termux
         log)

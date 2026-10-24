@@ -20,7 +20,7 @@ assert 'Migration_32_33_StableMemory' in registered
 assert 'Migration_37_38' in registered
 assert 'Migration_38_39' in registered
 assert 'Migration_39_40' in registered
-assert re.search(r'version\s*=\s*41', (source / 'data/db/AppDatabase.kt').read_text())
+assert int(re.search(r'version\s*=\s*(\d+)', (source / 'data/db/AppDatabase.kt').read_text()).group(1)) >= 41
 statement = re.compile(r'db\.execSQL\((?:"""(.*?)"""|"([^"\n]+)")\)|\b(Migration_\w+)\.migrate\(db\)', re.S)
 def apply(db, name):
     for match in statement.finditer(migrations[name][2]):
