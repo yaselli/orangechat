@@ -299,8 +299,13 @@ val dataSourceModule = module {
         SponsorAPI.create(get())
     }
 
+    single<me.rerere.rikkahub.data.ai.account.ProviderAccountStore> {
+        me.rerere.rikkahub.data.ai.account.SettingsAccountStore(get())
+    }
+    single { me.rerere.rikkahub.data.ai.account.ProviderAccountManager(get(), get<AppScope>(), get()) }
     single {
-        ProviderManager(client = get(), context = get())
+        ProviderManager(client = get(), context = get(),
+            credentials = get<me.rerere.rikkahub.data.ai.account.ProviderAccountManager>())
     }
 
     single {

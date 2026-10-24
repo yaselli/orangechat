@@ -74,6 +74,7 @@ termux = "0.118.0"
 diffutils = "4.17"
 
 [libraries]
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlin-coroutines-core" }
 jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
 apache-sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "apache-sshd" }
 apache-sshd-sftp = { module = "org.apache.sshd:sshd-sftp", version.ref = "apache-sshd" }

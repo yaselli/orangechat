@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.data.sync.webdav
 
+import me.rerere.rikkahub.data.ai.account.withoutAccountCredentials
 import androidx.room.withTransaction
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.backup.BackupIoLock
@@ -176,7 +177,7 @@ class WebDavSync(
                     addVirtualFileToZip(
                         zipOut = zipOut,
                         name = "settings.json",
-                        content = json.encodeToString(settingsStore.settingsFlow.value)
+                        content = json.encodeToString(settingsStore.settingsFlow.value.withoutAccountCredentials())
                     )
 
                     snapshot.listFiles()?.forEach { file -> addFileToZip(zipOut, file, file.name) }

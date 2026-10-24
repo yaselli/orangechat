@@ -64,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -467,9 +468,20 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
                 Text(stringResource(R.string.setting_provider_page_add_provider))
             },
             text = {
-                dialogState.currentState?.let {
-                    ProviderConfigure(it) { newState ->
-                        dialogState.currentState = newState
+                dialogState.currentState?.let { current ->
+                    Column {
+                        Row {
+                            TextButton(onClick = { dialogState.currentState = ProviderSetting.OpenAI(id = current.id) }) {
+                                Text("API Key")
+                            }
+                            TextButton(onClick = { dialogState.currentState = ProviderSetting.ChatGPT(id = current.id) }) {
+                                Text("ChatGPT")
+                            }
+                            TextButton(onClick = { dialogState.currentState = ProviderSetting.Grok(id = current.id) }) {
+                                Text("Grok")
+                            }
+                        }
+                        ProviderConfigure(current) { newState -> dialogState.currentState = newState }
                     }
                 }
             },

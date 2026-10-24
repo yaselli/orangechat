@@ -45,3 +45,5 @@ include(":workspace")
 include(":material3")
 
 include(":terminal")
+
+include(":oauth")

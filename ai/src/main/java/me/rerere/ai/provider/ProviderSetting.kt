@@ -12,6 +12,25 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlin.uuid.Uuid
 
+/** 账号登录得到的 OAuth 凭据 */
+@Serializable
+data class OAuthCredential(
+    val accessToken: String,
+    val refreshToken: String? = null,
+    // access token 过期时间（毫秒时间戳），0 表示未知
+    val expiresAt: Long = 0L,
+    // 厂商侧的账号/工作区 ID，ChatGPT 请求需要带上
+    val accountId: String? = null,
+    // 以下仅用于界面展示
+    val email: String? = null,
+    val plan: String? = null,
+) {
+    override fun toString(): String =
+        "OAuthCredential(accessToken=***, refreshToken=***, " +
+            "expiresAt=$expiresAt, accountId=$accountId, email=$email, plan=$plan)"
+
+}
+
 @Serializable
 data class BalanceOption(
     val enabled: Boolean = false, // 是否开启余额获取功能
@@ -239,6 +258,137 @@ sealed class ProviderSetting {
                 builtIn = builtIn,
                 description = description,
                 shortDescription = shortDescription,
+            )
+        }
+    }
+
+    @Serializable
+    sealed class Account : ProviderSetting() {
+        abstract val credential: OAuthCredential?
+        abstract val customHeaders: List<CustomHeader>
+        abstract fun withCredential(credential: OAuthCredential?): Account
+    }
+
+    @Serializable
+    @SerialName("chatgpt")
+    data class ChatGPT(
+        override var id: Uuid = Uuid.random(),
+        override var enabled: Boolean = true,
+        override var name: String = "ChatGPT",
+        override var models: List<Model> = emptyList(),
+        override val balanceOption: BalanceOption = BalanceOption(),
+        @Transient override val builtIn: Boolean = false,
+        @Transient override val description: @Composable (() -> Unit) = {},
+        @Transient override val shortDescription: @Composable (() -> Unit) = {},
+        override val credential: OAuthCredential? = null,
+        override val customHeaders: List<CustomHeader> = emptyList(),
+    ) : Account() {
+        override fun withCredential(credential: OAuthCredential?): Account = copy(credential = credential)
+
+        override fun addModel(model: Model): ProviderSetting {
+            return copy(models = models + model)
+        }
+
+        override fun editModel(model: Model): ProviderSetting {
+            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
+        }
+
+        override fun delModel(model: Model): ProviderSetting {
+            return copy(models = models.filter { it.id != model.id })
+        }
+
+        override fun moveMove(
+            from: Int,
+            to: Int
+        ): ProviderSetting {
+            return copy(models = models.toMutableList().apply {
+                val model = removeAt(from)
+                add(to, model)
+            })
+        }
+
+        override fun copyProvider(
+            id: Uuid,
+            enabled: Boolean,
+            name: String,
+            models: List<Model>,
+            balanceOption: BalanceOption,
+            builtIn: Boolean,
+            description: @Composable (() -> Unit),
+            shortDescription: @Composable (() -> Unit),
+        ): ProviderSetting {
+            return this.copy(
+                credential = if (id == this.id) credential else null,
+                id = id,
+                enabled = enabled,
+                name = name,
+                models = models,
+                builtIn = builtIn,
+                description = description,
+                balanceOption = balanceOption,
+                shortDescription = shortDescription
+            )
+        }
+    }
+
+    @Serializable
+    @SerialName("grok")
+    data class Grok(
+        override var id: Uuid = Uuid.random(),
+        override var enabled: Boolean = true,
+        override var name: String = "Grok",
+        override var models: List<Model> = emptyList(),
+        override val balanceOption: BalanceOption = BalanceOption(),
+        @Transient override val builtIn: Boolean = false,
+        @Transient override val description: @Composable (() -> Unit) = {},
+        @Transient override val shortDescription: @Composable (() -> Unit) = {},
+        override val credential: OAuthCredential? = null,
+        override val customHeaders: List<CustomHeader> = emptyList(),
+    ) : Account() {
+        override fun withCredential(credential: OAuthCredential?): Account = copy(credential = credential)
+
+        override fun addModel(model: Model): ProviderSetting {
+            return copy(models = models + model)
+        }
+
+        override fun editModel(model: Model): ProviderSetting {
+            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
+        }
+
+        override fun delModel(model: Model): ProviderSetting {
+            return copy(models = models.filter { it.id != model.id })
+        }
+
+        override fun moveMove(
+            from: Int,
+            to: Int
+        ): ProviderSetting {
+            return copy(models = models.toMutableList().apply {
+                val model = removeAt(from)
+                add(to, model)
+            })
+        }
+
+        override fun copyProvider(
+            id: Uuid,
+            enabled: Boolean,
+            name: String,
+            models: List<Model>,
+            balanceOption: BalanceOption,
+            builtIn: Boolean,
+            description: @Composable (() -> Unit),
+            shortDescription: @Composable (() -> Unit),
+        ): ProviderSetting {
+            return this.copy(
+                credential = if (id == this.id) credential else null,
+                id = id,
+                enabled = enabled,
+                name = name,
+                models = models,
+                builtIn = builtIn,
+                description = description,
+                balanceOption = balanceOption,
+                shortDescription = shortDescription
             )
         }
     }

@@ -401,6 +401,7 @@ class SettingsStore(
             settings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
+                        is ProviderSetting.Account -> provider.copyProvider(models = provider.models.distinctBy { model -> model.id })
                         is ProviderSetting.OpenAI -> provider.copy(
                             models = provider.models.distinctBy { model -> model.id }
                         )
@@ -473,7 +474,9 @@ class SettingsStore(
         }
     }
 
-    private suspend fun persistSettings(settings: Settings, previous: Settings) {
+    private suspend fun persistSettings(desired: Settings, previous: Settings, allowAccountCredentials: Boolean = false) {
+        val settings = if (allowAccountCredentials) desired else desired.copy(providers =
+            me.rerere.rikkahub.data.ai.account.preserveAccountCredentials(desired.providers, previous.providers))
         if(settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
             return
@@ -588,6 +591,13 @@ class SettingsStore(
                 preferences[WORKFLOW_HEADLESS_BLOCK_SENSITIVE] = settings.workflowHeadlessBlockSensitive
                 preferences[AUTO_APPROVE_ALL_TOOLS] = settings.autoApproveAllTools
             }
+        }
+    }
+
+    internal suspend fun updateAccountCredentials(fn: (Settings) -> Settings) {
+        updateMutex.withLock {
+            val previous = settingsFlowRaw.first()
+            persistSettings(fn(previous), previous, allowAccountCredentials = true)
         }
     }
 

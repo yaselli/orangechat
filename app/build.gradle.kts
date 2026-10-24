@@ -217,6 +217,7 @@ dependencies {
         exclude(group = "com.termux.termux-app", module = "terminal-emulator")
     }
     implementation(project(":terminal"))
+    implementation(project(":oauth"))
     implementation(libs.guava.listenablefuture)
 
     // Workflow feature: cron parsing + geofence triggers

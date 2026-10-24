@@ -25,6 +25,8 @@ interface Provider<T : ProviderSetting> {
         return "TODO"
     }
 
+    suspend fun getQuota(providerSetting: T): ProviderQuota = ProviderQuota.Balance(getBalance(providerSetting))
+
     suspend fun generateText(
         providerSetting: T,
         messages: List<UIMessage>,

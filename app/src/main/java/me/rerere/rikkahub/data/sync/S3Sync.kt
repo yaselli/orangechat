@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.data.sync
 
+import me.rerere.rikkahub.data.ai.account.withoutAccountCredentials
 import me.rerere.rikkahub.data.backup.BackupIoLock
 import android.content.Context
 import android.util.Log
@@ -128,7 +129,7 @@ class S3Sync(
             addVirtualFileToZip(
                 zipOut = zipOut,
                 name = "settings.json",
-                content = json.encodeToString(settingsStore.settingsFlow.value)
+                content = json.encodeToString(settingsStore.settingsFlow.value.withoutAccountCredentials())
             )
 
             // Backup database files
