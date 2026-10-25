@@ -15,7 +15,8 @@ APPROVED_REPOSITORIES = frozenset({'yaselli/watermelon-chat', 'yaselli/orangecha
 ALLOWED_RELEASE_FILES = {
     'app/build.gradle.kts', '.github/release-plan.json',
     '.github/workflows/build-apk.yml', '.github/workflows/build-isolated-apk.yml',
-    'docs/releases/2.3.2.md', 'scripts/publish-approved-update.py', 'scripts/test-publish-approved-update.py',
+    'docs/releases/2.3.2.md', 'docs/releases/2.3.3.md', 'docs/app-updates.md',
+    'scripts/publish-approved-update.py', 'scripts/test-publish-approved-update.py',
 }
 
 
@@ -89,7 +90,7 @@ def publish(directory, channel, env=os.environ, run=command):
         return False
     verify_source(plan['testedCommit'], source, run)
     notes = ROOT / plan['notes']
-    if plan['notes'] != 'docs/releases/2.3.2.md' or not notes.is_file():
+    if plan['notes'] != f'docs/releases/{plan["version"]}.md' or not notes.is_file():
         raise ValueError('Approved release notes are missing')
     repo, tag = env['GITHUB_REPOSITORY'], metadata['tag']
     tag_commit = run(['gh', 'api', f'repos/{repo}/git/ref/tags/{tag}'], check=False)
