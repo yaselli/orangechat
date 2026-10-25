@@ -77,14 +77,15 @@ fun SharedMusicSheet(
                 manager.refreshQueue()
             }
     }
-    LaunchedEffect(connection?.token, connected, query, sourceId) {
+    val remoteQuery = if (sourceId == null) query else ""
+    LaunchedEffect(connection?.token, connected, remoteQuery, sourceId) {
         songs = emptyList()
         sources = null
         if (connected)
             manager.reportFailure {
-                if (query.isNotBlank()) {
+                if (remoteQuery.isNotBlank()) {
                     delay(400)
-                    songs = manager.search(query)
+                    songs = manager.search(remoteQuery)
                 } else if (sourceId != null) songs = manager.sourceSongs(sourceId!!)
                 else sources = manager.sources()
             }
@@ -220,12 +221,28 @@ fun SharedMusicSheet(
                             query,
                             { query = it },
                             singleLine = true,
-                            label = { Text("搜歌曲、歌手") },
+                            label = { Text(if (sourceId == null) "搜歌曲、歌手" else "在这个歌单里找") },
                             modifier = Modifier.fillMaxWidth(),
                         )
                         sourceId?.let { source ->
                             Row {
-                                TextButton(onClick = { sourceId = null }) { Text("返回歌单") }
+                                TextButton(
+                                    onClick = {
+                                        sourceId = null
+                                        query = ""
+                                    }
+                                ) {
+                                    Text("返回歌单")
+                                }
+                                if (source.all { it.isDigit() })
+                                    TextButton(
+                                        onClick = {
+                                            action { manager.importPlaylist(source) }
+                                        },
+                                        enabled = !busy,
+                                    ) {
+                                        Text("导入列表")
+                                    }
                                 TextButton(
                                     onClick = {
                                         action {
@@ -277,7 +294,14 @@ fun SharedMusicSheet(
                                     )
                                 }
                             }
-                            items(songs) { song ->
+                            items(
+                                if (sourceId == null) songs
+                                else
+                                    songs.filter {
+                                        it.title.contains(query, true) ||
+                                            it.artist.contains(query, true)
+                                    }
+                            ) { song ->
                                 MusicSongRow(
                                     song,
                                     !busy,
@@ -316,7 +340,12 @@ fun SharedMusicSheet(
                             label = { Text("在列表里找") },
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        LazyColumn(Modifier.weight(1f)) {
+                        val queueScroll = androidx.compose.foundation.lazy.rememberLazyListState()
+                        LaunchedEffect(Unit) {
+                            val at = queue.items.indexOfFirst { it.id == queue.currentId }
+                            if (at >= 0) queueScroll.scrollToItem(at)
+                        }
+                        LazyColumn(Modifier.weight(1f), state = queueScroll) {
                             items(
                                 queue.items.filter {
                                     it.title.contains(filter, true) ||
@@ -392,14 +421,17 @@ fun SharedMusicSheet(
                                 "${current.song.title} · ${current.song.artist}",
                                 style = MaterialTheme.typography.titleMedium,
                             )
+                            if (current.trial) Text("当前为试听片段，歌词可浏览与分享")
                             if (current.item.addedBy == "ta")
                                 Text("TA：${current.item.note.ifBlank { "这首放给你" }}")
                             val lyricState =
                                 androidx.compose.foundation.lazy.rememberLazyListState()
                             val active =
-                                current.song.lyrics.indexOfLast {
-                                    it.timeMs <= current.positionMs + 300
-                                }
+                                if (current.trial) -1
+                                else
+                                    current.song.lyrics.indexOfLast {
+                                        it.timeMs <= current.positionMs + 300
+                                    }
                             LaunchedEffect(current.song.songId, active) {
                                 if (active >= 0 && !lyricState.isScrollInProgress)
                                     lyricState.animateScrollToItem((active - 2).coerceAtLeast(0))
@@ -408,7 +440,10 @@ fun SharedMusicSheet(
                                 items(current.song.lyrics, key = { it.index }) { line ->
                                     Row(
                                         Modifier.fillMaxWidth()
-                                            .clickable { action { manager.seek(line.timeMs) } }
+                                            .clickable {
+                                                if (!current.trial)
+                                                    action { manager.seek(line.timeMs) }
+                                            }
                                             .padding(vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {

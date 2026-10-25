@@ -147,7 +147,7 @@ fun SharedMusicCards(
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                         Text(song.title, style = MaterialTheme.typography.titleMedium)
                         Text(song.artist, style = MaterialTheme.typography.bodySmall)
-                        val note = card["note"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                        val note = (card["note"] as? JsonPrimitive)?.contentOrNull.orEmpty()
                         if (note.isNotBlank()) Text(note)
                         (card["lines"] as? JsonArray)?.take(8)?.forEach { line ->
                             Text(

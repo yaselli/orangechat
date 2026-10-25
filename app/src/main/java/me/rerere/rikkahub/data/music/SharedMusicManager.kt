@@ -60,12 +60,40 @@ class SharedMusicManager(
                 object : BroadcastReceiver() {
                     override fun onReceive(context: Context?, intent: Intent?) {
                         val snapshot = _playback.value ?: return
-                        if (snapshot.sourceUrl == MusicPlayerService.getNowPlaying()["filePath"]) {
-                            scope.launch { reportFailure { next(auto = true) } }
+                        if (intent?.action == MusicPlayerService.ACTION_MUSIC_STOPPED) {
+                            if (
+                                snapshot.sourceUrl == intent.getStringExtra("filePath") ||
+                                    snapshot.state == "loading"
+                            ) {
+                                scope.launch { stop() }
+                            }
+                        } else if (
+                            snapshot.sourceUrl == MusicPlayerService.getNowPlaying()["filePath"]
+                        ) {
+                            _playback.value =
+                                snapshot.copy(
+                                    state = "loading",
+                                    observedAt = System.currentTimeMillis(),
+                                )
+                            val endedEpoch = epoch.get()
+                            scope.launch {
+                                try {
+                                    next(auto = true)
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (failure: Exception) {
+                                    if (epoch.get() == endedEpoch + 1) {
+                                        _error.value = failure.message ?: "下一首暂时无法播放"
+                                        stop()
+                                    }
+                                }
+                            }
                         }
                     }
                 },
-                IntentFilter(MusicPlayerService.ACTION_MUSIC_COMPLETED),
+                IntentFilter(MusicPlayerService.ACTION_MUSIC_COMPLETED).apply {
+                    addAction(MusicPlayerService.ACTION_MUSIC_STOPPED)
+                },
             )
     }
 
@@ -160,6 +188,12 @@ class SharedMusicManager(
         setQueue(request(listOf("queue")))
     }
 
+    suspend fun importPlaylist(id: String) = operations.withLock {
+        setQueue(
+            request(listOf("queue", "import"), "POST", buildJsonObject { put("playlistId", id) })
+        )
+    }
+
     suspend fun enqueue(song: MusicSong, next: Boolean = true) = operations.withLock {
         setQueue(
             request(
@@ -239,7 +273,9 @@ class SharedMusicManager(
 
     suspend fun toggle() {
         val current = _playback.value ?: return
-        if (current.state in listOf("playing", "loading")) {
+        if (current.state == "loading" && MusicPlayerService.isWaitingForQueue()) {
+            stop()
+        } else if (current.state in listOf("playing", "loading")) {
             withContext(Dispatchers.Main.immediate) { MusicPlayerService.pause(context) }
         } else if (
             current.state == "stopped" ||
@@ -262,6 +298,14 @@ class SharedMusicManager(
 
     suspend fun seek(positionMs: Long) =
         withContext(Dispatchers.Main.immediate) {
+            val current = _playback.value ?: return@withContext
+            if (current.sourceUrl == null) {
+                _playback.value =
+                    current.copy(
+                        positionMs = positionMs.coerceIn(0, current.durationMs.coerceAtLeast(0))
+                    )
+                return@withContext
+            }
             MusicPlayerService.seekTo(
                 context,
                 positionMs.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
@@ -345,20 +389,34 @@ class SharedMusicManager(
                             ))
                 )
             val result = request(listOf("tool"), "POST", args)
+            var playbackWarning: String? = null
             if (action in listOf("play_next", "queue_add", "play_now")) refreshQueue()
             if (action == "play_now" && epoch.compareAndSet(playbackEpoch, playbackEpoch + 1)) {
                 val item = _queue.value.items.firstOrNull { it.id == _queue.value.currentId }
                 if (item != null)
-                    playResolved(
-                        item,
-                        assistantId,
-                        conversationId,
-                        current?.state in listOf("playing", "loading"),
-                        playbackEpoch + 1,
-                    )
+                    try {
+                        playResolved(
+                            item,
+                            assistantId,
+                            conversationId,
+                            current?.state in listOf("playing", "loading"),
+                            playbackEpoch + 1,
+                        )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (failure: Exception) {
+                        playbackWarning = failure.message ?: "播放器暂时无法打开"
+                    }
             }
             val delivery = result["delivery"]?.jsonObject?.get("card") as? JsonObject
-            val summary = JsonObject(result - "delivery")
+            val summary = buildJsonObject {
+                (result - "delivery").forEach { (key, value) -> put(key, value) }
+                if (action == "play_now") {
+                    put("text", "已保存歌卡。是否已播放以当前设备播放器状态为准；待播放状态需要用户点击。")
+                    put("playbackState", _playback.value?.state ?: "stopped")
+                    playbackWarning?.let { put("playbackWarning", it) }
+                }
+            }
             buildList {
                 add(UIMessagePart.Text(summary.toString()))
                 if (delivery != null)
@@ -414,11 +472,12 @@ class SharedMusicManager(
         positionMs: Long = 0,
     ) {
         val detail = song(item.songId)
+        val playbackSource = if (start) request(listOf("song", item.songId, "url")) else null
         val url =
-            if (start)
-                request(listOf("song", item.songId, "url"))["url"]?.jsonPrimitive?.contentOrNull
-                    ?: error("无法获取播放地址")
+            if (start) playbackSource?.get("url")?.jsonPrimitive?.contentOrNull ?: error("无法获取播放地址")
             else null
+        val trial = playbackSource?.get("trial")?.jsonPrimitive?.booleanOrNull == true
+        val resumePosition = if (trial) 0 else positionMs
         if (url != null) {
             val parsed = url.toHttpUrl()
             require(parsed.isHttps && parsed.host.endsWith(".music.126.net")) { "播放地址不受支持" }
@@ -426,6 +485,7 @@ class SharedMusicManager(
         if (turn != epoch.get()) return
         withContext(Dispatchers.Main.immediate) {
             if (turn != epoch.get()) return@withContext
+            val previous = _playback.value
             if (
                 !start &&
                     _playback.value?.sourceUrl == MusicPlayerService.getNowPlaying()["filePath"]
@@ -440,15 +500,27 @@ class SharedMusicManager(
                     item,
                     detail,
                     if (start) "loading" else "ready",
-                    positionMs,
+                    resumePosition,
                     detail.durationMs,
                     now,
                     sourceUrl = url,
+                    trial = trial,
                 )
             if (url != null) {
                 sourceObtainedAt = now
-                MusicPlayerService.play(context, url, detail.title, detail.artist)
-                if (positionMs > 0) MusicPlayerService.seekTo(context, positionMs.toInt())
+                try {
+                    MusicPlayerService.play(
+                        context,
+                        url,
+                        detail.title,
+                        detail.artist,
+                        keepForQueue = true,
+                        initialPositionMs = resumePosition,
+                    )
+                } catch (failure: Exception) {
+                    _playback.value = previous
+                    throw failure
+                }
             }
             if (start) ensureTicker()
             else {

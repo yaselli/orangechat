@@ -69,6 +69,7 @@ data class MusicPlayback(
     val observedAt: Long,
     val pausedAt: Long? = null,
     val sourceUrl: String? = null,
+    val trial: Boolean = false,
 )
 
 fun musicTime(ms: Long): String =
@@ -91,11 +92,14 @@ internal fun MusicPlayback.contextFor(assistantId: String, now: Long): String? {
         put("artist", song.artist.take(160))
         put("position", musicTime(positionMs))
         put("duration", musicTime(durationMs))
+        put("trial", trial)
         put(
             "lyrics_near_position",
             buildJsonArray {
                 song.lyrics
-                    .filterIndexed { index, _ -> index in (at - 1).coerceAtLeast(0)..(at + 1) }
+                    .filterIndexed { index, _ ->
+                        !trial && index in (at - 1).coerceAtLeast(0)..(at + 1)
+                    }
                     .forEach { add(JsonPrimitive(it.text.take(240))) }
             },
         )

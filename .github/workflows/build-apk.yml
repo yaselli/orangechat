@@ -137,6 +137,20 @@ jobs:
         if: steps.accepted.outputs.approved != 'true'
         run: ./gradlew :app:compileDebugAndroidTestKotlin
 
+      - name: Enable KVM for shared music playback tests
+        if: github.ref == 'refs/heads/feature/shared-music-multiuser'
+        run: sudo chmod 666 /dev/kvm
+      - name: Verify shared music background playback on Android
+        if: github.ref == 'refs/heads/feature/shared-music-multiuser'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.music.MusicPlayerDeviceTest
+
       - name: Upload unit test diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -146,6 +160,8 @@ jobs:
             verification-logs/unit-tests.txt
             **/build/reports/tests/**
             **/build/test-results/**
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**
           if-no-files-found: warn
 
       - name: Android Lint

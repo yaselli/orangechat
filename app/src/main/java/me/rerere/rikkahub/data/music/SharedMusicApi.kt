@@ -72,8 +72,8 @@ class SharedMusicApi(client: OkHttpClient) {
             .retryOnConnectionFailure(false)
             .callTimeout(18, TimeUnit.SECONDS)
             .apply {
-                interceptors.clear()
-                networkInterceptors.clear()
+                interceptors().clear()
+                networkInterceptors().clear()
             }
             .authenticator(okhttp3.Authenticator.NONE)
             .proxyAuthenticator(okhttp3.Authenticator.NONE)
