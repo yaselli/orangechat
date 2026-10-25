@@ -94,6 +94,15 @@ jobs:
         working-directory: services/shared-music
         run: npm ci --ignore-scripts && npm test
 
+      - name: Package self-hosted music service
+        run: git archive --format=zip --output=watermelon-music-service.zip HEAD:services/shared-music
+      - name: Upload self-hosted music service
+        uses: actions/upload-artifact@v4
+        with:
+          name: WatermelonChat-music-service
+          path: watermelon-music-service.zip
+          if-no-files-found: error
+
       - name: Unit tests
         if: steps.accepted.outputs.approved != 'true'
         shell: bash

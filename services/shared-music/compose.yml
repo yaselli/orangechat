@@ -5,7 +5,9 @@ services:
     ports:
       - "127.0.0.1:8787:8787"
     environment:
-      MAX_USERS: "1000"
+      MAX_USERS: "32"
+      MAX_ACTIVE_USERS: "8"
+      ONE_EARBUD_TOKEN: ${ONE_EARBUD_TOKEN:?请在 .env 中设置访问口令}
       TRUST_PROXY: "1"
     volumes:
       - music-data:/data

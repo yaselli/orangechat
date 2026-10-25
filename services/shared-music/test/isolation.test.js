@@ -19,7 +19,8 @@ async function fixture(t) {
     lyrics: async () => ({ lines: [{ index: 0, timeMs: 0, text: 'line' }] }),
   };
   const tenants = createTenants({ directory, client });
-  const app = createApp({ tenants, registrationsPerHour: 100 });
+  const registrationKey = 'private-server-owner-key';
+  const app = createApp({ tenants, registrationsPerHour: 100, registrationKey });
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   t.after(async () => { await new Promise(resolve => server.close(resolve)); fs.rmSync(directory, { recursive: true }); });
@@ -35,7 +36,8 @@ async function fixture(t) {
     await call(token, '/login/qr/' + qr.key);
     return qr;
   }
-  return { directory, tenants, client, call, login, register: async () => (await call('', '/sessions', {})).body.token };
+  return { directory, tenants, client, call, login, registrationKey,
+    register: async () => (await call(registrationKey, '/sessions', {})).body.token };
 }
 
 test('two users cannot read or overwrite each other’s account, QR, queue or listening state', async t => {
@@ -55,6 +57,16 @@ test('two users cannot read or overwrite each other’s account, QR, queue or li
   const status = await f.call(a, '/status');
   assert.equal(status.cache, 'no-store');
   assert.equal(Object.hasOwn(status.body, 'cookie'), false);
+});
+
+test('a private self-hosted service requires its owner’s key for pairing and uses a separate device credential afterwards', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.call('', '/sessions', {})).status, 401);
+  assert.equal((await f.call('wrong-access-key', '/sessions', {})).body.error, 'MUSIC_ACCESS_DENIED');
+  const token = await f.register();
+  assert.notEqual(token, f.registrationKey);
+  assert.equal((await f.call(token, '/status')).status, 200);
+  assert.equal((await f.call(f.registrationKey, '/status')).status, 401);
 });
 
 test('invalid credentials and forged user IDs never select another tenant', async t => {

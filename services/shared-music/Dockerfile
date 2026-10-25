@@ -1,7 +1,7 @@
 FROM node:24-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && mkdir /data && chown node:node /data
+RUN npm ci --omit=dev --ignore-scripts && mkdir /data && chown node:node /data
 COPY src ./src
 COPY vendor ./vendor
 USER node

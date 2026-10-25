@@ -50,6 +50,7 @@ fun SharedMusicSheet(
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var server by remember { mutableStateOf(connection?.server.orEmpty()) }
+    var accessKey by remember { mutableStateOf("") }
     var tab by remember { mutableIntStateOf(initialTab) }
     var query by remember { mutableStateOf("") }
     var sourceId by remember { mutableStateOf<String?>(null) }
@@ -133,14 +134,28 @@ fun SharedMusicSheet(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                OutlinedTextField(
+                    accessKey,
+                    { accessKey = it },
+                    label = { Text("音乐服务访问口令") },
+                    visualTransformation =
+                        androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Button(
-                    onClick = { action { manager.connect(server) } },
-                    enabled = !busy && server.isNotBlank(),
+                    onClick = {
+                        action {
+                            manager.connect(server, accessKey)
+                            accessKey = ""
+                        }
+                    },
+                    enabled = !busy && server.isNotBlank() && accessKey.length >= 16,
                 ) {
                     Text("连接")
                 }
                 Text(
-                    "服务地址由西瓜瓣维护者或你的服务管理员提供。每个人的账号、播放列表和状态分别保存。",
+                    "先在自己的服务器部署配套音乐服务，再填写地址和部署时设置的访问口令。网易云登录在下一步扫码完成。",
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else if (!connected) {

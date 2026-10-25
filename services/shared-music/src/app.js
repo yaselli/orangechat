@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const crypto = require('node:crypto');
 const { createTenants, failure } = require('./tenants');
 
 const ACTIONS = new Set(['search', 'lyrics', 'share', 'now_playing', 'queue', 'play_next', 'queue_add', 'play_now']);
@@ -32,6 +33,9 @@ function limiter(maximum, windowMs, now = Date.now) {
 }
 
 function createApp(options) {
+  const registrationKey = String(options.registrationKey || '');
+  if (!/^[\x21-\x7e]{16,256}$/.test(registrationKey)) throw new Error('Set ONE_EARBUD_TOKEN to 16–256 visible ASCII characters');
+  const expectedKey = crypto.createHash('sha256').update(registrationKey).digest();
   const tenants = options.tenants || createTenants(options);
   const app = express();
   app.disable('x-powered-by');
@@ -41,7 +45,12 @@ function createApp(options) {
     res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); next();
   });
   app.get('/health', (_req, res) => res.json({ ok: true, service: 'watermelon-shared-music' }));
-  app.post('/api/music/sessions', limiter(options.registrationsPerHour || 6, 3600000), (_req, res, next) => {
+  app.post('/api/music/sessions', limiter(60, 60000), (req, res, next) => {
+    const supplied = String(req.headers.authorization || '').replace(/^Bearer /, '');
+    const actual = crypto.createHash('sha256').update(supplied).digest();
+    if (!crypto.timingSafeEqual(actual, expectedKey)) return next(failure('MUSIC_ACCESS_DENIED', 401));
+    next();
+  }, limiter(options.registrationsPerHour || 6, 3600000), (_req, res, next) => {
     try { res.status(201).json({ ok: true, token: tenants.create() }); } catch (error) { next(error); }
   });
   const token = req => String(req.headers.authorization || '').replace(/^Bearer /, '');

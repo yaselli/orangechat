@@ -16,6 +16,38 @@ import org.junit.Test
 
 class SharedMusicApiTest {
     @Test
+    fun `self-hosted pairing uses the owner key once and keeps only the returned device credential`() =
+        runBlocking {
+            val ownerKey = "own-private-server-access-key"
+            val deviceToken = "t".repeat(43)
+            val headers = java.util.Collections.synchronizedList(mutableListOf<String>())
+            val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+            server.createContext("/") { exchange ->
+                headers.add(exchange.requestHeaders.getFirst("Authorization"))
+                val body =
+                    (if (exchange.requestURI.path.endsWith("/sessions"))
+                            """{"ok":true,"token":"$deviceToken"}"""
+                        else """{"ok":true,"connected":false}""")
+                        .toByteArray()
+                exchange.sendResponseHeaders(200, body.size.toLong())
+                exchange.responseBody.use { it.write(body) }
+            }
+            server.start()
+            val client = OkHttpClient()
+            try {
+                val api = SharedMusicApi(client)
+                val connection = api.register("http://127.0.0.1:${server.address.port}", ownerKey)
+                assertEquals(deviceToken, connection.token)
+                api.request(connection, listOf("status"))
+                assertEquals(listOf("Bearer $ownerKey", "Bearer $deviceToken"), headers)
+            } finally {
+                server.stop(0)
+                client.connectionPool.evictAll()
+                client.dispatcher.executorService.shutdown()
+            }
+        }
+
+    @Test
     fun `cancelling a slow music request cancels the HTTP call without waiting for its body`() =
         runBlocking {
             val accepted = CountDownLatch(1)

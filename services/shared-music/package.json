@@ -5,14 +5,14 @@
   "license": "MIT",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node --env-file-if-exists=.env src/server.js",
     "test": "node --test test/*.test.js vendor/one-earbud/server/test/*.test.js"
   },
   "dependencies": {
     "express": "^4.19.2"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.9"
   },
   "private": true
 }

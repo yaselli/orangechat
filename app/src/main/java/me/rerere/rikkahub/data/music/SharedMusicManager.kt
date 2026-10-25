@@ -21,6 +21,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -105,10 +106,10 @@ class SharedMusicManager(
             _playback.value?.contextFor(assistantId, System.currentTimeMillis())
         else null
 
-    suspend fun connect(server: String) = operations.withLock {
+    suspend fun connect(server: String, accessKey: String) = operations.withLock {
         val normalized = musicServerUrl(server).toString().trimEnd('/')
         val old = _connection.value
-        val connection = if (old?.server == normalized) old else api.register(normalized)
+        val connection = if (old?.server == normalized) old else api.register(normalized, accessKey)
         if (old?.token != connection.token) stop()
         withContext(Dispatchers.IO) { credentials.save(connection) }
         _connection.value = connection

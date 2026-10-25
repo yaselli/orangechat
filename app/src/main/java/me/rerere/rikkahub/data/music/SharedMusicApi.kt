@@ -47,6 +47,7 @@ class MusicApiException(val code: String) :
     Exception(
         when (code) {
             "UNAUTHORIZED" -> "音乐连接已失效，请重新连接服务"
+            "MUSIC_ACCESS_DENIED" -> "音乐服务的访问口令不正确"
             "MUSIC_NOT_LOGGED_IN",
             "MUSIC_LOGIN_EXPIRED" -> "网易云登录已过期，请重新扫码"
             "MUSIC_UNAVAILABLE" -> "这首歌暂时无法播放"
@@ -86,7 +87,6 @@ class SharedMusicApi(client: OkHttpClient) {
         method: String = "GET",
         body: JsonElement? = null,
         query: Map<String, String> = emptyMap(),
-        authenticated: Boolean = true,
     ): JsonObject {
         val url =
             musicServerUrl(connection.server)
@@ -101,10 +101,8 @@ class SharedMusicApi(client: OkHttpClient) {
             Request.Builder()
                 .url(url)
                 .apply {
-                    if (authenticated) {
-                        check(connection.token.isNotBlank()) { "请先连接音乐服务" }
-                        header("Authorization", "Bearer ${connection.token}")
-                    }
+                    check(connection.token.isNotBlank()) { "请先连接音乐服务" }
+                    header("Authorization", "Bearer ${connection.token}")
                     method(
                         method,
                         if (method in listOf("GET", "DELETE")) null
@@ -151,10 +149,12 @@ class SharedMusicApi(client: OkHttpClient) {
         value
     }
 
-    suspend fun register(server: String): MusicConnection {
+    suspend fun register(server: String, accessKey: String): MusicConnection {
+        require(accessKey.length in 16..256 && accessKey.all { it.code in 33..126 }) {
+            "访问口令请使用 16–256 位英文字母、数字或常见符号"
+        }
         val normalized = musicServerUrl(server).toString().trimEnd('/')
-        val response =
-            request(MusicConnection(normalized), listOf("sessions"), "POST", authenticated = false)
+        val response = request(MusicConnection(normalized, accessKey), listOf("sessions"), "POST")
         val token = response["token"]?.jsonPrimitive?.contentOrNull.orEmpty()
         require(Regex("[A-Za-z0-9_-]{43}").matches(token)) { "音乐服务返回了无效连接" }
         return MusicConnection(normalized, token)
