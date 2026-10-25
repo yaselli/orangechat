@@ -34,6 +34,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -84,9 +86,9 @@ import me.rerere.rikkahub.utils.sendNotification
 import kotlin.uuid.Uuid
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.random.Random
 
 class ProactiveMessageService {
@@ -99,6 +101,14 @@ class ProactiveMessageService {
 
         internal const val PREFS_NAME = "proactive_message_prefs"
         private const val KEY_NEXT_TRIGGER_TIME = "next_trigger_time"
+        private val manualTestRunning = AtomicBoolean(false)
+        private val mutableManualTestStatus = MutableStateFlow("idle")
+        internal val manualTestStatus = mutableManualTestStatus.asStateFlow()
+
+        internal fun finishManualTest(outcome: String) {
+            mutableManualTestStatus.value = outcome
+            manualTestRunning.set(false)
+        }
 
         fun scheduleNext(
             context: Context,
@@ -114,7 +124,9 @@ class ProactiveMessageService {
             val maxMinutes = setting.maxIntervalMinutes.coerceAtLeast(minMinutes)
             val randomDelay = Random.nextInt(minMinutes, maxMinutes + 1)
             val delayMinutes = delayMinutesOverride?.coerceAtLeast(1) ?: randomDelay
-            val triggerTime = java.lang.System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(delayMinutes.toLong())
+            val triggerTime = nextProactiveCheckTime(
+                setting, System.currentTimeMillis(), delayMinutes, java.time.ZoneId.systemDefault(),
+            )
 
             // 保存下次触发时间到SharedPreferences
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -191,7 +203,7 @@ class ProactiveMessageService {
             Log.d(TAG, "Scheduled proactive message in $delayMinutes minutes, trigger at ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(triggerTime))}")
 
             // Also schedule via WorkManager as a more reliable fallback
-            ProactiveMessageWorker.scheduleNext(context, setting, delayMinutes)
+            ProactiveMessageWorker.scheduleNext(context, setting, triggerTime)
         }
 
         fun getNextTriggerTime(context: Context): Long? {
@@ -254,13 +266,22 @@ class ProactiveMessageService {
         }
 
         fun triggerNow(context: Context, setting: ProactiveMessageSetting) {
-            // 先安排下一次（写入SP让UI立即显示），再立即触发
-            scheduleNext(context, setting)
-            // 立即触发：直接启动TriggerService
+            if (!setting.enabled) {
+                mutableManualTestStatus.value = "disabled"
+                return
+            }
+            if (!manualTestRunning.compareAndSet(false, true)) return
+            mutableManualTestStatus.value = "running"
             val serviceIntent = Intent(context, ProactiveMessageTriggerService::class.java).apply {
                 putExtra(EXTRA_TRIGGER_SOURCE, "manual")
+                putExtra(ProactiveMessageTriggerService.EXTRA_FORCE_TRIGGER, true)
             }
-            context.startForegroundService(serviceIntent)
+            try {
+                context.startForegroundService(serviceIntent)
+            } catch (e: RuntimeException) {
+                finishManualTest("foreground_rejected")
+                Log.e(TAG, "Manual proactive test could not start: ${e.javaClass.simpleName}")
+            }
         }
     }
 
@@ -294,8 +315,9 @@ class ProactiveMessageReceiver : BroadcastReceiver() {
                 val serviceIntent = Intent(context, ProactiveMessageTriggerService::class.java)
                 context.startForegroundService(serviceIntent)
             }
-            Intent.ACTION_BOOT_COMPLETED -> {
-                Log.d(ProactiveMessageService.TAG, "Boot completed, rescheduling proactive message")
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
+                Log.d(ProactiveMessageService.TAG, "Clock/boot event, rescheduling proactive message")
+                val pendingResult = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val settingsStore = org.koin.core.context.GlobalContext.get().get<SettingsStore>()
@@ -306,6 +328,8 @@ class ProactiveMessageReceiver : BroadcastReceiver() {
                         }
                     } catch (e: Exception) {
                         Log.e(ProactiveMessageService.TAG, "Failed to reschedule after boot: ${e.javaClass.simpleName}")
+                    } finally {
+                        pendingResult.finish()
                     }
                 }
             }
@@ -359,9 +383,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "=== TriggerService onStartCommand ===")
         // 外部触发（网关轮询）时跳过内部 minInterval 去重
-        val isForceTrigger = intent?.getBooleanExtra(EXTRA_FORCE_TRIGGER, false) ?: false
+        val forceRequested = intent?.getBooleanExtra(EXTRA_FORCE_TRIGGER, false) ?: false
         val triggerSource = intent?.getStringExtra(ProactiveMessageService.EXTRA_TRIGGER_SOURCE)
-            ?: if (isForceTrigger) "external" else "service"
+            ?: if (forceRequested) "external" else "service"
+        val isManualTest = triggerSource == "manual"
+        val isForceTrigger = forceRequested || isManualTest
         val trace = ProactiveMessageTrace.start(triggerSource)
         val notification = androidx.core.app.NotificationCompat.Builder(this, CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID)
             .setContentTitle("主动消息处理中")
@@ -374,6 +400,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             startForeground(me.rerere.rikkahub.service.ServiceNotificationIds.PROACTIVE, notification)
         } catch (e: RuntimeException) {
             trace.finish("foreground_rejected", e)
+            if (isManualTest) ProactiveMessageService.finishManualTest("foreground_rejected")
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -390,6 +417,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             acquireGenerationWakeLock(startId)
         } catch (e: RuntimeException) {
             trace.finish("wake_lock_failed", e)
+            if (isManualTest) ProactiveMessageService.finishManualTest("wake_lock_failed")
             if (activeRunCount.get() == 0) stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -410,6 +438,13 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
                 if (!proactiveSetting.enabled) {
                     outcome = "disabled"
+                    return@launch
+                }
+                proactiveScheduleBlockReason(
+                    proactiveSetting, System.currentTimeMillis(), java.time.ZoneId.systemDefault(), isManualTest,
+                )?.let { reason ->
+                    outcome = reason
+                    trace.event("schedule_guard", "blocked=$reason")
                     return@launch
                 }
 
@@ -437,7 +472,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         Log.d(TAG, "Duplicate trigger within min interval, skipping")
                         return@launch
                     }
-                } else {
+                } else if (!isManualTest) {
                     // 强制触发也写入时间戳，保持与常规触发一致的状态记录
                     synchronized(prefsLock) {
                         prefs.edit().putLong("last_triggered_time", System.currentTimeMillis()).apply()
@@ -489,8 +524,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val stateStore = ProactiveMessageStateStore(this@ProactiveMessageTriggerService)
                 val proactiveState = stateStore.synchronizeWithUser(latestUserMessage.id.toString())
                 val maxFollowUps = proactiveSetting.maxFollowUpMessages.coerceIn(1, 8)
-                if (proactiveState.stopUntilUserReturns ||
-                    proactiveState.followUpCount >= maxFollowUps
+                if (!isManualTest && (proactiveState.stopUntilUserReturns ||
+                    proactiveState.followUpCount >= maxFollowUps)
                 ) {
                     outcome = "follow_up_limit"
                     Log.d(TAG, "No proactive generation: waiting for a new real user message")
@@ -661,7 +696,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     assistant = assistant,
                     context = listOfNotNull(contextStr, chatService.unblockedChatStatusPrompt(conversationId))
                         .joinToString("\n\n"),
-                    state = proactiveState,
+                    state = if (isManualTest) proactiveState.copy(followUpCount = 0) else proactiveState,
                     maxFollowUps = maxFollowUps,
                     allowAppUsage = appUsageToolAllowed && tools.any { it.name == "get_app_usage" },
                     proactiveInjections = proactiveInjections,
@@ -714,6 +749,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     trace = trace,
                     runAssistantMessageIds = runAssistantMessageIds,
                     protectedMessageIds = protectedMessageIds,
+                    manualTest = isManualTest,
                 )
 
                 // 部分 thinking 模型会结束在 Reasoning/Tool 上而没有 Text 正文。
@@ -749,6 +785,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         trace = trace,
                         runAssistantMessageIds = runAssistantMessageIds,
                         protectedMessageIds = protectedMessageIds,
+                        manualTest = isManualTest,
                     )
                     hasToolCalls = hasToolCalls || finalizerUsedTools
                     hasJumpFlag = hasJumpFlag || finalizerJumpFlag
@@ -830,6 +867,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     )
                     return@launch
                 }
+                // A request may finish after quiet hours start or after the master switch is turned off.
+                ensureProactiveScheduleAllowed(isManualTest)
 
                 val generatedRawText = aiMessage.parts.filterIsInstance<UIMessagePart.Text>()
                     .joinToString("\n") { it.text }.trim()
@@ -840,7 +879,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val replyText = decision.message
                 val shouldJump = decision.shouldJump
                 nextDelayOverrideMinutes = decision.waitMinutes
-                if (decision.stopUntilUserReturns) {
+                if (decision.stopUntilUserReturns && !isManualTest) {
                     stateStore.stopUntilUserReturns(proactiveState)
                     nextDelayOverrideMinutes = 240
                 }
@@ -913,7 +952,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         state = proactiveState,
                         messageIds = persistedRunIds.ifEmpty { setOf(aiMessage.id.toString()) },
                         text = replyText,
-                        countTowardFollowUps = true,
+                        countTowardFollowUps = !isManualTest,
                     )
                     showProactiveNotification(conversationId, assistant.name.ifBlank { "AI" }, replyText)
                     // 强制跳转屏幕到聊天界面（方案 A：普通拉起前台）
@@ -934,6 +973,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         }
                     }
                 }
+            } catch (e: ProactiveScheduleBlocked) {
+                outcome = e.reason
+                trace.event("schedule_guard", "blocked=${e.reason}")
             } catch (e: CancellationException) {
                 outcome = "cancelled"
                 failure = e
@@ -958,7 +1000,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // 定时链断裂。NonCancellable 保证这段收尾逻辑跑完。
                 try {
                     withContext(NonCancellable) {
-                        if ((outcome == "failed" || outcome == "cancelled") &&
+                        if (outcome in setOf("failed", "cancelled", "quiet_hours", "disabled") &&
                             conversationId != null && runAssistantMessageIds.isNotEmpty()
                         ) {
                             runCatching {
@@ -982,7 +1024,18 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             "generation_busy",
                             "user_not_idle",
                         )
-                        if (!normalConversationOwnsTimer) {
+                        if (isManualTest) {
+                            // A test does not move an existing automatic alarm or apply its WAIT/STOP to that timer.
+                            val currentSettings = settingsStore.settingsFlowRaw.first()
+                            val next = ProactiveMessageService.getNextTriggerTime(this@ProactiveMessageTriggerService)
+                            if (!currentSettings.proactiveMessageSetting.enabled ||
+                                next == null || next <= System.currentTimeMillis()
+                            ) {
+                                ProactiveMessageService.scheduleNext(
+                                    this@ProactiveMessageTriggerService, currentSettings.proactiveMessageSetting,
+                                )
+                            }
+                        } else if (!normalConversationOwnsTimer) {
                             try {
                                 val currentSettings = settingsStore.settingsFlowRaw.first()
                                 ProactiveMessageService.scheduleNext(
@@ -1003,6 +1056,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         releaseGenerationWakeLock(startId)
                         trace.event("wake_lock", "acquired=false")
                         trace.finish(outcome, failure)
+                        if (isManualTest) ProactiveMessageService.finishManualTest(outcome)
                         if (activeRunCount.updateAndGet { (it - 1).coerceAtLeast(0) } == 0) {
                             stopSelfResult(latestStartId)
                         }
@@ -1012,6 +1066,13 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         }
 
         return START_NOT_STICKY
+    }
+
+    private suspend fun ensureProactiveScheduleAllowed(manualTest: Boolean) {
+        val current = settingsStore.settingsFlowRaw.first().proactiveMessageSetting
+        proactiveScheduleBlockReason(
+            current, System.currentTimeMillis(), java.time.ZoneId.systemDefault(), manualTest,
+        )?.let { throw ProactiveScheduleBlocked(it) }
     }
 
     private fun acquireGenerationWakeLock(startId: Int) {
@@ -1369,6 +1430,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         trace: ProactiveMessageTrace,
         runAssistantMessageIds: MutableSet<Uuid>,
         protectedMessageIds: Set<Uuid>,
+        manualTest: Boolean = false,
     ): Triple<List<UIMessage>, Boolean, Boolean> {
         val recallTurn = memoryRecallService.prepare(
             assistant, settings, conversationId.toString(), initialMessages,
@@ -1394,6 +1456,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 trace.event("generation_step", "step=$step finalTurn=$finalTurn")
             },
             generateTurn = generateTurn@{ currentMessages, _, step ->
+                ensureProactiveScheduleAllowed(manualTest)
                 // 流式调用 AI（替代非流式 generateText，兼容 thinking 模型）
                 // The provider-only copy may merge adjacent roles for API compatibility. Never merge
                 // the local streaming list: doing so can fold this run's assistant into the previous
@@ -1503,6 +1566,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 turnMessages
             },
             executeTool = { toolCall, toolDef, step ->
+                ensureProactiveScheduleAllowed(manualTest)
                 trace.event(
                     "tool_call",
                     "step=$step name=${toolCall.toolName} id=${ProactiveMessageTrace.safeId(toolCall.toolCallId)} " +

@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.service
 
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import kotlin.uuid.Uuid
 
 /**
@@ -16,14 +17,29 @@ internal class ProactiveProviderRequest private constructor(
     private val historyTailId: Uuid,
     private val event: UIMessage,
 ) {
+    private val continuationEvent = UIMessage.user(
+        "【系统后台续轮，不是对方的新发言】请依据上面的工具结果完成这次后台判断，" +
+            "不要重复执行已经完成的行动。",
+    )
+
     fun applyTo(messages: List<UIMessage>): List<UIMessage> {
-        if (messages.any { it.id == event.id }) return messages
         val boundary = messages.indexOfLast { it.id == historyTailId }
         if (boundary < 0) return messages
 
         // Subsequent tool rounds must retain this original boundary. Appending a new event
         // after every tool result would interrupt the model's active function-call turn.
-        return messages.take(boundary + 1) + event + messages.drop(boundary + 1)
+        val request = if (messages.any { it.id == event.id }) messages
+            else messages.take(boundary + 1) + event + messages.drop(boundary + 1)
+        val tail = request.lastOrNull() ?: return request
+        val tools = tail.getTools()
+        if (tail.role != MessageRole.ASSISTANT || tools.isEmpty() || tools.any { !it.isExecuted }) return request
+        val lastWirePart = tail.parts.lastOrNull {
+            it is UIMessagePart.Tool || it is UIMessagePart.Text && it.text.isNotBlank() ||
+                it is UIMessagePart.Reasoning && it.reasoning.isNotBlank() || it is UIMessagePart.Image
+        }
+        // A completed tool result already ends the wire request as a tool/user turn. A text
+        // block after that result changes the ending back to assistant/model and needs a bridge.
+        return if (lastWirePart is UIMessagePart.Tool) request else request + continuationEvent
     }
 
     companion object {
