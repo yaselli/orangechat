@@ -341,7 +341,7 @@
   <string name="donate_page_donation_methods">Donation Methods</string>
   <string name="donate_page_kofi_desc">For Global Users</string>
   <string name="donate_page_sponsor_list">Sponsor List</string>
-  <string name="donate_page_title">Donate</string>
+  <string name="donate_page_title">Support the project</string>
   <string name="edit">Edit</string>
   <string name="editing">Editing</string>
   <string name="emoji_picker_search_placeholder">Search emojis...</string>
@@ -857,8 +857,8 @@
   <string name="setting_page_display_setting_desc">Manage display settings</string>
   <string name="setting_page_documentation">Documentation</string>
   <string name="setting_page_documentation_desc">View app usage instructions and help documentation</string>
-  <string name="setting_page_donate">Donate</string>
-  <string name="setting_page_donate_desc">If you like it, sponsor the author\'s work</string>
+  <string name="setting_page_donate">Support the project</string>
+  <string name="setting_page_donate_desc">Project updates, feedback and community</string>
   <string name="setting_page_dynamic_color">Dynamic Color</string>
   <string name="setting_page_dynamic_color_desc">Use dynamic color</string>
   <string name="setting_page_extensions">Extensions</string>
@@ -887,7 +887,7 @@
   <string name="setting_page_search_title">Search Service</string>
   <string name="setting_page_share">Share</string>
   <string name="setting_page_share_desc">Share this app with friends</string>
-  <string name="setting_page_share_text">西瓜瓣 - Open Source Android AI Assistant\n\nWebsite: https://github.com/sue1231513/orangechat</string>
+  <string name="setting_page_share_text">西瓜瓣 - Open Source Android AI Assistant\n\nProject: https://github.com/yaselli/watermelon-chat</string>
   <string name="setting_page_sponsor_alert_confirm">Donate</string>
   <string name="setting_page_sponsor_alert_desc">You have launched the app over 100 times! If you enjoy using it, please consider supporting the developer.</string>
   <string name="setting_page_sponsor_alert_dismiss">Not Now</string>

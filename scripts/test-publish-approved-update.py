@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('publish_update', Path(__file__).with_name('publish-approved-update.py'))
 module = importlib.util.module_from_spec(spec)
@@ -73,16 +74,31 @@ class FakeGithub:
 
 class PublishUpdateTest(unittest.TestCase):
     def artifact(self, root, channel='release'):
-        version = '2.3.2' + ('-debug.1' if channel == 'debug' else '')
-        file = root / f'Xiguaban-{version}-167-arm64-v8a-{channel}.apk'
+        plan = json.loads((module.ROOT / '.github/release-plan.json').read_text())
+        version = plan['version'] + ('-debug.1' if channel == 'debug' else '')
+        code = plan['versionCode']
+        file = root / f'Xiguaban-{version}-{code}-arm64-v8a-{channel}.apk'
         file.write_bytes(b'fake signed APK')
-        metadata = {'version': version, 'versionCode': 167, 'tag': 'v' + version, 'channel': channel,
+        metadata = {'version': version, 'versionCode': code, 'tag': 'v' + version, 'channel': channel,
                     'sourceCommit': SOURCE, 'assets': [{'name': file.name,
                     'sha256': hashlib.sha256(file.read_bytes()).hexdigest()}]}
         (root / 'release-metadata.json').write_text(json.dumps(metadata))
 
     def test_rebuild_reuse_requires_both_unchanged_code_and_the_successful_exact_source(self):
         plan = json.loads((module.ROOT / '.github/release-plan.json').read_text())
+        # A new release has no reusable runs. Exercise reuse against an isolated, explicit fixture.
+        plan['verifiedRuns'] = {'release': 101, 'debug': 102}
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / '.github').mkdir()
+            (root / 'app').mkdir()
+            (root / '.github/release-plan.json').write_text(json.dumps(plan))
+            (root / 'app/build.gradle.kts').write_text(
+                f'versionName = "{plan["version"]}"\nversionCode = {plan["versionCode"]}\n')
+            with patch.object(module, 'ROOT', root):
+                self.check_rebuild_reuse(plan)
+
+    def check_rebuild_reuse(self, plan):
         for channel in ('release', 'debug'):
             state = {'conclusion': 'success'}
             def api(args, check=True):
@@ -106,6 +122,23 @@ class PublishUpdateTest(unittest.TestCase):
                 return api(args, check)
             self.assertFalse(module.approved_rebuild(channel, ENV, changed_code))
             self.assertFalse(module.approved_rebuild(channel, dict(ENV, GITHUB_REF='refs/heads/master'), api))
+
+    def test_missing_verified_runs_require_full_checks(self):
+        plan = json.loads((module.ROOT / '.github/release-plan.json').read_text())
+        plan['verifiedRuns'] = {'release': 0, 'debug': 0}
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / '.github').mkdir()
+            (root / 'app').mkdir()
+            (root / '.github/release-plan.json').write_text(json.dumps(plan))
+            (root / 'app/build.gradle.kts').write_text(
+                f'versionName = "{plan["version"]}"\nversionCode = {plan["versionCode"]}\n')
+            with patch.object(module, 'ROOT', root):
+                def git_only(args, check=True):
+                    self.assertEqual('git', args[0])
+                    return subprocess.CompletedProcess(args, 0, '', '')
+                for channel in ('release', 'debug'):
+                    self.assertFalse(module.approved_rebuild(channel, ENV, git_only))
 
     def test_publish_order_channels_and_idempotent_retry(self):
         for channel in ('release', 'debug'):
@@ -134,6 +167,16 @@ class PublishUpdateTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     module.publish(Path(temp), 'release', dict(ENV, **{key: value}), gh)
                 self.assertEqual([], gh.calls)
+
+    def test_repository_rename_uses_only_the_approved_old_or_new_repository(self):
+        for repo in ('yaselli/orangechat', 'yaselli/watermelon-chat'):
+            with self.subTest(repo=repo), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.artifact(root)
+                gh = FakeGithub(root)
+                self.assertTrue(module.publish(root, 'release', dict(ENV, GITHUB_REPOSITORY=repo), gh))
+                publish = next(c for c in gh.calls if c[:3] == ['gh', 'release', 'edit'])
+                self.assertEqual(repo, publish[publish.index('--repo') + 1])
 
     def test_bad_local_or_uploaded_bytes_and_wrong_tag_cannot_publish(self):
         for failure in ('local', 'remote', 'tag'):

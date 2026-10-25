@@ -19,6 +19,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.service.beginProactiveAssistantTurn
+import me.rerere.rikkahub.data.service.ProactiveProviderRequest
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -69,6 +70,33 @@ class GenerationModelTurnTest {
         assertEquals(local.last().id, result.last().id)
         assertNotEquals(history.last().id, result.last().id)
         assertEquals("[WAIT:20]", result.last().toText())
+    }
+
+    @Test
+    fun `Gemini background event reaches provider without entering local generated history`() = runBlocking {
+        val history = listOf(UIMessage.user("question"), UIMessage.assistant("old reply"))
+        val local = beginProactiveAssistantTurn(history, model.id)
+        val request = ProactiveProviderRequest.create(history, "gemini-3.8-flash", false)!!.applyTo(history)
+        val provider = RecordingProvider(listOf(chunk(UIMessagePart.Text("[WAIT:20]"))))
+
+        val result = generateModelTurn(
+            providerImpl = provider,
+            providerSetting = setting,
+            requestMessages = request,
+            initialMessages = local,
+            params = params,
+            model = model,
+            stream = true,
+            mergeUsage = false,
+            onUpdateMessages = {},
+        )
+
+        assertEquals(MessageRole.USER, provider.requestMessages!!.last().role)
+        assertEquals(history, result.dropLast(1))
+        assertEquals(local.last().id, result.last().id)
+        assertEquals("[WAIT:20]", result.last().toText())
+        assertEquals(1, result.count { it.role == MessageRole.USER })
+        assertTrue(result.none { it.id == request.last().id })
     }
 
     @Test

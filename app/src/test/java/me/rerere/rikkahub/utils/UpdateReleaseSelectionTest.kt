@@ -79,4 +79,30 @@ class UpdateReleaseSelectionTest {
     @Test fun `missing release notes do not hide a valid update`() {
         assertEquals("暂无更新说明", select(release().copy(body = null))!!.changelog)
     }
+
+    @Test fun `repository rename accepts both known download paths and preserves the actual release page`() {
+        val stable = release()
+        val asset = stable.assets.single()
+        for (repository in ProjectLinks.updateRepositories) {
+            val base = "https://github.com/$repository/releases"
+            val url = "$base/download/${stable.tagName}/${asset.name}"
+            val update = select(stable.copy(assets = listOf(asset.copy(browserDownloadUrl = url))))!!
+            assertEquals(url, update.download.url)
+            assertEquals("$base/tag/${stable.tagName}", update.releaseUrl)
+            assertEquals(base, updateDownloadBase(url))
+        }
+    }
+
+    @Test fun `rename compatibility does not accept lookalike repositories or a different release tag`() {
+        val stable = release()
+        val asset = stable.assets.single()
+        for (repository in listOf("other/watermelon-chat", "yaselli/watermelon-chat-fake", "yaselli/orangechat-fake")) {
+            val url = "https://github.com/$repository/releases/download/${stable.tagName}/${asset.name}"
+            assertNull(updateDownloadBase(url))
+            assertNull(select(stable.copy(assets = listOf(asset.copy(browserDownloadUrl = url)))))
+        }
+        assertNull(select(stable.copy(assets = listOf(asset.copy(
+            browserDownloadUrl = asset.browserDownloadUrl.replace("/v2.3.1/", "/v2.3.0/"),
+        )))))
+    }
 }

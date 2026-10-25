@@ -12,9 +12,15 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimeInput
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -39,6 +45,8 @@ import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.RiskConfirmDialog
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.ProactiveMessageWorker
+import me.rerere.rikkahub.data.service.isProactiveQuietTime
+import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
 import org.koin.compose.koinInject
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +56,39 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     var showProactiveRiskDialog by remember { mutableStateOf(false) }
+    var editingQuietStart by remember { mutableStateOf<Boolean?>(null) }
+    val testStatus by ProactiveMessageService.manualTestStatus.collectAsStateWithLifecycle()
+
+    fun updateSchedule(change: (ProactiveMessageSetting) -> ProactiveMessageSetting) {
+        val before = vm.settings.value
+        vm.updateSettings(before.copy(proactiveMessageSetting = change(before.proactiveMessageSetting)), before) {
+            committed ->
+            if (vm.settings.value.proactiveMessageSetting == committed.proactiveMessageSetting) {
+                ProactiveMessageService.scheduleNext(context, committed.proactiveMessageSetting)
+            }
+        }
+    }
+
+    editingQuietStart?.let { start ->
+        val current = settings.proactiveMessageSetting
+        val minute = (if (start) current.quietStartMinute else current.quietEndMinute).coerceIn(0, 1439)
+        val picker = rememberTimePickerState(initialHour = minute / 60, initialMinute = minute % 60, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { editingQuietStart = null },
+            title = { Text(if (start) "免打扰开始时间" else "免打扰结束时间") },
+            text = { TimeInput(state = picker) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val selected = picker.hour * 60 + picker.minute
+                    updateSchedule {
+                        if (start) it.copy(quietStartMinute = selected) else it.copy(quietEndMinute = selected)
+                    }
+                    editingQuietStart = null
+                }) { Text("确定") }
+            },
+            dismissButton = { TextButton(onClick = { editingQuietStart = null }) { Text("取消") } },
+        )
+    }
 
     if (showProactiveRiskDialog) {
         RiskConfirmDialog(
@@ -55,14 +96,7 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
             message = stringResource(R.string.risk_proactive_message_message),
             onConfirm = {
                 showProactiveRiskDialog = false
-                val newSetting = settings.proactiveMessageSetting.copy(enabled = true)
-                vm.updateSettings(settings.copy(proactiveMessageSetting = newSetting)) { committed ->
-                    if (vm.settings.value.proactiveMessageSetting.enabled &&
-                        committed.proactiveMessageSetting.enabled
-                    ) {
-                        ProactiveMessageService.triggerNow(context, committed.proactiveMessageSetting)
-                    }
-                }
+                updateSchedule { it.copy(enabled = true) }
             },
             onDismiss = { showProactiveRiskDialog = false }
         )
@@ -87,7 +121,7 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                 CardGroup {
                     item(
                         headlineContent = { Text("启用主动消息") },
-                        supportingContent = { Text("开启后AI立即主动发一条消息，之后按设定间隔循环") },
+                        supportingContent = { Text("开启后按设定间隔检查，AI 自行决定发送、等待或停止；免打扰时段暂停自动检查。") },
                         trailingContent = {
                             Switch(
                                 checked = settings.proactiveMessageSetting.enabled,
@@ -95,14 +129,7 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                                     if (enabled) {
                                         showProactiveRiskDialog = true
                                     } else {
-                                        val newSetting = settings.proactiveMessageSetting.copy(enabled = false)
-                                        vm.updateSettings(settings.copy(proactiveMessageSetting = newSetting)) { committed ->
-                                            if (!vm.settings.value.proactiveMessageSetting.enabled &&
-                                                !committed.proactiveMessageSetting.enabled
-                                            ) {
-                                                ProactiveMessageService.cancel(context)
-                                            }
-                                        }
+                                        updateSchedule { it.copy(enabled = false) }
                                     }
                                 }
                             )
@@ -110,28 +137,82 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                     )
                     if (settings.proactiveMessageSetting.enabled) {
                         var nextTime by remember { mutableStateOf(ProactiveMessageService.getNextTriggerTime(context)) }
+                        var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
                         LaunchedEffect(settings.proactiveMessageSetting) {
                             nextTime = ProactiveMessageService.getNextTriggerTime(context)
                             while (true) {
                                 kotlinx.coroutines.delay(10_000L)
+                                currentTime = System.currentTimeMillis()
                                 nextTime = ProactiveMessageService.getNextTriggerTime(context)
                             }
                         }
                         item(
                             headlineContent = { Text("下次触发时间") },
                             supportingContent = {
-                                val currentTime = System.currentTimeMillis()
-                                val triggerTime = nextTime
-                                if (triggerTime != null && triggerTime > currentTime) {
-                                    val remaining = triggerTime - currentTime
-                                    val remainMinutes = remaining / 60_000
-                                    val remainSeconds = (remaining % 60_000) / 1000
-                                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", LocalConfiguration.current.locales[0])
-                                    Text("🕐 ${sdf.format(java.util.Date(triggerTime))}（剩余 ${remainMinutes}分${remainSeconds}秒）")
-                                } else {
-                                    Text("等待调度中...")
+                                Column {
+                                    val triggerTime = nextTime
+                                    if (isProactiveQuietTime(
+                                            settings.proactiveMessageSetting, currentTime, java.time.ZoneId.systemDefault(),
+                                        )
+                                    ) {
+                                        Text("当前处于免打扰时段，结束后自动恢复检查。")
+                                    }
+                                    if (triggerTime != null && triggerTime > currentTime) {
+                                        val remaining = triggerTime - currentTime
+                                        val remainMinutes = remaining / 60_000
+                                        val remainSeconds = (remaining % 60_000) / 1000
+                                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", LocalConfiguration.current.locales[0])
+                                        Text("🕐 ${sdf.format(java.util.Date(triggerTime))}（剩余 ${remainMinutes}分${remainSeconds}秒）")
+                                    } else {
+                                        Text("等待调度中...")
+                                    }
                                 }
                             }
+                        )
+                    }
+                    item(
+                        headlineContent = { Text("立即测试一次") },
+                        supportingContent = {
+                            Column {
+                                Text("忽略免打扰、最小间隔和连续追问限制，只运行一次判断；AI 仍可选择暂不发送，不改变自动调度规则。")
+                                Text(proactiveTestStatusText(testStatus))
+                            }
+                        },
+                        trailingContent = {
+                            Button(
+                                enabled = settings.proactiveMessageSetting.enabled && !settings.init && testStatus != "running",
+                                onClick = { ProactiveMessageService.triggerNow(context, vm.settings.value.proactiveMessageSetting) },
+                            ) { Text(if (testStatus == "running") "测试中" else "测试") }
+                        },
+                    )
+                }
+            }
+            item {
+                CardGroup {
+                    item(
+                        headlineContent = { Text("定时免打扰") },
+                        supportingContent = { Text("每天按手机本地时间暂停自动主动消息，时段结束后恢复；不会自动打开已被你关闭的总开关。") },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.proactiveMessageSetting.quietHoursEnabled,
+                                enabled = !settings.init,
+                                onCheckedChange = { enabled -> updateSchedule { it.copy(quietHoursEnabled = enabled) } },
+                            )
+                        },
+                    )
+                    if (settings.proactiveMessageSetting.quietHoursEnabled) {
+                        item(
+                            headlineContent = { Text("开始时间") },
+                            supportingContent = { Text(formatQuietMinute(settings.proactiveMessageSetting.quietStartMinute)) },
+                            onClick = { editingQuietStart = true },
+                        )
+                        item(
+                            headlineContent = { Text("结束时间") },
+                            supportingContent = { Text(formatQuietMinute(settings.proactiveMessageSetting.quietEndMinute)) },
+                            onClick = { editingQuietStart = false },
+                        )
+                        item(
+                            headlineContent = { Text("支持跨午夜，例如 23:00–08:00；起止相同时不限制时段。") },
                         )
                     }
                 }
@@ -146,13 +227,7 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                                 onValueChange = { value ->
                                     val minutes = value.toIntOrNull()
                                     if (minutes != null && minutes > 0) {
-                                        vm.updateSettings(
-                                            settings.copy(
-                                                proactiveMessageSetting = settings.proactiveMessageSetting.copy(
-                                                    minIntervalMinutes = minutes
-                                                )
-                                            )
-                                        )
+                                        updateSchedule { it.copy(minIntervalMinutes = minutes) }
                                     }
                                 },
                                 placeholder = { Text("30") },
@@ -169,13 +244,7 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                                 onValueChange = { value ->
                                     val minutes = value.toIntOrNull()
                                     if (minutes != null && minutes >= settings.proactiveMessageSetting.minIntervalMinutes) {
-                                        vm.updateSettings(
-                                            settings.copy(
-                                                proactiveMessageSetting = settings.proactiveMessageSetting.copy(
-                                                    maxIntervalMinutes = minutes
-                                                )
-                                            )
-                                        )
+                                        updateSchedule { it.copy(maxIntervalMinutes = minutes) }
                                     }
                                 },
                                 placeholder = { Text("90") },
@@ -308,4 +377,24 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
             }
         }
     }
+}
+
+private fun formatQuietMinute(value: Int): String = value.coerceIn(0, 1439).let {
+    "%02d:%02d".format(it / 60, it % 60)
+}
+
+private fun proactiveTestStatusText(status: String): String = when (status) {
+    "idle" -> "启用主动消息后，可在这里手动测试。"
+    "running" -> "正在请求模型，请稍候…"
+    "sent" -> "本次测试已发送消息。"
+    "pass" -> "判断已完成：AI 这次选择不发送。"
+    "wait" -> "判断已完成：AI 这次选择继续等待。"
+    "stop" -> "判断已完成：AI 这次选择暂不打扰。"
+    "disabled" -> "主动消息总开关已关闭。"
+    "generation_busy", "duplicate_trigger" -> "当前已有生成任务，请稍后再试。"
+    "no_user_message" -> "请先和选定的助手聊一句，再测试。"
+    "no_model", "no_provider" -> "请先配置好助手使用的模型和接口。"
+    "blocked_chat" -> "当前会话已被暂停，暂时不能测试。"
+    "cancelled", "user_returned" -> "测试已中止：对话状态发生了变化。"
+    else -> "本次测试未完成，请到日志页面查看原因。"
 }

@@ -15,7 +15,7 @@ class UpdateCheckerTest {
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             calls.incrementAndGet()
             assertEquals("api.github.com", chain.request().url.host)
-            assertEquals("/repos/yaselli/orangechat/releases", chain.request().url.encodedPath)
+            assertEquals("/repos/$UPDATE_REPOSITORY/releases", chain.request().url.encodedPath)
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(status).message("test").body(body.toResponseBody()).build()
         }.build()
@@ -70,5 +70,33 @@ class UpdateCheckerTest {
         assertTrue(checker.claimAutomaticPrompt(166))
         assertFalse(checker.claimAutomaticPrompt(166))
         assertTrue(checker.claimAutomaticPrompt(167))
+    }
+
+    @Test fun `new repository missing during migration falls back to the legacy name and caches success`() = runBlocking {
+        val paths = mutableListOf<String>()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val path = chain.request().url.encodedPath
+            paths += path
+            val status = if (path == "/repos/${ProjectLinks.REPOSITORY}/releases") 404 else 200
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(status).message("test").body("[]".toResponseBody()).build()
+        }.build()
+        val checker = UpdateChecker(client, UpdateChannel.RELEASE, 165, listOf("arm64-v8a"))
+
+        assertTrue(checker.checkUpdate().toList().last() is UiState.Success)
+        assertTrue(checker.checkUpdate().toList().last() is UiState.Success)
+        assertEquals(ProjectLinks.updateRepositories.map { "/repos/$it/releases" }, paths)
+    }
+
+    @Test fun `unavailable old and new repositories remain an error rather than a false no update result`() = runBlocking {
+        val calls = AtomicInteger()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            calls.incrementAndGet()
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(404).message("missing").body("{}".toResponseBody()).build()
+        }.build()
+        val checker = UpdateChecker(client, UpdateChannel.RELEASE, 165, listOf("arm64-v8a"))
+        assertTrue(checker.checkUpdate().toList().last() is UiState.Error)
+        assertEquals(2, calls.get())
     }
 }

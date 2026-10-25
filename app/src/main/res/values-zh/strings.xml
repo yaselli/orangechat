@@ -338,7 +338,7 @@
   <string name="donate_page_donation_methods">赞助方式</string>
   <string name="donate_page_kofi_desc">面向全球用户</string>
   <string name="donate_page_sponsor_list">赞助用户列表</string>
-  <string name="donate_page_title">赞助</string>
+  <string name="donate_page_title">支持项目</string>
   <string name="edit">编辑</string>
   <string name="editing">编辑中</string>
   <string name="emoji_picker_search_placeholder">搜索表情符号...</string>
@@ -808,8 +808,8 @@
   <string name="setting_page_display_setting_desc">管理显示设置</string>
   <string name="setting_page_documentation">使用文档</string>
   <string name="setting_page_documentation_desc">查看应用使用说明和帮助文档</string>
-  <string name="setting_page_donate">赞助</string>
-  <string name="setting_page_donate_desc">如果你喜欢这个应用，请赞助作者的工作</string>
+  <string name="setting_page_donate">支持项目</string>
+  <string name="setting_page_donate_desc">项目主页、问题反馈与交流</string>
   <string name="setting_page_dynamic_color">动态颜色</string>
   <string name="setting_page_dynamic_color_desc">是否使用动态颜色</string>
   <string name="setting_page_extensions">扩展管理</string>
@@ -838,7 +838,7 @@
   <string name="setting_page_search_title">搜索服务</string>
   <string name="setting_page_share">分享</string>
   <string name="setting_page_share_desc">分享本APP给朋友</string>
-  <string name="setting_page_share_text">西瓜瓣 - 开源安卓AI助手\n\n官网: https://github.com/sue1231513/orangechat</string>
+  <string name="setting_page_share_text">西瓜瓣 - 开源安卓AI助手\n\n项目主页: https://github.com/yaselli/watermelon-chat</string>
   <string name="setting_page_sponsor_alert_confirm">捐赠</string>
   <string name="setting_page_sponsor_alert_desc">您已启动应用超过100次！如果您喜欢使用它，请考虑支持开发者。</string>
   <string name="setting_page_sponsor_alert_dismiss">暂不</string>

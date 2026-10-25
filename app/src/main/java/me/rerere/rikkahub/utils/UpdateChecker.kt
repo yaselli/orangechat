@@ -50,16 +50,21 @@ class UpdateChecker(
             val cacheMillis = if (previous is UiState.Error) 2 * 60_000L else 60 * 60_000L
             if (!force && previous != null && now() - checkedAt < cacheMillis) return@withLock previous
             val next = try {
-                val request = Request.Builder()
-                    .url("https://api.github.com/repos/$UPDATE_REPOSITORY/releases?per_page=100")
-                    .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", "Xiguaban/${BuildConfig.VERSION_NAME}")
-                    .build()
-                client.newCall(request).await().use { response ->
-                    check(response.isSuccessful) { "检查更新失败（HTTP ${response.code}）" }
-                    val releases = json.decodeFromString<List<GithubRelease>>(response.body.string())
-                    UiState.Success(selectAppUpdate(releases, channel, currentVersionCode, supportedAbis))
+                var releases: List<GithubRelease>? = null
+                for (repository in ProjectLinks.updateRepositories) {
+                    val request = Request.Builder()
+                        .url("https://api.github.com/repos/$repository/releases?per_page=100")
+                        .header("Accept", "application/vnd.github+json")
+                        .header("User-Agent", "Xiguaban/${BuildConfig.VERSION_NAME}")
+                        .build()
+                    client.newCall(request).await().use { response ->
+                        if (response.code == 404 && repository != ProjectLinks.updateRepositories.last()) return@use
+                        check(response.isSuccessful) { "检查更新失败（HTTP ${response.code}）" }
+                        releases = json.decodeFromString<List<GithubRelease>>(response.body.string())
+                    }
+                    if (releases != null) break
                 }
+                UiState.Success(selectAppUpdate(requireNotNull(releases), channel, currentVersionCode, supportedAbis))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -78,7 +83,7 @@ class UpdateChecker(
 
     fun downloadUpdate(context: Context, download: UpdateDownload) {
         runCatching {
-            require(download.url.startsWith("$UPDATE_RELEASES_URL/download/"))
+            require(updateDownloadBase(download.url) != null)
             val request = DownloadManager.Request(download.url.toUri()).apply {
                 setTitle(download.name)
                 setDescription("正在下载西瓜瓣更新…")
@@ -92,7 +97,7 @@ class UpdateChecker(
             Toast.makeText(context, "开始下载，完成后请从通知栏打开安装包。", Toast.LENGTH_LONG).show()
         }.onFailure {
             Toast.makeText(context, "无法启动下载，正在打开下载页面。", Toast.LENGTH_SHORT).show()
-            context.openUrl(UPDATE_RELEASES_URL)
+            context.openUrl(updateDownloadBase(download.url) ?: UPDATE_RELEASES_URL)
         }
     }
 }
