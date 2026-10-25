@@ -59,6 +59,7 @@ import me.rerere.rikkahub.ui.components.ui.AppUpdateDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.openUrl
+import me.rerere.rikkahub.utils.ProjectLinks
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.UpdateChecker
@@ -216,26 +217,26 @@ fun SettingAboutPage() {
                         modifier = Modifier.padding(horizontal = 8.dp),
                     ) {
                         item(
-                            onClick = { context.openUrl("https://github.com/yaselli/orangechat") },
+                            onClick = { context.openUrl(ProjectLinks.DOCUMENTATION) },
                             leadingContent = { Icon(HugeIcons.Earth, null) },
                             supportingContent = {
-                                Text("https://github.com/yaselli/orangechat")
+                                Text(ProjectLinks.DOCUMENTATION)
                             },
-                            headlineContent = { Text(stringResource(R.string.about_page_website)) },
+                            headlineContent = { Text(stringResource(R.string.setting_page_documentation)) },
                         )
                         item(
-                            onClick = { context.openUrl("https://github.com/yaselli/orangechat") },
+                            onClick = { context.openUrl(ProjectLinks.HOME) },
                             leadingContent = { Icon(HugeIcons.Github, null) },
                             supportingContent = {
-                                Text("https://github.com/yaselli/orangechat")
+                                Text(ProjectLinks.HOME)
                             },
                             headlineContent = { Text(stringResource(R.string.about_page_github)) },
                         )
                         item(
-                            onClick = { context.openUrl("https://github.com/yaselli/orangechat/blob/master/LICENSE") },
+                            onClick = { context.openUrl(ProjectLinks.LICENSE) },
                             leadingContent = { Icon(HugeIcons.File02, null) },
                             supportingContent = {
-                                Text("https://github.com/yaselli/orangechat/blob/master/LICENSE")
+                                Text(ProjectLinks.LICENSE)
                             },
                             headlineContent = { Text(stringResource(R.string.about_page_license)) },
                         )

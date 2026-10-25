@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+APPROVED_REPOSITORIES = frozenset({'yaselli/watermelon-chat', 'yaselli/orangechat'})
 ALLOWED_RELEASE_FILES = {
     'app/build.gradle.kts', '.github/release-plan.json',
     '.github/workflows/build-apk.yml', '.github/workflows/build-isolated-apk.yml',
@@ -42,7 +43,7 @@ def verify_source(tested, source, run=command):
 
 def approved_rebuild(channel, env=os.environ, run=command):
     """Reuse full checks only for an unchanged, accepted application and an exact successful CI source."""
-    if (env.get('GITHUB_REPOSITORY') != 'yaselli/orangechat'
+    if (env.get('GITHUB_REPOSITORY') not in APPROVED_REPOSITORIES
             or env.get('GITHUB_REF') != 'refs/heads/build/stable-release'
             or env.get('GITHUB_EVENT_NAME') != 'push'):
         return False
@@ -68,7 +69,7 @@ def approved_rebuild(channel, env=os.environ, run=command):
 
 
 def publish(directory, channel, env=os.environ, run=command):
-    if (env.get('GITHUB_REPOSITORY') != 'yaselli/orangechat'
+    if (env.get('GITHUB_REPOSITORY') not in APPROVED_REPOSITORIES
             or env.get('GITHUB_REF') != 'refs/heads/build/stable-release'
             or env.get('GITHUB_EVENT_NAME') != 'push'):
         raise ValueError('Publishing is restricted to stable-branch pushes in the approved repository')

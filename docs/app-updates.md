@@ -1,6 +1,6 @@
 # 版本号与应用内更新
 
-当前正式版为 `2.3.1`，Debug 为 `2.3.1-debug.1`，Android `versionCode` 均为 `166`。`2.3.0 / 165` 是新更新源的首个版本。后续每次发包都递增 versionCode；正式版改 defaultConfig.versionName，同一基础版本内追加 Debug 更新时，同时调整 versionNameSuffix 与 VERSION_NAME 字段中的 debug 序号。
+已发布正式版为 `2.3.2`，Debug 为 `2.3.2-debug.1`，Android `versionCode` 均为 `167`。`2.3.0 / 165` 是本项目更新源的首个版本。后续每次发包都递增 versionCode；正式版改 defaultConfig.versionName，同一基础版本内追加 Debug 更新时，同时调整 versionNameSuffix 与 VERSION_NAME 字段中的 debug 序号。
 
 同一份源代码分别通过 Build Stable Release APK、Build Personal APK 构建。拍一拍、消息贴表情、记忆、MCP 等功能共用代码；两种包只在包名、既有签名配置及测试诊断展示上区分。两套应用的数据相互独立。
 
@@ -16,7 +16,12 @@
 
 ## 准备下一次更新
 
-更新源固定为公开仓库 `yaselli/orangechat` 的 GitHub Releases，不需要在 App 中保存 GitHub 令牌。仅 Actions 附件、草稿或无匹配 APK 的 Release 不会产生更新提醒。
+目标更新源为公开仓库 `yaselli/watermelon-chat` 的 GitHub Releases；兼容版在新地址返回 404 时回退到旧名 `yaselli/orangechat`，并且仅允许这两个仓库的 APK 下载地址。无需在 App 中保存 GitHub 令牌。仅 Actions 附件、草稿或无匹配 APK 的 Release 不会产生更新提醒。
+
+仓库重命名是 GitHub 管理操作，修改代码里的地址不会自动重命名仓库。已经安装的旧版不能被远程修改：
+`2.3.2 / 167` 只接受旧仓库名的下载 URL，即使 GitHub 将 API 请求重定向到新仓库，它仍会过滤新 URL。
+应先在旧名下分发兼容版，再迁移；尚未安装兼容版的用户在改名后可能需要手动安装一次。
+兼容代码同时校验新旧仓库的下载链接，但不承诺修复尚未升级的安装包。
 
 1. 从同一提交完成两条构建。构建脚本从 APK 实际包名、版本、debug 标记和 ABI 生成安装包文件名与 `release-metadata.json`，上传到既有 Actions 附件。
 2. 将已通过验证的功能 PR 合入 `build/stable-release` 后，仅从该正式版分支运行 `release.yml`（Prepare Update Release），填写已成功的构建 run ID、`release` 或 `debug` 渠道，以及更新说明。可以复用已成功、且源提交已随 PR 合入维护分支的构建附件；应核对合并前后源树一致。工作流会核对构建来源、版本和 APK 校验和，再创建草稿。不要使用旧 `master` 的发布脚本；无需向 `master` 合入任何修改。

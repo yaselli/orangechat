@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/icon.png" alt="橘瓣" width="120" />
-  <h1>橘瓣</h1>
+  <h1>西瓜瓣</h1>
   <p><strong>基于 RikkaHub 的增强版 Android AI 聊天客户端</strong></p>
   <p>在 RikkaHub 的基础上，加入更多实用工具与个性化能力 🍊💬</p>
 
@@ -10,6 +10,8 @@
     <a href="README.md">English</a>
   </p>
 </div>
+
+[使用文档](docs/USER_GUIDE_ZH.md) · QQ：728342625
 
 ---
 
@@ -96,8 +98,8 @@
 
 | 渠道 | 链接 |
 |------|------|
-| GitHub Releases | [sue1231513/orangechat/releases](https://github.com/sue1231513/orangechat/releases) |
-| 源码 | [github.com/sue1231513/orangechat](https://github.com/sue1231513/orangechat) |
+| GitHub Releases | [yaselli/watermelon-chat/releases](https://github.com/yaselli/watermelon-chat/releases) |
+| 源码 | [github.com/yaselli/watermelon-chat](https://github.com/yaselli/watermelon-chat) |
 
 ---
 
@@ -178,7 +180,7 @@
 
 喜欢这个项目？给个 Star ⭐
 
-[![Star History Chart](https://api.star-history.com/svg?repos=sue1231513/orangechat&type=Date)](https://star-history.com/#sue1231513/orangechat&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=yaselli/watermelon-chat&type=Date)](https://star-history.com/#yaselli/watermelon-chat&Date)
 
 ---
 

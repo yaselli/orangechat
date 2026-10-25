@@ -135,6 +135,16 @@ class PublishUpdateTest(unittest.TestCase):
                     module.publish(Path(temp), 'release', dict(ENV, **{key: value}), gh)
                 self.assertEqual([], gh.calls)
 
+    def test_repository_rename_uses_only_the_approved_old_or_new_repository(self):
+        for repo in ('yaselli/orangechat', 'yaselli/watermelon-chat'):
+            with self.subTest(repo=repo), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.artifact(root)
+                gh = FakeGithub(root)
+                self.assertTrue(module.publish(root, 'release', dict(ENV, GITHUB_REPOSITORY=repo), gh))
+                publish = next(c for c in gh.calls if c[:3] == ['gh', 'release', 'edit'])
+                self.assertEqual(repo, publish[publish.index('--repo') + 1])
+
     def test_bad_local_or_uploaded_bytes_and_wrong_tag_cannot_publish(self):
         for failure in ('local', 'remote', 'tag'):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temp:

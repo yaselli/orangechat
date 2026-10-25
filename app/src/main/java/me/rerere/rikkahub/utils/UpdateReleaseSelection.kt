@@ -4,8 +4,13 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.Locale
 
-internal const val UPDATE_REPOSITORY = "yaselli/orangechat"
+internal const val UPDATE_REPOSITORY = ProjectLinks.REPOSITORY
 internal const val UPDATE_RELEASES_URL = "https://github.com/$UPDATE_REPOSITORY/releases"
+private val trustedReleaseBases = ProjectLinks.updateRepositories.map { "https://github.com/$it/releases" }
+
+internal fun updateDownloadBase(url: String, tag: String? = null): String? = trustedReleaseBases.firstOrNull {
+    url.startsWith("$it/download/" + if (tag == null) "" else "$tag/")
+}
 
 enum class UpdateChannel(val assetName: String) { RELEASE("release"), DEBUG("debug") }
 
@@ -59,8 +64,9 @@ internal fun selectAppUpdate(
         val (_, assetVersion, codeText, abi, assetChannel) = match.groupValues
         val code = codeText.toIntOrNull() ?: return@mapNotNull null
         val abiRank = if (abi == "universal") supportedAbis.size else supportedAbis.indexOf(abi)
+        val releaseBase = updateDownloadBase(asset.browserDownloadUrl, release.tagName)
         if (assetVersion != version || assetChannel != channel.assetName || code <= currentVersionCode ||
-            abiRank < 0 || !asset.browserDownloadUrl.startsWith("$UPDATE_RELEASES_URL/download/${release.tagName}/")
+            abiRank < 0 || releaseBase == null
         ) return@mapNotNull null
         val size = String.format(Locale.ROOT, "%.1f MB", asset.size / (1024.0 * 1024.0))
         abiRank to UpdateInfo(
@@ -68,7 +74,7 @@ internal fun selectAppUpdate(
             versionCode = code,
             changelog = release.body?.takeIf { it.isNotBlank() } ?: "暂无更新说明",
             download = UpdateDownload(asset.name, asset.browserDownloadUrl, size),
-            releaseUrl = "$UPDATE_RELEASES_URL/tag/${release.tagName}",
+            releaseUrl = "$releaseBase/tag/${release.tagName}",
         )
     }
 }.sortedWith(compareByDescending<Pair<Int, UpdateInfo>> { it.second.versionCode }.thenBy { it.first })
