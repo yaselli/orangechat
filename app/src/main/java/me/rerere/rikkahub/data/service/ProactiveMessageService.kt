@@ -14,6 +14,8 @@ import me.rerere.rikkahub.data.ai.UsageSource
 import me.rerere.rikkahub.data.ai.UsageTag
 
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
+import me.rerere.rikkahub.data.interaction.reactionReceipts
+import me.rerere.rikkahub.data.interaction.withReactionReceipts
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -885,6 +887,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 // 若移除了标记，同步更新 session 里 aiMessage 的文本 parts
+                var finalDisplayMessage = aiMessage
                 if (generatedRawText != replyText) {
                     var visibleTextWritten = false
                     val cleanedAiMessage = aiMessage.copy(
@@ -901,6 +904,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             }
                         }
                     )
+                    finalDisplayMessage = cleanedAiMessage
                     updateOrAppendAiMessage(
                         conversationId,
                         cleanedAiMessage,
@@ -937,8 +941,28 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         trace = trace,
                         label = "skip",
                     )
+                    // A completed WAIT/PASS/STOP still consumed the reaction notice. Save only
+                    // local receipt IDs on the real anchor; never persist its hidden decision text.
+                    val receipts = aiMessage.reactionReceipts()
+                    if (receipts.isNotEmpty()) {
+                        val session = chatService.getOrCreateSession(conversationId)
+                        session.saveMutex.withLock {
+                            val current = chatService.getConversationFlow(conversationId).value
+                            if (current.currentMessages.lastOrNull { it.role == MessageRole.USER }?.id == latestUserMessage.id) {
+                                val acknowledged = current.copy(messageNodes = current.messageNodes.map { node ->
+                                    node.copy(messages = node.messages.map { message ->
+                                        if (message.id == latestUserMessage.id) message.withReactionReceipts(receipts) else message
+                                    })
+                                })
+                                chatService.saveConversation(conversationId, acknowledged)
+                            }
+                        }
+                    }
                 } else {
                     // 有效回复：session 里已有 aiMessage（流式过程已追加），持久化并发通知
+                    updateOrAppendAiMessage(
+                        conversationId, finalDisplayMessage, trace, runAssistantMessageIds, protectedMessageIds,
+                    )
                     saveProactiveMessage(
                         assistant, conversationId, conversation, trace
                     )
@@ -1435,6 +1459,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         val recallTurn = memoryRecallService.prepare(
             assistant, settings, conversationId.toString(), initialMessages,
         )
+        val reactionTurn = chatInteractionRepository.prepare(
+            chatService.getConversationFlow(conversationId).value.currentMessages,
+            conversationId.toString(), assistant,
+        )
         val providerRequest = ProactiveProviderRequest.create(
             history = initialMessages,
             modelId = model.modelId,
@@ -1461,13 +1489,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // The provider-only copy may merge adjacent roles for API compatibility. Never merge
                 // the local streaming list: doing so can fold this run's assistant into the previous
                 // persisted assistant and transfer ownership back to the old message id.
-                val decoratedMessages = memoryRecallService.apply(recallTurn, chatInteractionRepository.decorate(
-                    currentMessages, conversationId.toString(), assistant,
-                    sourceMessages = chatService.getConversationFlow(conversationId).value.currentMessages.let { source ->
-                        val requested = currentMessages.mapTo(hashSetOf()) { it.id }
-                        source.take(source.indexOfLast { it.id in requested } + 1)
-                    },
-                ))
+                val decoratedMessages = memoryRecallService.apply(recallTurn, reactionTurn.apply(currentMessages))
                 val requestMessages = mergeAdjacentSameRoleMessages(
                     providerRequest?.applyTo(decoratedMessages) ?: decoratedMessages,
                 )
@@ -1589,7 +1611,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 )
             },
         )
-        return Triple(messages, hasToolCalls, hasJumpFlag)
+        return Triple(reactionTurn.finish(messages), hasToolCalls, hasJumpFlag)
     }
 
     override fun onBind(intent: Intent?): android.os.IBinder? = null

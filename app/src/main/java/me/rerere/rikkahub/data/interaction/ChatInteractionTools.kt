@@ -31,7 +31,7 @@ fun buildChatInteractionTools(
     ))
     if (assistant.enableMessageReactions) add(Tool(
         name = "message_reaction",
-        description = "Add or remove YOUR emoji reaction underneath one specific message. " +
+        description = "Add or remove YOUR emoji or kaomoji reaction underneath one specific message. " +
             "This is independent of avatar interactions. You cannot remove the user's reactions. " +
             "Use last_user, last_assistant, by_quote (with a unique sentence), or an exact message ID.",
         parameters = {
@@ -45,7 +45,7 @@ fun buildChatInteractionTools(
                     put("description", "Optional exact sentence to react to within a split message")
                 })
                 put("emoji", buildJsonObject {
-                    put("type", "string"); put("enum", buildJsonArray { CHAT_REACTION_EMOJIS.forEach { add(it) } })
+                    put("type", "string"); put("enum", buildJsonArray { CHAT_REACTIONS.forEach { add(it) } })
                 })
                 put("operation", buildJsonObject {
                     put("type", "string"); put("enum", buildJsonArray { add("add"); add("remove") })

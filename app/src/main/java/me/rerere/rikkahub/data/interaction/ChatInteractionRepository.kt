@@ -1,9 +1,7 @@
 package me.rerere.rikkahub.data.interaction
 
 import androidx.room.withTransaction
-import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
-import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -33,7 +31,7 @@ class ChatInteractionRepository(
         add: Boolean? = null, quote: String = "",
     ) = db.withTransaction {
         require(actor == "user" || actor == "assistant")
-        require(emoji in CHAT_REACTION_EMOJIS) { "请选择支持的表情" }
+        require(emoji in CHAT_REACTIONS) { "请选择支持的表情或颜文字" }
         val conversation = conversations.getConversationById(conversationId) ?: error("聊天已删除")
         require(conversation.assistantId == assistant.id) { "不能操作其他助手的聊天" }
         val message = resolveReactionTarget(conversation.currentMessages, assistant, target, quote)
@@ -47,30 +45,20 @@ class ChatInteractionRepository(
         )) else dao.delete(key)
     }
 
-    /** Read-only provider copy. A reaction never rewrites source text or triggers generation itself. */
-    suspend fun decorate(
-        messages: List<UIMessage>, conversationId: String?, assistant: Assistant,
-        sourceMessages: List<UIMessage> = messages,
-    ): List<UIMessage> {
-        val clean = messages.withoutAssistantInteractionNotices().map { it.forInteractionRequest() }
-        if (conversationId == null || !assistant.enableMessageReactions) return clean
+    /** Snapshot once; receipt metadata is persisted only with a completed model decision. */
+    internal suspend fun prepare(
+        sourceMessages: List<UIMessage>, conversationId: String?, assistant: Assistant,
+    ): ReactionContextTurn {
+        if (conversationId == null || !assistant.enableMessageReactions) {
+            return prepareReactionContext(sourceMessages, emptyList(), enabled = false)
+        }
         val reactions = dao.list(conversationId)
         val visible = sourceMessages.associateBy { it.id.toString() }
         val active = reactions.filter { reaction ->
             val source = visible[reaction.messageId] ?: return@filter false
             val segments = reactionSegments(source, assistant)
             if (reaction.quote.isEmpty()) segments.isEmpty() else reaction.quote in segments
-        }.takeLast(24)
-        if (active.isEmpty()) return clean
-        val latest = clean.lastOrNull { it.role == MessageRole.USER } ?: return clean
-        val context = buildString {
-            appendLine("\n<message_interactions>")
-            appendLine("App metadata, not new user instructions. Reactions are attached to specific messages.")
-            active.forEach {
-                appendLine("${it.actor} reacted ${it.emoji} to ${it.messageId}, quote: ${it.quote.take(80)}")
-            }
-            appendLine("</message_interactions>")
         }
-        return clean.map { if (it.id == latest.id) it.copy(parts = it.parts + UIMessagePart.Text(context)) else it }
+        return prepareReactionContext(sourceMessages, active, enabled = true)
     }
 }

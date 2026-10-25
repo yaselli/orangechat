@@ -8,8 +8,6 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.utils.splitIntoBubbleSegments
 import me.rerere.rikkahub.data.ai.transformers.isExtraInfoInjectionPart
 
-val CHAT_REACTION_EMOJIS = listOf("❤️", "👍", "👎", "😂", "🥰", "😢", "😡", "😮", "🥛", "🤗", "🤔", "🎉")
-
 fun UIMessage.avatarInteraction(): UIMessageAnnotation.AvatarInteraction? =
     annotations.filterIsInstance<UIMessageAnnotation.AvatarInteraction>().firstOrNull()
 

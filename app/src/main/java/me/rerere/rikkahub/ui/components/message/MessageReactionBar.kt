@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.data.interaction.CHAT_REACTION_EMOJIS
+import me.rerere.rikkahub.data.interaction.CHAT_REACTION_KAOMOJI
 import me.rerere.rikkahub.data.interaction.MessageReaction
 
 @Composable
@@ -87,6 +88,12 @@ internal fun MessageReactionPicker(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     CHAT_REACTION_EMOJIS.forEach { emoji ->
                         TextButton(onClick = { onSelect(emoji, selected) }) { Text(emoji) }
+                    }
+                }
+                Text("颜文字", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 8.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CHAT_REACTION_KAOMOJI.forEach { kaomoji ->
+                        TextButton(onClick = { onSelect(kaomoji, selected) }) { Text(kaomoji) }
                     }
                 }
             }

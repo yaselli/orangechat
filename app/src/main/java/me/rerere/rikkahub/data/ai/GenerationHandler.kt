@@ -8,6 +8,7 @@ package me.rerere.rikkahub.data.ai
  
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
+import me.rerere.rikkahub.data.interaction.ReactionContextTurn
 import android.content.Context
 import android.util.Log
 import me.rerere.rikkahub.utils.JsonInstant
@@ -123,10 +124,11 @@ class GenerationHandler(
             assistant, settings, conversationId,
             selectGenerationHistory(recallHistory, assistant.contextMessageSize, GenerationScene.CHAT),
         )
+        val reactionTurn = chatInteractionRepository.prepare(messages, conversationId, assistant)
 
         var requestProfile: JsonElement? = null
         val originalMessageIds = messages.mapTo(hashSetOf()) { it.id }
-        runGenerationToolLoop(
+        val completedMessages = runGenerationToolLoop(
             initialMessages = messages,
             maxSteps = maxSteps,
             resumeApprovedTools = true,
@@ -205,6 +207,7 @@ class GenerationHandler(
                     tools = toolsInternal,
                     memories = memories ?: emptyList(),
                     recallTurn = recallTurn,
+                    reactionTurn = reactionTurn,
                     onRequestProfile = { requestProfile = it?.let(::encodeRequestInputProfile) },
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
@@ -260,6 +263,8 @@ class GenerationHandler(
                 }
             },
         )
+        val acknowledgedMessages = reactionTurn.finish(completedMessages)
+        if (acknowledgedMessages != completedMessages) emit(GenerationChunk.Messages(acknowledgedMessages))
  
     }.throttleLatest(STREAM_UI_THROTTLE_MS)
         .flowOn(Dispatchers.IO)
@@ -277,6 +282,7 @@ class GenerationHandler(
         tools: List<Tool>,
         memories: List<AssistantMemory>,
         recallTurn: MemoryRecallTurn,
+        reactionTurn: ReactionContextTurn,
         onRequestProfile: (RequestInputProfile?) -> Unit,
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
@@ -383,9 +389,7 @@ class GenerationHandler(
             } else null,
         )
  
-        val internalMessages = memoryRecallService.apply(recallTurn, chatInteractionRepository.decorate(
-            baseMessages, conversationId, assistant, sourceMessages = messages,
-        ))
+        val internalMessages = memoryRecallService.apply(recallTurn, reactionTurn.apply(baseMessages))
 
         val params = buildGenerationRequestParameters(assistant, model, tools)
         // Sizes are local diagnostics, not billable token estimates. A diagnostics failure cannot stop chat.
