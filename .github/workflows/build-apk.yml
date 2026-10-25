@@ -18,6 +18,7 @@ on:
       - fix/workflow-mcp-release-diagnostics
       - build/stable-release
       - fix/upstream-alignment-batch1
+      - fix/gemini-proactive-turn
       - feature/upstream-usage-stats
       - feature/upstream-usage-dashboard
 

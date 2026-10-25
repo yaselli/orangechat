@@ -1373,6 +1373,14 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         val recallTurn = memoryRecallService.prepare(
             assistant, settings, conversationId.toString(), initialMessages,
         )
+        val providerRequest = ProactiveProviderRequest.create(
+            history = initialMessages,
+            modelId = model.modelId,
+            googleProvider = providerSetting is ProviderSetting.Google,
+        )
+        if (providerRequest != null) {
+            trace.event("provider_compat", "gemini_background_event=true")
+        }
         var hasToolCalls = false
         var hasJumpFlag = false
         val messages = runGenerationToolLoop(
@@ -1390,15 +1398,17 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // The provider-only copy may merge adjacent roles for API compatibility. Never merge
                 // the local streaming list: doing so can fold this run's assistant into the previous
                 // persisted assistant and transfer ownership back to the old message id.
+                val decoratedMessages = memoryRecallService.apply(recallTurn, chatInteractionRepository.decorate(
+                    currentMessages, conversationId.toString(), assistant,
+                    sourceMessages = chatService.getConversationFlow(conversationId).value.currentMessages.let { source ->
+                        val requested = currentMessages.mapTo(hashSetOf()) { it.id }
+                        source.take(source.indexOfLast { it.id in requested } + 1)
+                    },
+                ))
                 val requestMessages = mergeAdjacentSameRoleMessages(
-                    memoryRecallService.apply(recallTurn, chatInteractionRepository.decorate(
-                        currentMessages, conversationId.toString(), assistant,
-                        sourceMessages = chatService.getConversationFlow(conversationId).value.currentMessages.let { source ->
-                            val requested = currentMessages.mapTo(hashSetOf()) { it.id }
-                            source.take(source.indexOfLast { it.id in requested } + 1)
-                        },
-                    ))
+                    providerRequest?.applyTo(decoratedMessages) ?: decoratedMessages,
                 )
+                trace.messages("provider_request", requestMessages)
                 // A proactive request may legitimately end with an existing ASSISTANT message. Seed a
                 // fresh assistant placeholder locally so handleMessageChunk cannot append the new
                 // stream to that old message and reuse its id. Do not send the placeholder upstream.
