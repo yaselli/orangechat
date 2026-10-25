@@ -43,6 +43,7 @@ class ToolSurfaceBuilder(
     private val workspaceRepository: WorkspaceRepository,
     private val json: Json,
     private val memoryRepository: MemoryRepository,
+    private val sharedMusic: me.rerere.rikkahub.data.music.SharedMusicManager,
 ) {
     suspend fun build(
         assistant: me.rerere.rikkahub.data.model.Assistant,
@@ -104,5 +105,10 @@ class ToolSurfaceBuilder(
             )
         }
         addAll(pluginToolProvider.getTools())
+        if (policy.allowSharedMusic && sharedMusic.isEnabled(assistant.id.toString())) {
+            invocationContext.callerConversationId?.let { conversationId ->
+                add(me.rerere.rikkahub.data.music.createSharedMusicTool(sharedMusic, assistant.id.toString(), conversationId))
+            }
+        }
     }
 }

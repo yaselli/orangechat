@@ -60,6 +60,22 @@ class MusicPlayerService : Service() {
         private const val STATE_PAUSED = 2
         private const val STATE_STOPPED = 3
 
+        data class PlaybackSnapshot(val source: String, val state: String, val positionMs: Long, val durationMs: Long)
+
+        /** Called on Main, the ExoPlayer application thread. */
+        fun playbackSnapshot(): PlaybackSnapshot = synchronized(stateLock) {
+            val player = exoPlayer
+            val state = when {
+                currentState == STATE_STOPPED || player == null -> "stopped"
+                currentState == STATE_PAUSED -> "paused"
+                player.isPlaying -> "playing"
+                player.playWhenReady -> "loading"
+                else -> "paused"
+            }
+            PlaybackSnapshot(currentFilePath, state, player?.currentPosition?.coerceAtLeast(0) ?: 0,
+                player?.duration?.takeIf { it != C.TIME_UNSET && it >= 0 } ?: 0)
+        }
+
         fun play(context: Context, filePath: String, title: String, artist: String) {
             val intent = Intent(context, MusicPlayerService::class.java).apply {
                 action = ACTION_PLAY
@@ -222,7 +238,7 @@ class MusicPlayerService : Service() {
                     override fun onPlayerError(error: PlaybackException) {
                         Log.e(
                             TAG,
-                            "ExoPlayer error: ${error.errorCodeName}, msg=${error.message}, filePath=$filePath, title=$title",
+                            "ExoPlayer error: ${error.errorCodeName}, source=${if (filePath.startsWith("https://")) "remote audio" else filePath}, title=$title",
                             error
                         )
                         synchronized(stateLock) {
@@ -234,7 +250,8 @@ class MusicPlayerService : Service() {
                     }
                 })
 
-                player.setMediaItem(MediaItem.fromUri(Uri.fromFile(File(filePath))))
+                val source = if (filePath.startsWith("https://")) Uri.parse(filePath) else Uri.fromFile(File(filePath))
+                player.setMediaItem(MediaItem.fromUri(source))
                 player.prepare()
                 player.play()
 
@@ -243,7 +260,7 @@ class MusicPlayerService : Service() {
                 startedOk = true
                 Log.i(TAG, "Playing: $artist - $title")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to play (unexpected): ${e.message}, filePath=$filePath", e)
+                Log.e(TAG, "Failed to play (unexpected): ${e.message}, source=${if (filePath.startsWith("https://")) "remote audio" else filePath}", e)
                 currentState = STATE_STOPPED
             }
         }
@@ -261,11 +278,9 @@ class MusicPlayerService : Service() {
         synchronized(stateLock) {
             try {
                 exoPlayer?.let {
-                    if (it.isPlaying) {
-                        it.pause()
-                        currentState = STATE_PAUSED
-                        shouldNotify = true
-                    }
+                    it.pause()
+                    currentState = STATE_PAUSED
+                    shouldNotify = true
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Pause error: ${e.message}", e)

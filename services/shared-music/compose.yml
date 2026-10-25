@@ -1,0 +1,13 @@
+services:
+  music:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      MAX_USERS: "1000"
+      TRUST_PROXY: "1"
+    volumes:
+      - music-data:/data
+volumes:
+  music-data:

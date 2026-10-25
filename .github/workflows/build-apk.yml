@@ -19,6 +19,7 @@ on:
       - build/stable-release
       - fix/upstream-alignment-batch1
       - fix/gemini-proactive-turn
+      - feature/shared-music-multiuser
       - feature/upstream-usage-stats
       - feature/upstream-usage-dashboard
 
@@ -88,6 +89,10 @@ jobs:
           fi
           printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > app/debug.keystore
           keytool -list -keystore app/debug.keystore -storepass android -alias androiddebugkey
+
+      - name: Verify shared music user isolation
+        working-directory: services/shared-music
+        run: npm ci --ignore-scripts && npm test
 
       - name: Unit tests
         if: steps.accepted.outputs.approved != 'true'

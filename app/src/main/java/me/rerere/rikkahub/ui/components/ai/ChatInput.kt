@@ -171,6 +171,7 @@ fun ChatInput(
     onVoiceMessage: ((url: String, duration: Long, transcript: String) -> Unit)? = null,
     autoStartVoice: Boolean = false,
     onConversationSettings: () -> Unit = {},
+    onSharedMusic: () -> Unit = {},
 ) {
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
@@ -875,6 +876,7 @@ fun ChatInput(
                                 onConversationSettings()
                             },
                             conversationSettingsEnabled = !loading,
+                            onSharedMusic = { dismissExpand(); onSharedMusic() },
                             onCompressContext = onCompressContext,
                             onUpdateAssistant = onUpdateAssistant,
                             showInjectionSheet = showInjectionSheet,

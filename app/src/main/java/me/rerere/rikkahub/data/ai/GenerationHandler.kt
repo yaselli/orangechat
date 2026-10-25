@@ -9,6 +9,7 @@ package me.rerere.rikkahub.data.ai
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import me.rerere.rikkahub.data.interaction.ReactionContextTurn
+import me.rerere.rikkahub.data.music.withSharedMusicContext
 import android.content.Context
 import android.util.Log
 import me.rerere.rikkahub.utils.JsonInstant
@@ -93,6 +94,7 @@ class GenerationHandler(
     private val memoryBankService: MemoryBankService,
     private val memoryRecallService: MemoryRecallService,
     private val chatInteractionRepository: ChatInteractionRepository,
+    private val sharedMusic: me.rerere.rikkahub.data.music.SharedMusicManager,
     private val usageRecorder: UsageRecorder,
 ) {
     fun generateText(
@@ -125,6 +127,7 @@ class GenerationHandler(
             selectGenerationHistory(recallHistory, assistant.contextMessageSize, GenerationScene.CHAT),
         )
         val reactionTurn = chatInteractionRepository.prepare(messages, conversationId, assistant)
+        val musicContext = sharedMusic.contextFor(assistant.id.toString())
 
         var requestProfile: JsonElement? = null
         val originalMessageIds = messages.mapTo(hashSetOf()) { it.id }
@@ -208,6 +211,7 @@ class GenerationHandler(
                     memories = memories ?: emptyList(),
                     recallTurn = recallTurn,
                     reactionTurn = reactionTurn,
+                    musicContext = musicContext,
                     onRequestProfile = { requestProfile = it?.let(::encodeRequestInputProfile) },
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
@@ -283,6 +287,7 @@ class GenerationHandler(
         memories: List<AssistantMemory>,
         recallTurn: MemoryRecallTurn,
         reactionTurn: ReactionContextTurn,
+        musicContext: String?,
         onRequestProfile: (RequestInputProfile?) -> Unit,
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
@@ -389,7 +394,8 @@ class GenerationHandler(
             } else null,
         )
  
-        val internalMessages = memoryRecallService.apply(recallTurn, reactionTurn.apply(baseMessages))
+        val internalMessages = memoryRecallService.apply(recallTurn,
+            reactionTurn.apply(baseMessages).withSharedMusicContext(musicContext))
 
         val params = buildGenerationRequestParameters(assistant, model, tools)
         // Sizes are local diagnostics, not billable token estimates. A diagnostics failure cannot stop chat.

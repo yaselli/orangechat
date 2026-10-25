@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.ai.UsageTag
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import me.rerere.rikkahub.data.interaction.reactionReceipts
 import me.rerere.rikkahub.data.interaction.withReactionReceipts
+import me.rerere.rikkahub.data.music.withSharedMusicContext
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -349,6 +350,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val json: Json by inject()
     private val chatService: ChatService by inject()
     private val chatInteractionRepository: ChatInteractionRepository by inject()
+    private val sharedMusic: me.rerere.rikkahub.data.music.SharedMusicManager by inject()
     private val extraInfoCollector: me.rerere.rikkahub.data.ai.transformers.ExtraInfoInjectionCollector by inject()
     private val proactiveMessageService = ProactiveMessageService()
     private val serviceScope = CoroutineScope(
@@ -1463,6 +1465,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             chatService.getConversationFlow(conversationId).value.currentMessages,
             conversationId.toString(), assistant,
         )
+        val musicContext = sharedMusic.contextFor(assistant.id.toString())
         val providerRequest = ProactiveProviderRequest.create(
             history = initialMessages,
             modelId = model.modelId,
@@ -1489,7 +1492,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // The provider-only copy may merge adjacent roles for API compatibility. Never merge
                 // the local streaming list: doing so can fold this run's assistant into the previous
                 // persisted assistant and transfer ownership back to the old message id.
-                val decoratedMessages = memoryRecallService.apply(recallTurn, reactionTurn.apply(currentMessages))
+                val decoratedMessages = memoryRecallService.apply(recallTurn,
+                    reactionTurn.apply(currentMessages).withSharedMusicContext(musicContext))
                 val requestMessages = mergeAdjacentSameRoleMessages(
                     providerRequest?.applyTo(decoratedMessages) ?: decoratedMessages,
                 )

@@ -68,6 +68,10 @@ jobs:
           umask 077
           printf '%s' "$KEY_BASE64" | base64 --decode > app/app.key
           printf '%s\n' "$SIGNING_CONFIG" > local.properties
+      - name: Verify shared music user isolation
+        working-directory: services/shared-music
+        run: npm ci --ignore-scripts && npm test
+
       - name: Unit tests
         if: steps.accepted.outputs.approved != 'true'
         run: |

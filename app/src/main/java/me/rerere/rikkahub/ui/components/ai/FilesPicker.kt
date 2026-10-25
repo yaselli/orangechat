@@ -97,6 +97,7 @@ internal fun FilesPicker(
     onRecordAudio: () -> Unit,
     onPickFile: () -> Unit,
     onConversationSettings: () -> Unit,
+    onSharedMusic: () -> Unit,
     conversationSettingsEnabled: Boolean,
 ) {
     // settings 仍保留给 InjectionQuickConfigSheet -> ExtensionSelector 使用（它需要完整 Settings）
@@ -182,6 +183,13 @@ internal fun FilesPicker(
             modifier = Modifier
                 .clip(MaterialTheme.shapes.large)
                 .clickable(enabled = conversationSettingsEnabled, onClick = onConversationSettings),
+        )
+
+        ListItem(
+            leadingContent = { Text("♫") },
+            headlineContent = { Text("一起听歌") },
+            supportingContent = { Text("网易云、歌词和你们的播放列表") },
+            modifier = Modifier.clip(MaterialTheme.shapes.large).clickable(onClick = onSharedMusic),
         )
 
         // Compress History Button

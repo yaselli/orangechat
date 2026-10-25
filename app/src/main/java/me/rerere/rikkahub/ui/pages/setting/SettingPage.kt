@@ -82,6 +82,7 @@ import me.rerere.hugeicons.stroke.Message01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -114,6 +115,11 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     )
 
     var showCommunity by remember { mutableStateOf(false) }
+    var showSharedMusic by remember { mutableStateOf(false) }
+    if (showSharedMusic) me.rerere.rikkahub.ui.components.music.SharedMusicSheet(
+        assistantId = settings.getCurrentAssistant().id.toString(),
+        onDismiss = { showSharedMusic = false },
+    )
     if (showCommunity) ProjectCommunityDialog(onDismiss = { showCommunity = false })
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -214,6 +220,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Package, null) },
                         supportingContent = { Text("管理本地插件，导入ZIP插件包") },
                         headlineContent = { Text("插件管理") },
+                    )
+                    item(
+                        onClick = { showSharedMusic = true },
+                        leadingContent = { Text("♫") },
+                        supportingContent = { Text("登录自己的网易云，与 AI 一起听歌") },
+                        headlineContent = { Text("一起听歌") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingSecurity) },
