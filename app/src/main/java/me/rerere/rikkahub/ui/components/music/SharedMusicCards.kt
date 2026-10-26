@@ -235,6 +235,7 @@ fun SharedMusicCards(
     parts: List<UIMessagePart>,
     assistantId: String,
     manager: SharedMusicManager = koinInject(),
+    conversationId: String = "",
 ) {
     val cards =
         remember(parts) {
@@ -249,6 +250,7 @@ fun SharedMusicCards(
     if (showPlayer)
         SharedMusicSheet(
             assistantId = assistantId,
+            conversationId = conversationId,
             initialTab = 2,
             onDismiss = { showPlayer = false },
         )
@@ -269,7 +271,7 @@ fun SharedMusicCards(
             Card(
                 onClick = {
                     scope.launch {
-                        manager.reportFailure { manager.play(song, assistantId, "") }
+                        manager.reportFailure { manager.play(song, assistantId, conversationId) }
                         showPlayer = true
                     }
                 },

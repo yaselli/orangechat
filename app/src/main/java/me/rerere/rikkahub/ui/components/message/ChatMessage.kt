@@ -162,6 +162,7 @@ fun ChatMessage(
     onReact: ((String, String) -> Unit)? = null,
     onAvatarInteraction: ((UIMessage) -> Unit)? = null,
     avatarPulse: String? = null,
+    conversationId: String = "",
 ) {
     val message = node.messages[node.selectIndex]
     if (message.avatarInteraction() != null) {
@@ -232,6 +233,7 @@ fun ChatMessage(
         ProvideTextStyle(textStyle) {
             MessagePartsBlock(
                 assistant = assistant,
+                conversationId = conversationId,
                 role = message.role,
                 parts = message.parts,
                 annotations = message.annotations,
@@ -343,6 +345,7 @@ fun ChatMessage(
 @Composable
 private fun MessagePartsBlock(
     assistant: Assistant?,
+    conversationId: String,
     role: MessageRole,
     model: Model?,
     parts: List<UIMessagePart>,
@@ -774,7 +777,9 @@ private fun MessagePartsBlock(
     if (role == MessageRole.ASSISTANT) {
         EditedFilesList(parts = parts, assistant = assistant)
     }
-    me.rerere.rikkahub.ui.components.music.SharedMusicCards(parts, assistant?.id?.toString().orEmpty())
+    me.rerere.rikkahub.ui.components.music.SharedMusicCards(
+        parts, assistant?.id?.toString().orEmpty(), conversationId = conversationId,
+    )
 }
 
 @Composable
