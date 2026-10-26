@@ -43,6 +43,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -343,10 +344,12 @@ private fun ChatPageContent(
     var previewMode by rememberSaveable { mutableStateOf(false) }
     var showConversationSettings by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var showSharedMusic by rememberSaveable(conversation.id) { mutableStateOf(false) }
+    var sharedMusicTab by rememberSaveable(conversation.id) { mutableIntStateOf(0) }
     if (showSharedMusic) me.rerere.rikkahub.ui.components.music.SharedMusicSheet(
         assistantId = conversation.assistantId.toString(),
         conversationId = conversation.id.toString(),
         onDismiss = { showSharedMusic = false },
+        initialTab = sharedMusicTab,
         onShare = { song, lines ->
             inputState.messageContent = inputState.messageContent + song.cardPart(lines = lines)
         },
@@ -410,7 +413,7 @@ private fun ChatPageContent(
                     )
                 } else Column {
                     me.rerere.rikkahub.ui.components.music.SharedMusicMiniBar(
-                        conversation.assistantId.toString(), onOpen = { showSharedMusic = true },
+                        conversation.assistantId.toString(), onOpen = { sharedMusicTab = 2; showSharedMusic = true },
                     )
                     inputState.messageContent.filter { it.musicCard() != null }.forEach { part ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -448,7 +451,7 @@ private fun ChatPageContent(
                         hazeState = hazeState,
                         autoStartVoice = autoStartVoice,
                         onConversationSettings = { showConversationSettings = true },
-                        onSharedMusic = { showSharedMusic = true },
+                        onSharedMusic = { sharedMusicTab = 0; showSharedMusic = true },
                         onCancelClick = {
                             vm.stopGeneration()
                         },

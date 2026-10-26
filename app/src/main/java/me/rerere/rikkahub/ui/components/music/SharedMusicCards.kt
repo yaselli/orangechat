@@ -6,8 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.composables.icons.lucide.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 import me.rerere.ai.ui.UIMessagePart
@@ -37,7 +36,7 @@ internal fun MusicCover(url: String, modifier: Modifier = Modifier, round: Boole
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            Icons.Outlined.Album,
+            Lucide.Disc,
             null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .3f),
         )
@@ -107,7 +106,7 @@ internal fun MusicPlaybackControls(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (current.item.addedBy == "ta")
                             Icon(
-                                Icons.Outlined.Headphones,
+                                Lucide.Headphones,
                                 "TA 放给你",
                                 Modifier.size(13.dp),
                                 tint = MaterialTheme.colorScheme.primary,
@@ -131,15 +130,15 @@ internal fun MusicPlaybackControls(
                     )
                 }
                 MusicIcon(
-                    if (current.state in listOf("playing", "loading")) Icons.Outlined.Pause
-                    else Icons.Outlined.PlayArrow,
+                    if (current.state in listOf("playing", "loading")) Lucide.Pause
+                    else Lucide.Play,
                     "播放或暂停",
                 ) {
                     action { manager.toggle() }
                 }
-                MusicIcon(Icons.Outlined.SkipNext, "下一首") { action { manager.next() } }
-                MusicIcon(Icons.Outlined.QueueMusic, "打开播放器", onClick = onOpen)
-                MusicIcon(Icons.Outlined.Close, "停止一起听") { action { manager.stop() } }
+                MusicIcon(Lucide.SkipForward, "下一首") { action { manager.next() } }
+                MusicIcon(Lucide.ListMusic, "打开播放器", onClick = onOpen)
+                MusicIcon(Lucide.X, "停止一起听") { action { manager.stop() } }
             }
         } else {
             var dragging by remember(current.item.id) { mutableStateOf<Float?>(null) }
@@ -175,7 +174,7 @@ internal fun MusicPlaybackControls(
                 horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                MusicIcon(Icons.Outlined.SkipPrevious, "上一首") {
+                MusicIcon(Lucide.SkipBack, "上一首") {
                     action { manager.next(previous = true) }
                 }
                 FilledIconButton(
@@ -191,13 +190,12 @@ internal fun MusicPlaybackControls(
                         )
                     else
                         Icon(
-                            if (current.state == "playing") Icons.Outlined.Pause
-                            else Icons.Outlined.PlayArrow,
+                            if (current.state == "playing") Lucide.Pause else Lucide.Play,
                             "播放或暂停",
                             Modifier.size(30.dp),
                         )
                 }
-                MusicIcon(Icons.Outlined.SkipNext, "下一首") { action { manager.next() } }
+                MusicIcon(Lucide.SkipForward, "下一首") { action { manager.next() } }
             }
         }
     }
@@ -347,7 +345,7 @@ fun SharedMusicCards(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Icon(
-                            Icons.Outlined.PlayCircle,
+                            Lucide.CirclePlay,
                             "播放歌曲",
                             Modifier.size(28.dp),
                             tint = MaterialTheme.colorScheme.primary,
@@ -408,8 +406,8 @@ internal fun MusicSongRow(
                     color = MaterialTheme.colorScheme.primary,
                 )
         }
-        onShare?.let { MusicIcon(Icons.Outlined.Send, "分享歌卡", enabled, it) }
-        onQueue?.let { MusicIcon(Icons.Outlined.PlaylistAdd, "加入下一首", enabled, it) }
+        onShare?.let { MusicIcon(Lucide.Send, "分享歌卡", enabled, it) }
+        onQueue?.let { MusicIcon(Lucide.ListPlus, "加入下一首", enabled, it) }
         trailing?.invoke()
     }
 }

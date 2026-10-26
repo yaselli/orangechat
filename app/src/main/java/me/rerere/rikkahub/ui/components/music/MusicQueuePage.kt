@@ -4,13 +4,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.composables.icons.lucide.*
 import me.rerere.rikkahub.data.music.*
 
 @Composable
@@ -41,9 +40,9 @@ internal fun MusicQueuePage(
                 )
             }
             listOf(
-                    Triple("seq", Icons.Outlined.QueueMusic, "顺序播放"),
-                    Triple("shuffle", Icons.Outlined.Shuffle, "随机播放"),
-                    Triple("one", Icons.Outlined.RepeatOne, "单曲循环"),
+                    Triple("seq", Lucide.ListMusic, "顺序播放"),
+                    Triple("shuffle", Lucide.Shuffle, "随机播放"),
+                    Triple("one", Lucide.Repeat1, "单曲循环"),
                 )
                 .forEach { (mode, icon, label) ->
                     IconToggleButton(
@@ -59,7 +58,7 @@ internal fun MusicQueuePage(
             query,
             { query = it },
             placeholder = { Text("在列表里找") },
-            leadingIcon = { Icon(Icons.Outlined.Search, null) },
+            leadingIcon = { Icon(Lucide.Search, null) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
@@ -91,7 +90,7 @@ internal fun MusicQueuePage(
                         onShare = onShare?.let { share -> { share(item.song(), emptyList()) } },
                         trailing = {
                             Box {
-                                MusicIcon(Icons.Outlined.MoreVert, "管理这首歌", !busy) { menu = true }
+                                MusicIcon(Lucide.EllipsisVertical, "管理这首歌", !busy) { menu = true }
                                 DropdownMenu(menu, { menu = false }) {
                                     DropdownMenuItem(
                                         text = { Text("上移") },

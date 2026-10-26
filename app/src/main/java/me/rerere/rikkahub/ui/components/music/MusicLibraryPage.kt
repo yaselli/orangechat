@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +15,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.composables.icons.lucide.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 import me.rerere.rikkahub.data.music.*
@@ -59,14 +57,14 @@ internal fun MusicLibraryPage(
             query,
             { query = it },
             placeholder = { Text(if (sourceId == null) "搜歌、歌手" else "在这个歌单里找") },
-            leadingIcon = { Icon(Icons.Outlined.Search, null) },
+            leadingIcon = { Icon(Lucide.Search, null) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
         )
         if (sourceId != null)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                MusicIcon(Icons.AutoMirrored.Outlined.ArrowBack, "返回推荐") {
+                MusicIcon(Lucide.ArrowLeft, "返回推荐") {
                     sourceId = null
                     query = ""
                 }
@@ -202,7 +200,7 @@ private fun MusicRecommendationCard(card: JsonObject, modifier: Modifier, onClic
                 )
             }
             Icon(
-                Icons.Outlined.PlayCircle,
+                Lucide.CirclePlay,
                 title,
                 Modifier.align(Alignment.BottomEnd).padding(12.dp).size(32.dp),
                 tint = Color.White,

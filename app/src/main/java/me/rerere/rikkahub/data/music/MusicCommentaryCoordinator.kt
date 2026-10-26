@@ -10,8 +10,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
@@ -35,6 +38,7 @@ import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.service.isProactiveQuietTime
+import me.rerere.rikkahub.service.ChatNotifications
 import me.rerere.rikkahub.service.ChatService
 
 /**
@@ -89,6 +93,13 @@ class MusicCommentaryCoordinator(
         val job =
             scope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
                 var wakeLock: PowerManager.WakeLock? = null
+                val owner = currentCoroutineContext().job
+                // Ordinary messages take priority immediately, rather than waiting behind this
+                // request.
+                val userMessageWatcher = launch {
+                    session.messageQueue.state.first { it.messages.isNotEmpty() }
+                    owner.cancel()
+                }
                 try {
                     wakeLock =
                         (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
@@ -216,6 +227,17 @@ class MusicCommentaryCoordinator(
                                     updateAt = Instant.now(),
                                 ),
                             )
+                            if (
+                                !chat.isForeground.value &&
+                                    settings.displaySetting.enableNotificationOnMessageGeneration
+                            ) {
+                                ChatNotifications(context)
+                                    .sendGenerationDoneNotification(
+                                        id,
+                                        assistant.name.ifBlank { model.displayName },
+                                        reply,
+                                    )
+                            }
                             Logging.log("Music", "commentary outcome=delivered")
                         }
                     }
@@ -227,6 +249,7 @@ class MusicCommentaryCoordinator(
                         "commentary outcome=failed type=${failure.javaClass.simpleName}",
                     )
                 } finally {
+                    userMessageWatcher.cancel()
                     wakeLock?.let { if (it.isHeld) it.release() }
                 }
             }

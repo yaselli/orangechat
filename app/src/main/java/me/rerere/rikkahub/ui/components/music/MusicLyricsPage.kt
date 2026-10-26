@@ -3,11 +3,9 @@ package me.rerere.rikkahub.ui.components.music
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.composables.icons.lucide.*
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.music.*
 
@@ -48,7 +47,7 @@ internal fun MusicLyricsPage(
         if (current == null) {
             Spacer(Modifier.weight(1f))
             Icon(
-                Icons.Outlined.Headphones,
+                Lucide.Headphones,
                 null,
                 Modifier.size(56.dp),
                 tint = MaterialTheme.colorScheme.primary.copy(alpha = .4f),
@@ -103,9 +102,11 @@ internal fun MusicLyricsPage(
                     state = scroll,
                     contentPadding = PaddingValues(vertical = 24.dp),
                 ) {
-                    items(current.song.lyrics, key = { it.index }) { line ->
+                    itemsIndexed(current.song.lyrics, key = { _, line -> line.index }) {
+                        lineIndex,
+                        line ->
                         val highlighted = current.song.lyrics.getOrNull(active)?.index == line.index
-                        val distance = kotlin.math.abs(current.song.lyrics.indexOf(line) - active)
+                        val distance = kotlin.math.abs(lineIndex - active)
                         Row(
                             Modifier.fillMaxWidth()
                                 .clickable {

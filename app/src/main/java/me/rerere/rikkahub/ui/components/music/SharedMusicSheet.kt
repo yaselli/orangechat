@@ -4,14 +4,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.composables.icons.lucide.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
@@ -73,7 +72,7 @@ fun SharedMusicSheet(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    Icons.Outlined.Headphones,
+                    Lucide.Headphones,
                     null,
                     Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.primary,
@@ -89,12 +88,12 @@ fun SharedMusicSheet(
                     )
                 }
                 MusicIcon(
-                    if (tab == 3) Icons.Outlined.LibraryMusic else Icons.Outlined.Settings,
+                    if (tab == 3) Lucide.Library else Lucide.Settings,
                     if (tab == 3) "返回音乐" else "一起听设置",
                 ) {
                     tab = if (tab == 3) 0 else 3
                 }
-                MusicIcon(Icons.Outlined.KeyboardArrowDown, "收起播放器", onClick = onDismiss)
+                MusicIcon(Lucide.ChevronDown, "收起播放器", onClick = onDismiss)
             }
             error?.let {
                 Surface(
@@ -300,7 +299,7 @@ private fun MusicAccountPage(
                         ?.contentOrNull
                 ListItem(
                     headlineContent = { Text(nickname ?: "已登录${musicPlatformName(platform)}") },
-                    leadingContent = { Icon(Icons.Outlined.AccountCircle, null) },
+                    leadingContent = { Icon(Lucide.CircleUserRound, null) },
                     trailingContent = {
                         TextButton(
                             onClick = {
