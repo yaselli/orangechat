@@ -31,6 +31,9 @@ internal fun createToolDiscoverySession(
                         "system",
                         "contents",
                         "input",
+                        "instructions",
+                        "systemInstruction",
+                        "system_instruction",
                     )
             }
     )

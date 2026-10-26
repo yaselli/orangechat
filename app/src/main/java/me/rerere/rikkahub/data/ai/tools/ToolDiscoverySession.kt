@@ -46,7 +46,12 @@ internal class ToolDiscoverySession(private val residentNames: Set<String>) {
             appendLine("可主动按场景查找，不必等用户说出工具名。不要臆造参数或在同一批里边加载边执行。")
             deferred.forEach { appendLine("${it.name} — ${summary(it.description, 88)}") }
         }
-        return tools.filter { it.name in residentNames || it.name in loadedNames } + entryTool()
+        // Keep the resident/entry prefix fixed when temporary definitions are appended.
+        return tools.filter { it.name in residentNames } +
+            entryTool() +
+            tools
+                .filter { it.name in loadedNames && it.name !in residentNames }
+                .sortedBy { it.name }
     }
 
     fun profile(fullSchemaBytes: Long): ToolDiscoveryProfile =
@@ -168,12 +173,14 @@ internal class ToolDiscoverySession(private val residentNames: Set<String>) {
                     val description = tool.description.lowercase()
                     tool to
                         terms.sumOf { term ->
-                            when {
-                                term == name -> 100
-                                term in name -> 10
-                                term in description -> 1
-                                else -> 0
-                            }
+                            val score: Int =
+                                when {
+                                    term == name -> 100
+                                    term in name -> 10
+                                    term in description -> 1
+                                    else -> 0
+                                }
+                            score
                         }
                 }
                 .filter { it.second > 0 }

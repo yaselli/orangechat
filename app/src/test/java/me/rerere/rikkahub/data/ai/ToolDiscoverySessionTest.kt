@@ -74,8 +74,8 @@ class ToolDiscoverySessionTest {
         invoke(entry(before), """{"action":"load","names":["write_files"]}""")
         assertEquals(0, executions)
         val after = session.expose(listOf(hidden))
-        assertSame(hidden, after.first())
-        assertTrue(after.first().needsApproval)
+        assertSame(hidden, after.single { it.name == hidden.name })
+        assertTrue(after.single { it.name == hidden.name }.needsApproval)
         assertTrue(session.expose(listOf(hidden)).contains(hidden))
         assertFalse(ToolDiscoverySession(emptySet()).expose(listOf(hidden)).contains(hidden))
     }
@@ -111,7 +111,7 @@ class ToolDiscoverySessionTest {
         )
         invoke(entry, """{"action":"load","names":["mcp_00000002_list_games"]}""")
         assertEquals(
-            listOf(second.name, ToolDiscoverySession.ENTRY),
+            listOf(ToolDiscoverySession.ENTRY, second.name),
             session.expose(listOf(first, second)).map { it.name },
         )
         assertFalse(session.expose(listOf(first)).contains(second))
@@ -253,4 +253,24 @@ class ToolDiscoverySessionTest {
             result[result.lastIndex - 1].getTools().last().output.toString().contains("not found")
         )
     }
+
+    @Test
+    fun `loading temporary tools leaves resident definitions entry and directory prefix unchanged`() =
+        runBlocking {
+            val hidden = tool("a_hidden")
+            val resident = tool("z_resident")
+            val session = ToolDiscoverySession(setOf(resident.name))
+            val first = session.expose(listOf(hidden, resident))
+            val initialDefinitions = toolDefinitionSizes(first)
+            val initialDirectory = entry(first).systemPrompt(Model(), emptyList())
+            invoke(entry(first), """{"action":"load","names":["a_hidden"]}""")
+            val loaded = session.expose(listOf(hidden, resident))
+            assertEquals(
+                listOf(resident.name, ToolDiscoverySession.ENTRY, hidden.name),
+                loaded.map { it.name },
+            )
+            assertEquals(initialDefinitions, toolDefinitionSizes(loaded.take(first.size)))
+            assertEquals(initialDirectory, entry(loaded).systemPrompt(Model(), emptyList()))
+            assertEquals(1, session.profile(0).loadedCount)
+        }
 }
