@@ -6,12 +6,16 @@
 
 package me.rerere.rikkahub.ui.pages.chat
 
+import me.rerere.rikkahub.data.music.cardPart
+import me.rerere.rikkahub.data.music.musicCard
+
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,11 +43,13 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -337,6 +343,17 @@ private fun ChatPageContent(
         displaySetting.enableBlurEffect || displaySetting.enableGlassDrawer
     var previewMode by rememberSaveable { mutableStateOf(false) }
     var showConversationSettings by rememberSaveable(conversation.id) { mutableStateOf(false) }
+    var showSharedMusic by rememberSaveable(conversation.id) { mutableStateOf(false) }
+    var sharedMusicTab by rememberSaveable(conversation.id) { mutableIntStateOf(0) }
+    if (showSharedMusic) me.rerere.rikkahub.ui.components.music.SharedMusicSheet(
+        assistantId = conversation.assistantId.toString(),
+        conversationId = conversation.id.toString(),
+        onDismiss = { showSharedMusic = false },
+        initialTab = sharedMusicTab,
+        onShare = { song, lines ->
+            inputState.messageContent = inputState.messageContent + song.cardPart(lines = lines)
+        },
+    )
     val blockedChatState by vm.blockedChatState.collectAsStateWithLifecycle()
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(blockedChatState.blocked) {
@@ -395,6 +412,17 @@ private fun ChatPageContent(
                         onPause = vm::pauseBlockedReplies,
                     )
                 } else Column {
+                    me.rerere.rikkahub.ui.components.music.SharedMusicMiniBar(
+                        conversation.assistantId.toString(), onOpen = { sharedMusicTab = 2; showSharedMusic = true },
+                    )
+                    inputState.messageContent.filter { it.musicCard() != null }.forEach { part ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(part.musicCard()?.get("title")?.toString().orEmpty(), Modifier.weight(1f))
+                            TextButton(onClick = { inputState.messageContent = inputState.messageContent - part }) {
+                                Text("移除歌曲")
+                            }
+                        }
+                    }
                     if (showConversationSettings) {
                         ConversationSettingsDialog(
                             conversation = conversation,
@@ -423,6 +451,7 @@ private fun ChatPageContent(
                         hazeState = hazeState,
                         autoStartVoice = autoStartVoice,
                         onConversationSettings = { showConversationSettings = true },
+                        onSharedMusic = { sharedMusicTab = 0; showSharedMusic = true },
                         onCancelClick = {
                             vm.stopGeneration()
                         },

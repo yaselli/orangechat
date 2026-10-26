@@ -1,0 +1,18 @@
+{
+  "name": "watermelon-shared-music",
+  "version": "0.2.0",
+  "description": "西瓜瓣一起听歌：网易云与 QQ 音乐独立登录、原生播放、歌卡与 AI 排歌",
+  "license": "AGPL-3.0-only",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "test": "node --test test/*.test.js vendor/one-earbud/server/test/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=22.9"
+  },
+  "private": true
+}

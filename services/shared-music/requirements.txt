@@ -1,0 +1,24 @@
+# QQMusicApi SDK and resolved runtime dependencies; Python 3.11+.
+annotated-types==0.8.0
+anyio==4.15.1
+brotli==1.2.1
+cffi==2.1.1
+charset-normalizer==3.5.2
+cryptography==50.0.2
+h11==0.16.0
+idna==3.20
+jh2==5.0.15
+jsonpath-ng==1.13.0
+niquests==3.21.2
+orjson==3.13.0
+paho-mqtt==2.1.0
+pycparser==3.12
+pydantic==2.14.1
+pydantic_core==2.50.1
+qh3==2.1.0
+qqmusic-api-python==0.7.3
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+urllib3-future==2.25.903
+wassima==2.1.5
+zstandard==0.25.0

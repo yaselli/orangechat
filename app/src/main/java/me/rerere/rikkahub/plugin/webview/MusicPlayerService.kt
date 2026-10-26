@@ -14,6 +14,8 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -38,11 +40,15 @@ private const val ACTION_STOP = "me.rerere.rikkahub.MUSIC_STOP"
 private const val EXTRA_FILE_PATH = "filePath"
 private const val EXTRA_TITLE = "title"
 private const val EXTRA_ARTIST = "artist"
+private const val EXTRA_QUEUE = "keepForQueue"
+private const val EXTRA_INITIAL_POSITION = "initialPositionMs"
 
 class MusicPlayerService : Service() {
+    private val completionTimeout = Handler(Looper.getMainLooper())
 
     companion object {
         const val ACTION_MUSIC_COMPLETED = "me.rerere.rikkahub.MUSIC_COMPLETED"
+        const val ACTION_MUSIC_STOPPED = "me.rerere.rikkahub.MUSIC_STOPPED"
         private const val ACTION_SEEK = "me.rerere.rikkahub.MUSIC_SEEK"
         private const val EXTRA_POSITION = "position"
 
@@ -55,17 +61,42 @@ class MusicPlayerService : Service() {
         private var currentTitle: String = ""
         private var currentArtist: String = ""
         private var currentFilePath: String = ""
+        private var waitingForQueue = false
+
+        fun isWaitingForQueue(): Boolean = synchronized(stateLock) { waitingForQueue }
 
         private const val STATE_PLAYING = 1
         private const val STATE_PAUSED = 2
         private const val STATE_STOPPED = 3
 
-        fun play(context: Context, filePath: String, title: String, artist: String) {
+        data class PlaybackSnapshot(val source: String, val state: String, val positionMs: Long, val durationMs: Long)
+
+        /** Called on Main, the ExoPlayer application thread. */
+        fun playbackSnapshot(): PlaybackSnapshot = synchronized(stateLock) {
+            val player = exoPlayer
+            val state = when {
+                waitingForQueue -> "loading"
+                currentState == STATE_STOPPED || player == null -> "stopped"
+                currentState == STATE_PAUSED -> "paused"
+                player.isPlaying -> "playing"
+                player.playWhenReady -> "loading"
+                else -> "paused"
+            }
+            PlaybackSnapshot(currentFilePath, state, player?.currentPosition?.coerceAtLeast(0) ?: 0,
+                player?.duration?.takeIf { it != C.TIME_UNSET && it >= 0 } ?: 0)
+        }
+
+        fun play(
+            context: Context, filePath: String, title: String, artist: String,
+            keepForQueue: Boolean = false, initialPositionMs: Long = 0,
+        ) {
             val intent = Intent(context, MusicPlayerService::class.java).apply {
                 action = ACTION_PLAY
                 putExtra(EXTRA_FILE_PATH, filePath)
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_ARTIST, artist)
+                putExtra(EXTRA_QUEUE, keepForQueue)
+                putExtra(EXTRA_INITIAL_POSITION, initialPositionMs.coerceAtLeast(0))
             }
             context.startForegroundService(intent)
         }
@@ -160,7 +191,8 @@ class MusicPlayerService : Service() {
                 val title = intent.getStringExtra(EXTRA_TITLE) ?: ""
                 val artist = intent.getStringExtra(EXTRA_ARTIST) ?: ""
                 if (filePath.isNotEmpty()) {
-                    startPlayback(filePath, title, artist)
+                    startPlayback(filePath, title, artist, intent.getBooleanExtra(EXTRA_QUEUE, false),
+                        intent.getLongExtra(EXTRA_INITIAL_POSITION, 0), startId)
                 }
             }
             ACTION_PAUSE -> pausePlayback()
@@ -174,7 +206,11 @@ class MusicPlayerService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun startPlayback(filePath: String, title: String, artist: String) {
+    private fun startPlayback(
+        filePath: String, title: String, artist: String, keepForQueue: Boolean,
+        initialPositionMs: Long, startId: Int,
+    ) {
+        completionTimeout.removeCallbacksAndMessages(null)
         var startedOk = false
 
         synchronized(stateLock) {
@@ -186,6 +222,7 @@ class MusicPlayerService : Service() {
             currentTitle = title
             currentArtist = artist
             currentFilePath = filePath
+            waitingForQueue = false
 
             try {
                 val player = ExoPlayer.Builder(applicationContext).build()
@@ -208,11 +245,18 @@ class MusicPlayerService : Service() {
                                 // 避免把新歌的状态错误地改回"已停止"
                                 if (exoPlayer === player) {
                                     currentState = STATE_STOPPED
+                                    waitingForQueue = keepForQueue
                                     shouldNotify = true
                                 }
                             }
                             if (shouldNotify) {
-                                stopForeground(STOP_FOREGROUND_REMOVE)
+                                if (keepForQueue) {
+                                    // Preserve the foreground service while the app resolves the next
+                                    // signed stream URL. Dropping it here prevents background handoff.
+                                    completionTimeout.postDelayed({
+                                        if (synchronized(stateLock) { exoPlayer === player && waitingForQueue }) stopPlayback()
+                                    }, 60_000)
+                                } else stopForeground(STOP_FOREGROUND_REMOVE)
                                 LocalBroadcastManager.getInstance(this@MusicPlayerService)
                                     .sendBroadcast(Intent(ACTION_MUSIC_COMPLETED))
                             }
@@ -222,19 +266,29 @@ class MusicPlayerService : Service() {
                     override fun onPlayerError(error: PlaybackException) {
                         Log.e(
                             TAG,
-                            "ExoPlayer error: ${error.errorCodeName}, msg=${error.message}, filePath=$filePath, title=$title",
-                            error
+                            "ExoPlayer error: ${error.errorCodeName}, source=${if (filePath.startsWith("https://")) "remote audio" else filePath}, title=$title",
+                            if (filePath.startsWith("https://")) null else error
                         )
+                        var failedCurrent = false
                         synchronized(stateLock) {
                             if (exoPlayer === player) {
                                 currentState = STATE_STOPPED
                                 exoPlayer = null
+                                waitingForQueue = false
+                                failedCurrent = true
                             }
+                        }
+                        if (failedCurrent) {
+                            player.release()
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf(startId)
                         }
                     }
                 })
 
-                player.setMediaItem(MediaItem.fromUri(Uri.fromFile(File(filePath))))
+                val source = if (filePath.startsWith("https://")) Uri.parse(filePath) else Uri.fromFile(File(filePath))
+                player.setMediaItem(MediaItem.fromUri(source))
+                if (initialPositionMs > 0) player.seekTo(initialPositionMs)
                 player.prepare()
                 player.play()
 
@@ -243,7 +297,7 @@ class MusicPlayerService : Service() {
                 startedOk = true
                 Log.i(TAG, "Playing: $artist - $title")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to play (unexpected): ${e.message}, filePath=$filePath", e)
+                Log.e(TAG, "Failed to play (unexpected): ${e.message}, source=${if (filePath.startsWith("https://")) "remote audio" else filePath}", e)
                 currentState = STATE_STOPPED
             }
         }
@@ -261,11 +315,9 @@ class MusicPlayerService : Service() {
         synchronized(stateLock) {
             try {
                 exoPlayer?.let {
-                    if (it.isPlaying) {
-                        it.pause()
-                        currentState = STATE_PAUSED
-                        shouldNotify = true
-                    }
+                    it.pause()
+                    currentState = STATE_PAUSED
+                    shouldNotify = true
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Pause error: ${e.message}", e)
@@ -293,6 +345,8 @@ class MusicPlayerService : Service() {
     }
 
     private fun stopPlayback() {
+        completionTimeout.removeCallbacksAndMessages(null)
+        val stoppedSource = synchronized(stateLock) { currentFilePath }
         synchronized(stateLock) {
             try {
                 exoPlayer?.let {
@@ -305,8 +359,12 @@ class MusicPlayerService : Service() {
             currentTitle = ""
             currentArtist = ""
             currentFilePath = ""
+            waitingForQueue = false
         }
         stopForeground(STOP_FOREGROUND_REMOVE)
+        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent(ACTION_MUSIC_STOPPED).apply {
+            putExtra(EXTRA_FILE_PATH, stoppedSource)
+        })
         stopSelf()
     }
 
@@ -321,6 +379,7 @@ class MusicPlayerService : Service() {
     }
 
     override fun onDestroy() {
+        completionTimeout.removeCallbacksAndMessages(null)
         synchronized(stateLock) {
             try {
                 exoPlayer?.let {
@@ -330,6 +389,7 @@ class MusicPlayerService : Service() {
             } catch (_: Exception) {}
             exoPlayer = null
             currentState = STATE_STOPPED
+            waitingForQueue = false
         }
         super.onDestroy()
     }
@@ -367,7 +427,7 @@ class MusicPlayerService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 ServiceCompat.startForeground(
                     this, NOTIFICATION_ID, notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
                 )
             } else {
                 startForeground(NOTIFICATION_ID, notification)

@@ -39,6 +39,12 @@ internal fun RequestInputProfileButton(message: UIMessage) {
                 Text("这是该回复最后一次模型调用前的 UTF-8 文本大小，不是计费 token。图片、音频及协议包装未计入；不同接口可能进一步过滤消息。")
                 Text("消息 ${profile.messageCount} 条 · 文本 ${size(profile.textBytes)}")
                 Text("工具 ${profile.toolCount} 个 · 定义约 ${size(profile.toolSchemaBytes)}（按 OpenAI 格式计算）")
+                profile.discovery?.let { discovery ->
+                    Text("工具按需加载（本轮）", style = MaterialTheme.typography.titleSmall)
+                    Text("已启用 ${discovery.availableCount} · 常驻 ${discovery.residentCount} · 临时加载 ${discovery.loadedCount}")
+                    Text("全量定义约 ${size(discovery.fullSchemaBytes)} · 简短目录 ${size(discovery.directoryBytes)}")
+                    Text("上方工具定义是本次实际发送的部分，已包含查找入口；目录计入消息文本。这里不是 token 估算。")
+                }
                 Text("最终消息按角色统计", style = MaterialTheme.typography.titleSmall)
                 profile.roles.forEach { Text("${it.label}：${size(it.bytes)}") }
                 Text("初始系统提示构成（已包含在消息文本中）", style = MaterialTheme.typography.titleSmall)

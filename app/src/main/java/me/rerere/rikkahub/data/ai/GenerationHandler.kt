@@ -9,6 +9,7 @@ package me.rerere.rikkahub.data.ai
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import me.rerere.rikkahub.data.interaction.ReactionContextTurn
+import me.rerere.rikkahub.data.music.withSharedMusicContext
 import android.content.Context
 import android.util.Log
 import me.rerere.rikkahub.utils.JsonInstant
@@ -49,6 +50,8 @@ import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTools
+import me.rerere.rikkahub.data.ai.tools.createToolDiscoverySession
+import me.rerere.rikkahub.data.ai.tools.ToolDiscoveryProfile
 import me.rerere.rikkahub.data.ai.tools.buildWriteFilesTool
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.service.MemoryBankService
@@ -93,6 +96,7 @@ class GenerationHandler(
     private val memoryBankService: MemoryBankService,
     private val memoryRecallService: MemoryRecallService,
     private val chatInteractionRepository: ChatInteractionRepository,
+    private val sharedMusic: me.rerere.rikkahub.data.music.SharedMusicManager,
     private val usageRecorder: UsageRecorder,
 ) {
     fun generateText(
@@ -125,13 +129,17 @@ class GenerationHandler(
             selectGenerationHistory(recallHistory, assistant.contextMessageSize, GenerationScene.CHAT),
         )
         val reactionTurn = chatInteractionRepository.prepare(messages, conversationId, assistant)
+        val musicContext = sharedMusic.contextFor(assistant.id.toString())
 
+        val discovery = createToolDiscoverySession(assistant, settings, model, tools)
+        var fullToolBytes = 0L
         var requestProfile: JsonElement? = null
         val originalMessageIds = messages.mapTo(hashSetOf()) { it.id }
         val completedMessages = runGenerationToolLoop(
             initialMessages = messages,
             maxSteps = maxSteps,
             resumeApprovedTools = true,
+            discovery = discovery,
             onStep = { stepIndex, _ ->
                 Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
             },
@@ -166,6 +174,10 @@ class GenerationHandler(
                     // 文件写入工具 - AI可直接将文件内容写入设备或打包ZIP
                     add(buildWriteFilesTool(conversationId))
                     addAll(tools)
+                }.also { registered ->
+                    if (discovery != null && BuildConfig.DEBUG && settings.displaySetting.showTokenUsage) {
+                        fullToolBytes = runCatching { toolDefinitionSizes(registered).sumOf { it.bytes } }.getOrDefault(0L)
+                    }
                 }
             },
             generateTurn = { currentMessages, toolsInternal, _ ->
@@ -208,6 +220,8 @@ class GenerationHandler(
                     memories = memories ?: emptyList(),
                     recallTurn = recallTurn,
                     reactionTurn = reactionTurn,
+                    musicContext = musicContext,
+                    discoveryProfile = discovery?.profile(fullToolBytes),
                     onRequestProfile = { requestProfile = it?.let(::encodeRequestInputProfile) },
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
@@ -283,6 +297,8 @@ class GenerationHandler(
         memories: List<AssistantMemory>,
         recallTurn: MemoryRecallTurn,
         reactionTurn: ReactionContextTurn,
+        musicContext: String?,
+        discoveryProfile: ToolDiscoveryProfile?,
         onRequestProfile: (RequestInputProfile?) -> Unit,
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
@@ -389,25 +405,14 @@ class GenerationHandler(
             } else null,
         )
  
-        val internalMessages = memoryRecallService.apply(recallTurn, reactionTurn.apply(baseMessages))
+        val internalMessages = memoryRecallService.apply(recallTurn,
+            reactionTurn.apply(baseMessages).withSharedMusicContext(musicContext))
 
         val params = buildGenerationRequestParameters(assistant, model, tools)
         // Sizes are local diagnostics, not billable token estimates. A diagnostics failure cannot stop chat.
         onRequestProfile(if (collectProfile) runCatching {
             val exposedTools = if (ModelAbility.TOOL in model.abilities) params.tools else emptyList()
-            val toolSizes = exposedTools.map { tool ->
-                val schema = tool.parameters()
-                val definition = buildJsonObject {
-                    put("type", "function")
-                    put("function", buildJsonObject {
-                        put("name", tool.name)
-                        put("description", tool.description)
-                        put("parameters", schema?.let { JsonInstant.encodeToJsonElement(InputSchema.serializer(), it) }
-                            ?: buildJsonObject { put("type", "object"); put("properties", buildJsonObject {}) })
-                    })
-                }
-                InputSizeEntry(tool.name.take(80), inputUtf8Bytes(definition.toString()))
-            }
+            val toolSizes = toolDefinitionSizes(exposedTools)
             RequestInputProfile(
                 messageCount = internalMessages.size,
                 textBytes = inputTextBytes(internalMessages),
@@ -419,6 +424,7 @@ class GenerationHandler(
                 toolSchemaBytes = toolSizes.sumOf { it.bytes },
                 largestTools = toolSizes.sortedByDescending { it.bytes }.take(10),
                 customBodyKeys = params.customBody.size,
+                discovery = discoveryProfile,
             )
         }.getOrNull() else null)
         aiLoggingManager.addLog(

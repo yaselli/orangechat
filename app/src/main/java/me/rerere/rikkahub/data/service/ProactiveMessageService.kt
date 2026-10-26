@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.ai.UsageTag
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import me.rerere.rikkahub.data.interaction.reactionReceipts
 import me.rerere.rikkahub.data.interaction.withReactionReceipts
+import me.rerere.rikkahub.data.music.withSharedMusicContext
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -25,6 +26,8 @@ import android.util.Log
 import me.rerere.rikkahub.data.ai.executeGenerationTool
 import me.rerere.rikkahub.data.ai.generateModelTurn
 import me.rerere.rikkahub.data.ai.runGenerationToolLoop
+import me.rerere.rikkahub.data.ai.tools.createToolDiscoverySession
+import me.rerere.rikkahub.data.ai.tools.withToolDiscoveryDirectory
 import me.rerere.rikkahub.data.model.updateGenerationMessages
 import me.rerere.rikkahub.data.ai.transformers.forProactiveExtraInfo
 import kotlinx.coroutines.CancellationException
@@ -349,6 +352,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val json: Json by inject()
     private val chatService: ChatService by inject()
     private val chatInteractionRepository: ChatInteractionRepository by inject()
+    private val sharedMusic: me.rerere.rikkahub.data.music.SharedMusicManager by inject()
     private val extraInfoCollector: me.rerere.rikkahub.data.ai.transformers.ExtraInfoInjectionCollector by inject()
     private val proactiveMessageService = ProactiveMessageService()
     private val serviceScope = CoroutineScope(
@@ -1463,6 +1467,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             chatService.getConversationFlow(conversationId).value.currentMessages,
             conversationId.toString(), assistant,
         )
+        val musicContext = sharedMusic.contextFor(assistant.id.toString())
         val providerRequest = ProactiveProviderRequest.create(
             history = initialMessages,
             modelId = model.modelId,
@@ -1473,8 +1478,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         }
         var hasToolCalls = false
         var hasJumpFlag = false
+        val discovery = createToolDiscoverySession(assistant, settings, model, tools)
         val messages = runGenerationToolLoop(
             initialMessages = initialMessages,
+            discovery = discovery,
             maxSteps = MAX_TOOL_STEPS,
             reserveFinalModelTurn = true,
             toolLimitError = "Proactive tool limit reached before a final reply",
@@ -1483,13 +1490,15 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 Log.d(TAG, "generateWithTools: step $step/${MAX_TOOL_STEPS}")
                 trace.event("generation_step", "step=$step finalTurn=$finalTurn")
             },
-            generateTurn = generateTurn@{ currentMessages, _, step ->
+            generateTurn = generateTurn@{ currentMessages, stepTools, step ->
                 ensureProactiveScheduleAllowed(manualTest)
                 // 流式调用 AI（替代非流式 generateText，兼容 thinking 模型）
                 // The provider-only copy may merge adjacent roles for API compatibility. Never merge
                 // the local streaming list: doing so can fold this run's assistant into the previous
                 // persisted assistant and transfer ownership back to the old message id.
-                val decoratedMessages = memoryRecallService.apply(recallTurn, reactionTurn.apply(currentMessages))
+                val decoratedMessages = memoryRecallService.apply(recallTurn,
+                    reactionTurn.apply(currentMessages).withSharedMusicContext(musicContext))
+                    .withToolDiscoveryDirectory(stepTools, model)
                 val requestMessages = mergeAdjacentSameRoleMessages(
                     providerRequest?.applyTo(decoratedMessages) ?: decoratedMessages,
                 )
@@ -1508,7 +1517,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     providerSetting = providerSetting,
                     requestMessages = requestMessages,
                     initialMessages = initialStreamMessages,
-                    params = params,
+                    params = params.copy(tools = stepTools),
                     model = model,
                     stream = true,
                     mergeUsage = false,

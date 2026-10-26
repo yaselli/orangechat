@@ -82,6 +82,7 @@ class RikkaHubApp : Application() {
         // Resume polling only after preferences are decoded, without re-submitting interrupted requests.
         get<me.rerere.rikkahub.AppScope>().launch {
             get<SettingsStore>().settingsFlowRaw.first()
+            get<me.rerere.rikkahub.data.music.MusicCommentaryCoordinator>().start()
             get<me.rerere.rikkahub.service.MediaCreationService>().resumePending()
         }
 

@@ -231,6 +231,7 @@ val dataSourceModule = module {
             memoryBankService = get(),
             memoryRecallService = get(),
             chatInteractionRepository = get(),
+            sharedMusic = get(),
             usageRecorder = get(),
         )
     }

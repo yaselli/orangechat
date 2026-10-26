@@ -6,6 +6,8 @@
 
 package me.rerere.rikkahub.ui.components.message
 
+import me.rerere.rikkahub.data.music.musicCard
+
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 
 import me.rerere.rikkahub.ui.theme.glassSurface
@@ -160,6 +162,7 @@ fun ChatMessage(
     onReact: ((String, String) -> Unit)? = null,
     onAvatarInteraction: ((UIMessage) -> Unit)? = null,
     avatarPulse: String? = null,
+    conversationId: String = "",
 ) {
     val message = node.messages[node.selectIndex]
     if (message.avatarInteraction() != null) {
@@ -230,6 +233,7 @@ fun ChatMessage(
         ProvideTextStyle(textStyle) {
             MessagePartsBlock(
                 assistant = assistant,
+                conversationId = conversationId,
                 role = message.role,
                 parts = message.parts,
                 annotations = message.annotations,
@@ -341,6 +345,7 @@ fun ChatMessage(
 @Composable
 private fun MessagePartsBlock(
     assistant: Assistant?,
+    conversationId: String,
     role: MessageRole,
     model: Model?,
     parts: List<UIMessagePart>,
@@ -395,7 +400,7 @@ private fun MessagePartsBlock(
     // Persisted extra information remains available to the model but must not appear as
     // another user bubble or expose sensitive device context in the normal chat UI.
     val groupedParts = remember(parts) {
-        parts.filterNot { it.isExtraInfoInjectionPart() }.groupMessageParts()
+        parts.filterNot { it.isExtraInfoInjectionPart() || it.musicCard() != null }.groupMessageParts()
     }
     groupedParts.fastForEach { block ->
         when (block) {
@@ -772,6 +777,9 @@ private fun MessagePartsBlock(
     if (role == MessageRole.ASSISTANT) {
         EditedFilesList(parts = parts, assistant = assistant)
     }
+    me.rerere.rikkahub.ui.components.music.SharedMusicCards(
+        parts, assistant?.id?.toString().orEmpty(), conversationId = conversationId,
+    )
 }
 
 @Composable

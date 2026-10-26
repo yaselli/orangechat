@@ -49,6 +49,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Icon1stBracket
 import me.rerere.hugeicons.stroke.McpServer
+import me.rerere.rikkahub.data.ai.tools.ToolDiscoveryPolicy
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
@@ -372,6 +373,24 @@ fun McpPicker(
                             }
                         }
                     )
+                }
+                if (assistant.toolDiscoveryEnabled && server.id in assistant.mcpServers) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("这组工具完整常驻", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        val resident = ToolDiscoveryPolicy.residentServers(assistant, servers)
+                        Switch(
+                            checked = server.id in resident,
+                            onCheckedChange = { enabled ->
+                                onUpdateAssistant(assistant.copy(
+                                    toolDiscoveryMcpServers = if (enabled) resident + server.id else resident - server.id,
+                                ))
+                            },
+                        )
+                    }
                 }
             }
         }

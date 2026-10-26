@@ -7,6 +7,7 @@ data class ToolSurfacePolicy(
     val includeMemoryTools: Boolean = true,
     val allowAppUsage: Boolean = true,
     val allowVoiceCall: Boolean = true,
+    val allowSharedMusic: Boolean = true,
     val requireReadyWorkspace: Boolean = false,
 ) {
     internal fun localOptions(options: List<LocalToolOption>): List<LocalToolOption> =
@@ -24,6 +25,7 @@ data class ToolSurfacePolicy(
             includeMemoryTools = false,
             allowAppUsage = allowAppUsage,
             allowVoiceCall = !chatBlocked,
+            allowSharedMusic = !chatBlocked,
             requireReadyWorkspace = true,
         )
     }

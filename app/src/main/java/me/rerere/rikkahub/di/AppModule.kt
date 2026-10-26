@@ -24,6 +24,14 @@ import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
 
 val appModule = module {
+    single { me.rerere.rikkahub.data.music.SharedMusicCredentials(get()) }
+    single { me.rerere.rikkahub.data.music.SharedMusicApi(get()) }
+    single { me.rerere.rikkahub.data.music.SharedMusicManager(get(), get(), get()) }
+    single {
+        me.rerere.rikkahub.data.music.MusicCommentaryCoordinator(
+            get(), get(), get(), get(), get(), get(), get(), get(),
+        )
+    }
     single { me.rerere.mediagen.provider.MediaGenerationManager(get()) }
     single { me.rerere.rikkahub.service.MediaCreationService(get(), get(), get(), get(), get(), get(), get()) }
 
@@ -98,6 +106,7 @@ val appModule = module {
             pluginToolProvider = get(),
             workspaceRepository = get(),
             json = get(),
+            sharedMusic = get(),
             memoryRepository = get(),
         )
     }

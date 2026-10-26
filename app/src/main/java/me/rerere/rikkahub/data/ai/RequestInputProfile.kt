@@ -3,6 +3,11 @@ package me.rerere.rikkahub.data.ai
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import me.rerere.ai.core.InputSchema
+import me.rerere.ai.core.Tool
+import me.rerere.rikkahub.data.ai.tools.ToolDiscoveryProfile
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -26,6 +31,7 @@ data class RequestInputProfile(
     val toolSchemaBytes: Long,
     val largestTools: List<InputSizeEntry>,
     val customBodyKeys: Int,
+    val discovery: ToolDiscoveryProfile? = null,
 )
 
 internal fun inputUtf8Bytes(text: String): Long = text.toByteArray(Charsets.UTF_8).size.toLong()
@@ -64,4 +70,19 @@ fun UIMessage.requestInputProfile(): RequestInputProfile? {
             it.roles.size <= 8 && it.systemParts.size <= 16 && it.transformations.size <= 32 &&
             it.largestTools.size <= 10
     }
+}
+
+/** Comparable OpenAI-format definition sizes. Does not include execution callbacks or secrets. */
+internal fun toolDefinitionSizes(tools: List<Tool>): List<InputSizeEntry> = tools.map { tool ->
+    val schema = tool.parameters()
+    val definition = buildJsonObject {
+        put("type", "function")
+        put("function", buildJsonObject {
+            put("name", tool.name)
+            put("description", tool.description)
+            put("parameters", schema?.let { JsonInstant.encodeToJsonElement(InputSchema.serializer(), it) }
+                ?: buildJsonObject { put("type", "object"); put("properties", buildJsonObject {}) })
+        })
+    }
+    InputSizeEntry(tool.name.take(80), inputUtf8Bytes(definition.toString()))
 }

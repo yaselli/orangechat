@@ -387,6 +387,7 @@ private fun ChatListNormal(
                     ) {
                         ChatMessage(
                             node = node,
+                            conversationId = conversation.id.toString(),
                             reactions = reactions.filter { it.messageId == node.currentMessage.id.toString() },
                             onReact = if (currentAssistant?.enableMessageReactions == true &&
                                 !(loading && index == displayNodes.lastIndex)
