@@ -1,6 +1,6 @@
 # 版本号与应用内更新
 
-本次发布版本为正式版 `2.3.3`、Debug `2.3.3-debug.1`，Android `versionCode` 均为 `168`。是否已公开以 GitHub Releases 为准。`2.3.0 / 165` 是本项目更新源的首个版本。后续每次发包都递增 versionCode；正式版改 defaultConfig.versionName，同一基础版本内追加 Debug 更新时，同时调整 versionNameSuffix 与 VERSION_NAME 字段中的 debug 序号。
+本次发布版本为正式版 `2.3.4`、Debug `2.3.4-debug.1`，Android `versionCode` 均为 `169`。是否已公开以 GitHub Releases 为准。`2.3.0 / 165` 是本项目更新源的首个版本。后续每次发包都递增 versionCode；正式版改 defaultConfig.versionName，同一基础版本内追加 Debug 更新时，同时调整 versionNameSuffix 与 VERSION_NAME 字段中的 debug 序号。
 
 同一份源代码分别通过 Build Stable Release APK、Build Personal APK 构建。拍一拍、消息贴表情、记忆、MCP 等功能共用代码；两种包只在包名、既有签名配置及测试诊断展示上区分。两套应用的数据相互独立。
 
@@ -23,7 +23,7 @@
 仓库现已迁移，尚未安装兼容版的用户应手动下载 `2.3.3` 或对应 Debug 包，使用原渠道覆盖安装一次。
 兼容代码同时校验新旧仓库的下载链接，但不承诺修复尚未升级的安装包。
 
-当前 `2.3.3` 发布计划已由用户确认：合入 `build/stable-release` 后，两条构建分别执行完整自动检查，使用原渠道签名生成新 APK；发布任务核对已接受的源提交、版本、渠道、Tag 与全部附件校验和后公开。用户明确跳过本批真机测试；自动检查仍必须通过。不复用旧版 `2.3.2` 安装包。
+当前 `2.3.4` 发布计划已由用户确认：合入 `build/stable-release` 后，两条构建分别执行完整自动检查，使用原渠道签名生成新 APK；发布任务核对已接受的源提交、版本、渠道、Tag 与全部附件校验和后公开。`verifiedRuns` 均为 0，不跳过检查，也不复用旧版本安装包。一起听已有网易云真机反馈；工具按需加载的真实模型自然查找尚未验收，两个渠道均保留默认关闭、按角色开启的实验开关，正式版隐藏体积与召回诊断面板。提交后由 Actions 后台运行，无需持续刷新。
 
 没有已确认发布计划时，可使用以下草稿流程：
 

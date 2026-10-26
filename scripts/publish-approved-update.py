@@ -15,7 +15,7 @@ APPROVED_REPOSITORIES = frozenset({'yaselli/watermelon-chat', 'yaselli/orangecha
 ALLOWED_RELEASE_FILES = {
     'app/build.gradle.kts', '.github/release-plan.json',
     '.github/workflows/build-apk.yml', '.github/workflows/build-isolated-apk.yml',
-    'docs/releases/2.3.2.md', 'docs/releases/2.3.3.md', 'docs/app-updates.md',
+    'docs/releases/2.3.2.md', 'docs/releases/2.3.3.md', 'docs/releases/2.3.4.md', 'docs/app-updates.md',
     'scripts/publish-approved-update.py', 'scripts/test-publish-approved-update.py',
 }
 
