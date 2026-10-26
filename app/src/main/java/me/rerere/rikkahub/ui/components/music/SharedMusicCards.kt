@@ -97,30 +97,26 @@ internal fun MusicPlaybackControls(
     Column(Modifier.fillMaxWidth().padding(horizontal = if (compact) 8.dp else 4.dp)) {
         if (compact) {
             Row(Modifier.heightIn(min = 60.dp), verticalAlignment = Alignment.CenterVertically) {
-                MusicCover(
-                    current.song.coverUrl,
-                    Modifier.size(40.dp).clickable(onClick = onOpen),
-                    round = true,
-                )
-                Column(Modifier.weight(1f).clickable(onClick = onOpen).padding(start = 10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (current.item.addedBy == "ta")
-                            Icon(
-                                Lucide.Headphones,
-                                "TA 放给你",
-                                Modifier.size(13.dp),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        Text(
-                            current.song.title,
-                            Modifier.padding(
-                                start = if (current.item.addedBy == "ta") 4.dp else 0.dp
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodyMedium,
+                Box(Modifier.size(40.dp).clickable(onClick = onOpen)) {
+                    MusicCover(current.song.coverUrl, Modifier.fillMaxSize(), round = true)
+                    if (current.item.addedBy == "ta")
+                        Icon(
+                            Lucide.Headphones,
+                            "TA 放给你",
+                            Modifier.align(Alignment.BottomEnd)
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                            tint = MaterialTheme.colorScheme.primary,
                         )
-                    }
+                }
+                Column(Modifier.weight(1f).clickable(onClick = onOpen).padding(start = 10.dp)) {
+                    Text(
+                        current.song.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                     Text(
                         current.song.artist,
                         style = MaterialTheme.typography.labelSmall,
@@ -137,7 +133,6 @@ internal fun MusicPlaybackControls(
                     action { manager.toggle() }
                 }
                 MusicIcon(Lucide.SkipForward, "下一首") { action { manager.next() } }
-                MusicIcon(Lucide.ListMusic, "打开播放器", onClick = onOpen)
                 MusicIcon(Lucide.X, "停止一起听") { action { manager.stop() } }
             }
         } else {
@@ -156,6 +151,21 @@ internal fun MusicPlaybackControls(
                 },
                 valueRange = 0f..current.durationMs.coerceAtLeast(1).toFloat(),
                 modifier = Modifier.height(28.dp),
+                thumb = {
+                    Box(
+                        Modifier.size(12.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                },
+                track = { sliderState ->
+                    SliderDefaults.Track(
+                        sliderState = sliderState,
+                        modifier = Modifier.height(3.dp),
+                        drawStopIndicator = null,
+                        thumbTrackGapSize = 0.dp,
+                    )
+                },
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(

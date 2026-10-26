@@ -104,6 +104,7 @@ class SharedMusicUiDeviceTest {
     }
 
     private fun screenshot(name: String) {
+        compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
         // Gradle uninstalls the app after instrumentation; public test images survive that cleanup.
         val values =
