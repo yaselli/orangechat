@@ -28,6 +28,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
@@ -94,6 +95,30 @@ private fun AssistantLocalToolContent(
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (BuildConfig.DEBUG) {
+            CardGroup {
+                item(
+                    headlineContent = { Text("工具按需加载（实验）") },
+                    supportingContent = {
+                        Text("开启后常用工具完整常驻，其余显示简短目录，用到时加载。本轮加载后保持可用；关闭即可恢复全量。首次加载会增加模型请求。自定义请求体若覆盖工具或消息，则保留原配置、使用全量模式。")
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = assistant.toolDiscoveryEnabled,
+                            onCheckedChange = { onUpdate(assistant.copy(toolDiscoveryEnabled = it)) },
+                        )
+                    },
+                )
+                if (assistant.toolDiscoveryEnabled) {
+                    item(
+                        headlineContent = { Text("常驻范围") },
+                        supportingContent = {
+                            Text("内置记忆、拍一拍、贴表情、一起听、联网与网页、时间与提醒、朗读/提问/剪贴板、表情包和天气。仅保留原本已启用的工具；外置记忆库等整组常驻可在角色的 MCP 页面选择。")
+                        },
+                    )
+                }
+            }
+        }
         CardGroup {
             item(
                 headlineContent = { Text("图表展示") },

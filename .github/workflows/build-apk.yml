@@ -20,6 +20,7 @@ on:
       - fix/upstream-alignment-batch1
       - fix/gemini-proactive-turn
       - feature/shared-music-multiuser
+      - feature/tool-discovery
       - feature/upstream-usage-stats
       - feature/upstream-usage-dashboard
 
@@ -29,7 +30,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref == 'refs/heads/build/stable-release' || github.ref == 'refs/heads/feature/shared-music-multiuser' }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/build/stable-release' || github.ref == 'refs/heads/feature/shared-music-multiuser' || github.ref == 'refs/heads/feature/tool-discovery' }}
 
 jobs:
   build:
@@ -107,7 +108,7 @@ jobs:
           python -m unittest discover -s test -p 'test_qq_worker.py' -v
 
       - name: Verify combined music service container
-        if: github.ref == 'refs/heads/feature/shared-music-multiuser'
+        if: (github.ref == 'refs/heads/feature/shared-music-multiuser' || github.ref == 'refs/heads/feature/tool-discovery')
         run: |
           docker build -t watermelon-music-check services/shared-music
           docker run --rm watermelon-music-check /opt/qq-python/bin/python -c "from qqmusic_api import __version__; assert __version__ == '0.7.3'"
@@ -165,10 +166,10 @@ jobs:
         run: ./gradlew :app:compileDebugAndroidTestKotlin
 
       - name: Enable KVM for shared music playback tests
-        if: github.ref == 'refs/heads/feature/shared-music-multiuser'
+        if: (github.ref == 'refs/heads/feature/shared-music-multiuser' || github.ref == 'refs/heads/feature/tool-discovery')
         run: sudo chmod 666 /dev/kvm
       - name: Verify shared music background playback on Android
-        if: github.ref == 'refs/heads/feature/shared-music-multiuser'
+        if: (github.ref == 'refs/heads/feature/shared-music-multiuser' || github.ref == 'refs/heads/feature/tool-discovery')
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -181,7 +182,7 @@ jobs:
             adb pull /sdcard/Pictures/WatermelonMusicTests music-ui-previews
 
       - name: Upload music UI previews
-        if: github.ref == 'refs/heads/feature/shared-music-multiuser' && !cancelled()
+        if: (github.ref == 'refs/heads/feature/shared-music-multiuser' || github.ref == 'refs/heads/feature/tool-discovery') && !cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: WatermelonChat-music-ui-previews

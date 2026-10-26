@@ -79,6 +79,8 @@ data class Assistant(
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowSkipReply: Boolean = false,
     val splitBubbleByLine: Boolean = false,             // 按模型自己写的换行拆分成多个独立气泡
+    val toolDiscoveryEnabled: Boolean = false, // Debug opt-in; old profiles keep the full tool surface.
+    val toolDiscoveryMcpServers: Set<Uuid>? = null, // null auto-pins the OB interface; empty means none.
     val splitUserBubbleByLine: Boolean = false,         // 用户消息按换行拆分成多个独立气泡
 )
  

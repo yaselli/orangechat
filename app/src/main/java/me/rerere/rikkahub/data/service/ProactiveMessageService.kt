@@ -26,6 +26,8 @@ import android.util.Log
 import me.rerere.rikkahub.data.ai.executeGenerationTool
 import me.rerere.rikkahub.data.ai.generateModelTurn
 import me.rerere.rikkahub.data.ai.runGenerationToolLoop
+import me.rerere.rikkahub.data.ai.tools.createToolDiscoverySession
+import me.rerere.rikkahub.data.ai.tools.withToolDiscoveryDirectory
 import me.rerere.rikkahub.data.model.updateGenerationMessages
 import me.rerere.rikkahub.data.ai.transformers.forProactiveExtraInfo
 import kotlinx.coroutines.CancellationException
@@ -1476,8 +1478,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         }
         var hasToolCalls = false
         var hasJumpFlag = false
+        val discovery = createToolDiscoverySession(assistant, settings, model, tools)
         val messages = runGenerationToolLoop(
             initialMessages = initialMessages,
+            discovery = discovery,
             maxSteps = MAX_TOOL_STEPS,
             reserveFinalModelTurn = true,
             toolLimitError = "Proactive tool limit reached before a final reply",
@@ -1486,7 +1490,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 Log.d(TAG, "generateWithTools: step $step/${MAX_TOOL_STEPS}")
                 trace.event("generation_step", "step=$step finalTurn=$finalTurn")
             },
-            generateTurn = generateTurn@{ currentMessages, _, step ->
+            generateTurn = generateTurn@{ currentMessages, stepTools, step ->
                 ensureProactiveScheduleAllowed(manualTest)
                 // 流式调用 AI（替代非流式 generateText，兼容 thinking 模型）
                 // The provider-only copy may merge adjacent roles for API compatibility. Never merge
@@ -1494,6 +1498,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // persisted assistant and transfer ownership back to the old message id.
                 val decoratedMessages = memoryRecallService.apply(recallTurn,
                     reactionTurn.apply(currentMessages).withSharedMusicContext(musicContext))
+                    .withToolDiscoveryDirectory(stepTools, model)
                 val requestMessages = mergeAdjacentSameRoleMessages(
                     providerRequest?.applyTo(decoratedMessages) ?: decoratedMessages,
                 )
@@ -1512,7 +1517,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     providerSetting = providerSetting,
                     requestMessages = requestMessages,
                     initialMessages = initialStreamMessages,
-                    params = params,
+                    params = params.copy(tools = stepTools),
                     model = model,
                     stream = true,
                     mergeUsage = false,
