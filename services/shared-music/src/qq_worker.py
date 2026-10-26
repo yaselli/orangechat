@@ -71,8 +71,10 @@ async def dispatch(message):
     from qqmusic_api.modules.song import SongFileInfo, SongFileType, SongQueryInfo
 
     method = message["method"]
+    if method in ("song", "url", "lyrics"):
+        number(message.get("songId"))
     credential = Credential.model_validate(message.get("credential") or {})
-    if method not in ("qr", "poll", "search", "song", "lyrics") and not credential.musickey:
+    if method not in ("qr", "poll") and not credential.musickey:
         raise MusicError("MUSIC_NOT_LOGGED_IN")
     async with Client(credential=credential, device_path=message["devicePath"]) as client:
         if credential.musickey and credential.key_expires_in > 0 and credential.is_expired():
@@ -144,14 +146,18 @@ async def dispatch(message):
         return {"result": result, "credential": client.credential.model_dump(mode="json", by_alias=True)}
 
 
-def error_code(error):
+def error_code(error, authenticated=False):
     """Do not serialize SDK exceptions: they may contain request URLs or credentials."""
     if isinstance(error, MusicError):
         return str(error)
     name = type(error).__name__
     if "Credential" in name or name == "LoginAuthExpiredError":
         return "MUSIC_LOGIN_EXPIRED"
-    if name in ("RatelimitedError", "LoginRateLimitError", "LoginAccountRestrictedError", "LoginDeviceLimitError"):
+    if name == "RatelimitedError":
+        return "MUSIC_QQ_VERIFICATION_REQUIRED" if authenticated else "MUSIC_NOT_LOGGED_IN"
+    if name in ("LoginAccountRestrictedError", "LoginDeviceLimitError"):
+        return "MUSIC_QQ_ACCOUNT_RESTRICTED"
+    if name == "LoginRateLimitError":
         return "MUSIC_RATE_LIMITED"
     return "MUSIC_QQ_UNAVAILABLE" if isinstance(error, ImportError) else "MUSIC_UPSTREAM_ERROR"
 
@@ -167,7 +173,8 @@ async def main():
                 async with semaphore:
                     response = {"id": message["id"], "ok": True, **await dispatch(message)}
         except Exception as error:
-            response = {"id": message.get("id"), "ok": False, "error": error_code(error)}
+            authenticated = bool((message.get("credential") or {}).get("musickey"))
+            response = {"id": message.get("id"), "ok": False, "error": error_code(error, authenticated)}
         encoded = json.dumps(response, ensure_ascii=True, separators=(",", ":"))
         if len(encoded) > 2_000_000:
             encoded = json.dumps({"id": message.get("id"), "ok": False, "error": "MUSIC_UPSTREAM_ERROR"})

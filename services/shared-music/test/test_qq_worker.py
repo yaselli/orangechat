@@ -33,8 +33,15 @@ class QQAdapterTest(unittest.TestCase):
 
     def test_errors_do_not_echo_sdk_messages(self):
         self.assertEqual("MUSIC_UPSTREAM_ERROR", worker.error_code(ValueError("musickey=secret")))
-        limited = type("RatelimitedError", (Exception,), {})("credential=secret")
-        self.assertEqual("MUSIC_RATE_LIMITED", worker.error_code(limited))
+        from qqmusic_api import RatelimitedError
+        limited = RatelimitedError(code=2001, data={"feedbackURL": "https://example.invalid/private-verification"})
+        self.assertEqual("MUSIC_NOT_LOGGED_IN", worker.error_code(limited))
+        self.assertEqual("MUSIC_QQ_VERIFICATION_REQUIRED", worker.error_code(limited, authenticated=True))
+
+    def test_frequency_and_account_limits_are_not_mislabeled_as_verification(self):
+        from qqmusic_api import LoginRateLimitError, LoginDeviceLimitError
+        self.assertEqual("MUSIC_RATE_LIMITED", worker.error_code(LoginRateLimitError(code=104604)))
+        self.assertEqual("MUSIC_QQ_ACCOUNT_RESTRICTED", worker.error_code(LoginDeviceLimitError(code=20279)))
 
     def test_pinned_sdk_credentials_round_trip_without_field_loss(self):
         from qqmusic_api import Credential, __version__

@@ -77,7 +77,31 @@ test('the real Python worker rejects malformed IDs without leaking upstream cred
   try {
     await assert.rejects(bridge.call('song', { songId: '../private', credential: {}, devicePath: path.join(root, 'device.json') }),
       error => error.code === 'MUSIC_INPUT_ERROR' && !error.message.includes('private'));
+    await assert.rejects(bridge.call('search', { query: 'test', credential: {}, devicePath: path.join(root, 'device.json') }),
+      error => error.code === 'MUSIC_NOT_LOGGED_IN' && error.status === 401);
   } finally { bridge.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('QQ searches require this device login before any upstream call and carry its credential afterwards', async t => {
+  const f = await fixture(t);
+  const response = await f.call('/search?q=test');
+  assert.equal(response.status, 401);
+  assert.equal(response.body.error, 'MUSIC_NOT_LOGGED_IN');
+  assert.equal(f.seen.length, 0);
+  await f.login();
+  assert.equal((await f.call('/search?q=test')).status, 200);
+  const request = f.seen.find(x => x.method === 'search').input;
+  assert.equal(request.credential.musickey, 'private-login-ticket');
+  assert.ok(request.credential.musicid > 0);
+});
+
+test('repeating a successful QQ search reuses only this device cache and relogin clears it', async t => {
+  const f = await fixture(t); await f.login();
+  await f.call('/search?q=test'); await f.call('/search?q=test');
+  assert.equal(f.seen.filter(x => x.method === 'search').length, 1);
+  await f.call('/logout', {}); await f.login();
+  await f.call('/search?q=test');
+  assert.equal(f.seen.filter(x => x.method === 'search').length, 2);
 });
 
 test('QQ QR identifiers and credentials stay server-side and a guessed QR key cannot log in', async t => {

@@ -7,7 +7,9 @@ const path = require('node:path');
 function createQQBridge({ executable = process.env.QQ_PYTHON || 'python3', script = path.join(__dirname, 'qq_worker.py') } = {}) {
   let worker, buffer = '', sequence = 0;
   const pending = new Map();
-  const fail = code => Object.assign(new Error(code), { code, status: 503 });
+  const fail = code => Object.assign(new Error(code), { code, status: ({ MUSIC_INPUT_ERROR: 400,
+    MUSIC_NOT_LOGGED_IN: 401, MUSIC_LOGIN_EXPIRED: 401, MUSIC_QQ_VERIFICATION_REQUIRED: 403,
+    MUSIC_QQ_ACCOUNT_RESTRICTED: 403, MUSIC_RATE_LIMITED: 429 })[code] || 503 });
   function stop() {
     const old = worker;
     worker = null;
@@ -38,7 +40,8 @@ function createQQBridge({ executable = process.env.QQ_PYTHON || 'python3', scrip
         pending.delete(response.id); clearTimeout(task.timer);
         if (response.ok) task.resolve(response);
         else task.reject(fail(new Set(['MUSIC_LOGIN_EXPIRED', 'MUSIC_NOT_LOGGED_IN', 'MUSIC_UNAVAILABLE',
-          'MUSIC_RATE_LIMITED', 'MUSIC_QQ_UNAVAILABLE', 'MUSIC_INPUT_ERROR']).has(response.error) ? response.error : 'MUSIC_UPSTREAM_ERROR'));
+          'MUSIC_RATE_LIMITED', 'MUSIC_QQ_VERIFICATION_REQUIRED', 'MUSIC_QQ_ACCOUNT_RESTRICTED',
+          'MUSIC_QQ_UNAVAILABLE', 'MUSIC_INPUT_ERROR']).has(response.error) ? response.error : 'MUSIC_UPSTREAM_ERROR'));
       }
     });
     // An idle worker must not keep Node alive; active requests have their own deadline timers.

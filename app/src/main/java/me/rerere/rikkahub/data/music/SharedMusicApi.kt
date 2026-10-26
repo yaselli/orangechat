@@ -55,8 +55,10 @@ class MusicApiException(val code: String) :
         when (code) {
             "UNAUTHORIZED" -> "音乐连接已失效，请重新连接服务"
             "MUSIC_ACCESS_DENIED" -> "音乐服务的访问口令不正确"
-            "MUSIC_NOT_LOGGED_IN",
+            "MUSIC_NOT_LOGGED_IN" -> "请先扫码登录音乐账号"
             "MUSIC_LOGIN_EXPIRED" -> "音乐账号登录已过期，请重新扫码"
+            "MUSIC_QQ_VERIFICATION_REQUIRED" -> "QQ 音乐要求安全验证（2001），请检查官方账号状态并重新扫码；仍失败时请反馈此错误码"
+            "MUSIC_QQ_ACCOUNT_RESTRICTED" -> "QQ 音乐账号或登录设备受到限制，请在官方客户端检查"
             "MUSIC_QQ_UNAVAILABLE" -> "QQ 音乐服务暂不可用，请检查服务端部署或稍后重试"
             "MUSIC_UNAVAILABLE" -> "这首歌暂时无法播放"
             "MUSIC_RATE_LIMITED" -> "操作有些频繁，请稍后再试"
