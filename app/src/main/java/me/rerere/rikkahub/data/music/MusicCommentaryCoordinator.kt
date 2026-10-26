@@ -253,7 +253,7 @@ class MusicCommentaryCoordinator(
                     wakeLock?.let { if (it.isHeld) it.release() }
                 }
             }
-        if (!session.tryClaimGeneration(job)) {
+        if (!session.tryClaimGeneration(job, pauseQueueOnFailure = false)) {
             job.cancel()
             return
         }

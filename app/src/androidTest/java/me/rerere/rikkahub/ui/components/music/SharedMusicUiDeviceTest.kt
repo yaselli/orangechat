@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.ui.components.music
 
+import android.content.ContentValues
 import android.graphics.Bitmap
+import android.provider.MediaStore
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -12,8 +14,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
-import java.io.File
 import me.rerere.rikkahub.data.music.*
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
@@ -25,6 +27,7 @@ import org.junit.runner.RunWith
  * Narrow phone, large text, dark mode and actual lyric selection; no music account or model calls.
  */
 @RunWith(AndroidJUnit4::class)
+@SdkSuppress(minSdkVersion = 29)
 class SharedMusicUiDeviceTest {
     @get:Rule val compose = createComposeRule()
     private val context
@@ -102,8 +105,17 @@ class SharedMusicUiDeviceTest {
 
     private fun screenshot(name: String) {
         compose.waitForIdle()
-        val folder = File(context.getExternalFilesDir(null), "music-ui-previews").apply { mkdirs() }
-        File(folder, "$name.png").outputStream().use { output ->
+        // Gradle uninstalls the app after instrumentation; public test images survive that cleanup.
+        val values =
+            ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/WatermelonMusicTests")
+            }
+        val resolver = context.contentResolver
+        val uri =
+            requireNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
+        requireNotNull(resolver.openOutputStream(uri)).use { output ->
             compose
                 .onRoot()
                 .captureToImage()

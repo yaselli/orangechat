@@ -178,7 +178,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           script: |
             ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.music.MusicPlayerDeviceTest,me.rerere.rikkahub.ui.components.music.SharedMusicUiDeviceTest
-            adb pull /sdcard/Android/data/me.rerere.orangechat.debug/files/music-ui-previews music-ui-previews
+            adb pull /sdcard/Pictures/WatermelonMusicTests music-ui-previews
 
       - name: Upload music UI previews
         if: github.ref == 'refs/heads/feature/shared-music-multiuser' && !cancelled()

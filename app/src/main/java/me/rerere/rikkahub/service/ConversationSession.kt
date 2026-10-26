@@ -144,7 +144,8 @@ class ConversationSession(
         }
     }
 
-    fun setJob(job: Job?) = synchronized(claimLock) {
+    /** Optional background events can yield without pausing the normal send queue. */
+    fun setJob(job: Job?, pauseQueueOnFailure: Boolean = true) = synchronized(claimLock) {
         val previous = _generationJob.value
         _generationJob.value = job
         if (previous !== job) previous?.cancel()
@@ -156,7 +157,7 @@ class ConversationSession(
                     true
                 } else false
             }
-            if (cleared) onGenerationFinished(id, cause)
+            if (cleared) onGenerationFinished(id, if (pauseQueueOnFailure) cause else null)
             if (cleared && refCount.get() <= 0) {
                 scheduleIdleCheck()
             }
@@ -182,11 +183,11 @@ class ConversationSession(
      */
     private val claimLock = Any()
 
-    fun tryClaimGeneration(newJob: Job): Boolean = synchronized(claimLock) {
+    fun tryClaimGeneration(newJob: Job, pauseQueueOnFailure: Boolean = true): Boolean = synchronized(claimLock) {
         if (isGenerating || messageQueue.state.value.messages.isNotEmpty() || submittingMessage != null) {
             return@synchronized false
         }
-        setJob(newJob)
+        setJob(newJob, pauseQueueOnFailure)
         true
     }
 
