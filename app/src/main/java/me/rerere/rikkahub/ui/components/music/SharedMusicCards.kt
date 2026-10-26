@@ -146,7 +146,10 @@ fun SharedMusicCards(
                     AsyncImage(musicCoverUrl(song.coverUrl), null, Modifier.size(56.dp))
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                         Text(song.title, style = MaterialTheme.typography.titleMedium)
-                        Text(song.artist, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "${musicPlatformName(song.platform)} · ${song.artist}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                         val note = (card["note"] as? JsonPrimitive)?.contentOrNull.orEmpty()
                         if (note.isNotBlank()) Text(note)
                         (card["lines"] as? JsonArray)?.take(8)?.forEach { line ->

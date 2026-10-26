@@ -68,9 +68,21 @@ jobs:
           umask 077
           printf '%s' "$KEY_BASE64" | base64 --decode > app/app.key
           printf '%s\n' "$SIGNING_CONFIG" > local.properties
+      - name: Set up Python for QQ music service
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/shared-music/requirements.txt
+      - name: Install QQ music protocol SDK
+        run: python -m pip install -r services/shared-music/requirements.txt
+
       - name: Verify shared music user isolation
         working-directory: services/shared-music
-        run: npm ci --ignore-scripts && npm test
+        run: |
+          npm ci --ignore-scripts
+          QQ_PYTHON=python npm test
+          python -m unittest discover -s test -p 'test_qq_worker.py' -v
 
       - name: Unit tests
         if: steps.accepted.outputs.approved != 'true'

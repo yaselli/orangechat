@@ -39,7 +39,14 @@ internal fun musicServerUrl(value: String): HttpUrl {
 }
 
 internal fun musicCoverUrl(value: String): String? = runCatching {
-    value.toHttpUrl().takeIf { it.isHttps && it.host.endsWith(".music.126.net") }?.toString()
+    value
+        .toHttpUrl()
+        .takeIf {
+            it.isHttps &&
+                (it.host.endsWith(".music.126.net") ||
+                    it.host in setOf("y.gtimg.cn", "qpic.y.qq.com", "p.qpic.cn"))
+        }
+        ?.toString()
 }
     .getOrNull()
 
@@ -49,7 +56,8 @@ class MusicApiException(val code: String) :
             "UNAUTHORIZED" -> "音乐连接已失效，请重新连接服务"
             "MUSIC_ACCESS_DENIED" -> "音乐服务的访问口令不正确"
             "MUSIC_NOT_LOGGED_IN",
-            "MUSIC_LOGIN_EXPIRED" -> "网易云登录已过期，请重新扫码"
+            "MUSIC_LOGIN_EXPIRED" -> "音乐账号登录已过期，请重新扫码"
+            "MUSIC_QQ_UNAVAILABLE" -> "QQ 音乐服务暂不可用，请检查服务端部署或稍后重试"
             "MUSIC_UNAVAILABLE" -> "这首歌暂时无法播放"
             "MUSIC_RATE_LIMITED" -> "操作有些频繁，请稍后再试"
             "MUSIC_SERVICE_FULL",
@@ -103,6 +111,8 @@ class SharedMusicApi(client: OkHttpClient) {
                 .apply {
                     check(connection.token.isNotBlank()) { "请先连接音乐服务" }
                     header("Authorization", "Bearer ${connection.token}")
+                    require(connection.platform in setOf("netease", "qq")) { "不支持的音乐平台" }
+                    header("X-Music-Platform", connection.platform)
                     method(
                         method,
                         if (method in listOf("GET", "DELETE")) null
@@ -160,3 +170,16 @@ class SharedMusicApi(client: OkHttpClient) {
         return MusicConnection(normalized, token)
     }
 }
+
+internal fun musicStreamAllowed(value: String, platform: String): Boolean = runCatching {
+    val url = value.toHttpUrl()
+    url.isHttps &&
+        url.username.isEmpty() &&
+        url.password.isEmpty() &&
+        when (platform) {
+            "netease" -> url.host.endsWith(".music.126.net")
+            "qq" -> url.host.endsWith(".stream.qqmusic.qq.com")
+            else -> false
+        }
+}
+    .getOrDefault(false)

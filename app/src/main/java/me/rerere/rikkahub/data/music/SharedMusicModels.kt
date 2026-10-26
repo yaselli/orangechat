@@ -28,6 +28,7 @@ data class MusicSong(
     val durationMs: Long = 0,
     val album: String = "",
     val lyrics: List<MusicLyric> = emptyList(),
+    val platform: String = "netease",
 )
 
 @Serializable
@@ -40,8 +41,9 @@ data class MusicQueueItem(
     val durationMs: Long = 0,
     val addedBy: String = "you",
     val note: String = "",
+    val platform: String = "netease",
 ) {
-    fun song() = MusicSong(songId, title, artist, coverUrl, durationMs)
+    fun song() = MusicSong(songId, title, artist, coverUrl, durationMs, platform = platform)
 }
 
 @Serializable
@@ -56,6 +58,7 @@ data class MusicConnection(
     val server: String = "",
     val token: String = "",
     val assistants: Set<String> = emptySet(),
+    val platform: String = "netease",
 )
 
 data class MusicPlayback(
@@ -88,6 +91,7 @@ internal fun MusicPlayback.contextFor(assistantId: String, now: Long): String? {
     val context = buildJsonObject {
         put("state", state)
         put("song_id", song.songId)
+        put("platform", song.platform)
         put("title", song.title.take(160))
         put("artist", song.artist.take(160))
         put("position", musicTime(positionMs))
@@ -123,7 +127,7 @@ fun MusicSong.cardPart(
     lines: List<MusicLyric> = emptyList(),
 ): UIMessagePart.Text =
     UIMessagePart.Text(
-        "分享歌曲：$title — $artist\nhttps://music.163.com/#/song?id=$songId" +
+        "分享歌曲：$title — $artist\n${musicShareUrl(platform, songId)}" +
             (if (note.isBlank()) "" else "\n${note.take(300)}") +
             lines.take(8).joinToString(
                 separator = "\n",
@@ -137,6 +141,7 @@ fun MusicSong.cardPart(
                     SHARED_MUSIC_CARD,
                     buildJsonObject {
                         put("songId", songId)
+                        put("platform", platform)
                         put("title", title)
                         put("artist", artist)
                         put("coverUrl", coverUrl)
@@ -164,3 +169,14 @@ fun MusicSong.cardPart(
 
 fun UIMessagePart.musicCard(): JsonObject? =
     (this as? UIMessagePart.Text)?.metadata?.get(SHARED_MUSIC_CARD) as? JsonObject
+
+fun musicPlatformName(platform: String): String = if (platform == "qq") "QQ 音乐" else "网易云音乐"
+
+internal fun musicShareUrl(platform: String, songId: String): String {
+    require(songId.matches(Regex("[0-9]{1,20}"))) { "歌曲 ID 不正确" }
+    return when (platform) {
+        "netease" -> "https://music.163.com/#/song?id=$songId"
+        "qq" -> "https://i.y.qq.com/v8/playsong.html?songid=$songId"
+        else -> error("不支持的音乐平台")
+    }
+}

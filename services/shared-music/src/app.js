@@ -58,7 +58,7 @@ function createApp(options) {
   function route(method, name, execute) {
     app[method]('/api/music' + name, async (req, res, next) => {
       try {
-        const result = await tenants.run(token(req), tenant => execute(tenant, req));
+        const result = await tenants.run(token(req), tenant => execute(tenant, req), req.get('X-Music-Platform') || 'netease');
         res.json({ ok: true, ...result });
       } catch (error) { next(error); }
     });

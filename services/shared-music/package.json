@@ -1,8 +1,8 @@
 {
   "name": "watermelon-shared-music",
-  "version": "0.1.0",
-  "description": "分你一只耳机：让你的 AI 伴侣（TA）和你一起听网易云——看得见你在听什么，能给你排歌、直接放歌、发歌卡。",
-  "license": "MIT",
+  "version": "0.2.0",
+  "description": "西瓜瓣一起听歌：网易云与 QQ 音乐独立登录、原生播放、歌卡与 AI 排歌",
+  "license": "AGPL-3.0-only",
   "main": "src/server.js",
   "scripts": {
     "start": "node --env-file-if-exists=.env src/server.js",

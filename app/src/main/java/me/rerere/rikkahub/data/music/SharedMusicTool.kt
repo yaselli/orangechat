@@ -12,11 +12,12 @@ fun createSharedMusicTool(
     manager: SharedMusicManager,
     assistantId: String,
     conversationId: String,
-) =
+) = run {
+    val target = manager.connection.value
     Tool(
         name = "shared_music",
         description =
-            "和用户一起听网易云。你读歌曲、进度和歌词，听不到音频。可查当前播放、搜歌、读歌词、分享歌卡、排歌。" +
+            "和用户一起听当前选中的音乐平台（网易云或 QQ 音乐）。你读歌曲、进度和歌词，听不到音频。可查当前播放、搜歌、读歌词、分享歌卡、排歌。" +
                 "play_now 在用户正听歌时切歌，否则备好歌曲等她点击播放。删歌、排序和播放模式由用户控制。",
         parameters = {
             InputSchema.Obj(
@@ -84,5 +85,6 @@ fun createSharedMusicTool(
                 required = listOf("action"),
             )
         },
-        execute = { manager.executeTool(assistantId, conversationId, it.jsonObject) },
+        execute = { manager.executeTool(assistantId, conversationId, it.jsonObject, target) },
     )
+}

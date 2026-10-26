@@ -31,7 +31,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.plugin.webview.MusicPlayerService
-import okhttp3.HttpUrl.Companion.toHttpUrl
 
 class SharedMusicManager(
     private val context: Context,
@@ -117,6 +116,25 @@ class SharedMusicManager(
         refreshAccount()
     }
 
+    suspend fun switchPlatform(platform: String) = operations.withLock {
+        switchPlatformLocked(platform)
+    }
+
+    private suspend fun switchPlatformLocked(platform: String) {
+        require(platform in setOf("netease", "qq")) { "不支持的音乐平台" }
+        val current = _connection.value ?: error("请先连接音乐服务")
+        if (current.platform == platform) return
+        stop()
+        val updated = current.copy(platform = platform)
+        withContext(Dispatchers.IO) { credentials.save(updated) }
+        _connection.value = updated
+        _account.value = null
+        _queue.value = MusicQueue()
+        _error.value = null
+        refreshAccount()
+        refreshQueue()
+    }
+
     suspend fun enableAssistant(assistantId: String, enabled: Boolean) = operations.withLock {
         val current = _connection.value ?: error("请先连接音乐服务")
         val updated =
@@ -196,6 +214,7 @@ class SharedMusicManager(
     }
 
     suspend fun enqueue(song: MusicSong, next: Boolean = true) = operations.withLock {
+        require(song.platform == _connection.value?.platform) { "请先切换到歌曲所属平台" }
         setQueue(
             request(
                 listOf("queue", if (next) "next" else "append"),
@@ -222,8 +241,9 @@ class SharedMusicManager(
     }
 
     suspend fun play(song: MusicSong, assistantId: String, conversationId: String) {
-        val turn = epoch.incrementAndGet()
         operations.withLock {
+            switchPlatformLocked(song.platform)
+            val turn = epoch.incrementAndGet()
             setQueue(
                 request(
                     listOf("queue", "now"),
@@ -337,6 +357,8 @@ class SharedMusicManager(
         val current = _playback.value ?: return
         val turn = epoch.incrementAndGet()
         operations.withLock {
+            if (epoch.get() != turn || current.song.platform != _connection.value?.platform)
+                return@withLock
             refreshQueue()
             val items = _queue.value.items
             if (items.isEmpty()) return@withLock
@@ -359,9 +381,18 @@ class SharedMusicManager(
         assistantId: String,
         conversationId: String,
         input: JsonObject,
+        target: MusicConnection?,
     ): List<UIMessagePart> {
         val playbackEpoch = epoch.get()
         return operations.withLock {
+            check(
+                target != null &&
+                    target.server == _connection.value?.server &&
+                    target.token == _connection.value?.token &&
+                    target.platform == _connection.value?.platform
+            ) {
+                "音乐平台已切换，请重新确认当前歌曲"
+            }
             check(isEnabled(assistantId)) { "此角色未开启一起听歌" }
             val current = _playback.value
             check(current == null || current.assistantId == assistantId) { "当前由其他角色陪伴听歌" }
@@ -409,8 +440,18 @@ class SharedMusicManager(
                         playbackWarning = failure.message ?: "播放器暂时无法打开"
                     }
             }
-            val delivery = result["delivery"]?.jsonObject?.get("card") as? JsonObject
+            val delivery =
+                (result["delivery"]?.jsonObject?.get("card") as? JsonObject)?.let { card ->
+                    JsonObject(
+                        card +
+                            ("platform" to
+                                kotlinx.serialization.json.JsonPrimitive(
+                                    _connection.value?.platform ?: "netease"
+                                ))
+                    )
+                }
             val summary = buildJsonObject {
+                put("platform", _connection.value?.platform ?: "netease")
                 (result - "delivery").forEach { (key, value) -> put(key, value) }
                 if (action == "play_now") {
                     put("text", "已保存歌卡。是否已播放以当前设备播放器状态为准；待播放状态需要用户点击。")
@@ -453,7 +494,8 @@ class SharedMusicManager(
         val result = api.request(connection, path, method, body, query)
         if (
             _connection.value?.token != connection.token ||
-                _connection.value?.server != connection.server
+                _connection.value?.server != connection.server ||
+                _connection.value?.platform != connection.platform
         ) {
             throw CancellationException("Music connection changed")
         }
@@ -461,7 +503,12 @@ class SharedMusicManager(
     }
 
     private fun setQueue(response: JsonObject) {
-        response["queue"]?.let { _queue.value = api.json.decodeFromJsonElement(it) }
+        response["queue"]?.let {
+            val decoded = api.json.decodeFromJsonElement<MusicQueue>(it)
+            val platform = _connection.value?.platform ?: "netease"
+            _queue.value =
+                decoded.copy(items = decoded.items.map { item -> item.copy(platform = platform) })
+        }
     }
 
     private suspend fun playResolved(
@@ -480,8 +527,7 @@ class SharedMusicManager(
         val trial = playbackSource?.get("trial")?.jsonPrimitive?.booleanOrNull == true
         val resumePosition = if (trial) 0 else positionMs
         if (url != null) {
-            val parsed = url.toHttpUrl()
-            require(parsed.isHttps && parsed.host.endsWith(".music.126.net")) { "播放地址不受支持" }
+            require(musicStreamAllowed(url, detail.platform)) { "播放地址不受支持" }
         }
         if (turn != epoch.get()) return
         withContext(Dispatchers.Main.immediate) {

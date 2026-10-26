@@ -16,6 +16,34 @@ import org.junit.Test
 
 class SharedMusicApiTest {
     @Test
+    fun `platform requests send a separate selector without exposing it in a credential URL`() =
+        runBlocking {
+            val received = java.util.Collections.synchronizedList(mutableListOf<String>())
+            val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+            server.createContext("/") { exchange ->
+                received.add(exchange.requestHeaders.getFirst("X-Music-Platform"))
+                assertNull(exchange.requestURI.query)
+                val body = """{"ok":true}""".toByteArray()
+                exchange.sendResponseHeaders(200, body.size.toLong())
+                exchange.responseBody.use { it.write(body) }
+            }
+            server.start()
+            val client = OkHttpClient()
+            try {
+                val api = SharedMusicApi(client)
+                val connection =
+                    MusicConnection("http://127.0.0.1:${server.address.port}", "device-token")
+                api.request(connection, listOf("status"))
+                api.request(connection.copy(platform = "qq"), listOf("status"))
+                assertEquals(listOf("netease", "qq"), received)
+            } finally {
+                server.stop(0)
+                client.connectionPool.evictAll()
+                client.dispatcher.executorService.shutdown()
+            }
+        }
+
+    @Test
     fun `self-hosted pairing uses the owner key once and keeps only the returned device credential`() =
         runBlocking {
             val ownerKey = "own-private-server-access-key"

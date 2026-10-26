@@ -5,6 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { createMusicAuthority } = require('../vendor/one-earbud/server/music/authority');
 const { createMusicAuthStore } = require('../vendor/one-earbud/server/music/store');
+const { createQQAuthority } = require('./qq');
 const { createTaMusicTool } = require('../vendor/one-earbud/server/agent/tool-contract');
 
 function failure(code, status = 401) {
@@ -12,7 +13,7 @@ function failure(code, status = 401) {
 }
 
 /** A random installation credential selects the tenant; callers never supply a user ID or disk path. */
-function createTenants({ directory, maxUsers = 1000, maxCached = 100, client, now = Date.now } = {}) {
+function createTenants({ directory, maxUsers = 1000, maxCached = 100, client, qqFactory = createQQAuthority, now = Date.now } = {}) {
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   const entries = new Map();
   let count = fs.readdirSync(directory).filter(x => /^[a-f0-9]{64}$/.test(x)).length;
@@ -47,6 +48,20 @@ function createTenants({ directory, maxUsers = 1000, maxCached = 100, client, no
         tenant.tool = createTaMusicTool({ authority: tenant.authority });
       };
       tenant.reset();
+      tenant.qq = () => {
+        if (!tenant.qqTenant) {
+          const qqRoot = path.join(root, 'qq');
+          fs.mkdirSync(qqRoot, { recursive: true, mode: 0o700 });
+          const qqStore = createMusicAuthStore({ file: path.join(qqRoot, 'auth.json') });
+          const value = { id, root: qqRoot };
+          value.reset = () => {
+            value.authority = qqFactory({ root: qqRoot, store: qqStore, now });
+            value.tool = createTaMusicTool({ authority: value.authority });
+          };
+          value.reset(); tenant.qqTenant = value;
+        }
+        return tenant.qqTenant;
+      };
       entries.set(id, tenant);
     }
     // Refresh LRU order without touching credentials or listening timestamps.
@@ -55,13 +70,14 @@ function createTenants({ directory, maxUsers = 1000, maxCached = 100, client, no
     entries.set(id, tenant);
     return tenant;
   }
-  async function run(token, operation) {
+  async function run(token, operation, platform = 'netease') {
+    if (!['netease', 'qq'].includes(platform)) throw failure('MUSIC_INPUT_ERROR', 400);
     const tenant = resolve(token);
     if (tenant.pending >= 20) throw failure('MUSIC_BUSY', 429);
     tenant.pending++;
     const task = tenant.tail.then(async () => {
       if (!fs.existsSync(path.join(tenant.root, 'session.json'))) throw failure('UNAUTHORIZED');
-      return operation(tenant);
+      return operation(platform === 'qq' ? tenant.qq() : tenant);
     });
     tenant.tail = task.catch(() => {});
     try { return await task; } finally { tenant.pending--; }
@@ -69,6 +85,7 @@ function createTenants({ directory, maxUsers = 1000, maxCached = 100, client, no
   async function revoke(token) {
     return run(token, tenant => {
       tenant.authority.logout();
+      tenant.qqTenant?.authority.logout();
       fs.rmSync(tenant.root, { recursive: true });
       entries.delete(tenant.id);
       count--;

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.components.music
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -58,6 +59,9 @@ fun SharedMusicSheet(
     var sources by remember { mutableStateOf<JsonObject?>(null) }
     var qrKey by remember { mutableStateOf("") }
     var qrStatus by remember { mutableStateOf("") }
+    var qrImage by remember { mutableStateOf("") }
+    val platform = connection?.platform ?: "netease"
+    val platformName = musicPlatformName(platform)
     var selectedLines by remember(playback?.song?.songId) { mutableStateOf(emptySet<Int>()) }
     val connected = account?.get("connected")?.jsonPrimitive?.booleanOrNull == true
     fun action(block: suspend () -> Unit) {
@@ -71,15 +75,23 @@ fun SharedMusicSheet(
             }
         }
     }
-    LaunchedEffect(connection?.token) {
+    LaunchedEffect(connection?.token, platform) {
         if (connection != null)
             manager.reportFailure {
                 manager.refreshAccount()
                 manager.refreshQueue()
             }
     }
+    LaunchedEffect(platform) {
+        qrKey = ""
+        qrImage = ""
+        qrStatus = ""
+        query = ""
+        sourceId = null
+        selectedLines = emptySet()
+    }
     val remoteQuery = if (sourceId == null) query else ""
-    LaunchedEffect(connection?.token, connected, remoteQuery, sourceId) {
+    LaunchedEffect(connection?.token, platform, connected, remoteQuery, sourceId) {
         songs = emptyList()
         sources = null
         if (connected)
@@ -91,7 +103,7 @@ fun SharedMusicSheet(
                 else sources = manager.sources()
             }
     }
-    LaunchedEffect(qrKey, connection?.token) {
+    LaunchedEffect(qrKey, connection?.token, platform) {
         if (qrKey.isNotEmpty()) {
             val started = System.currentTimeMillis()
             while (System.currentTimeMillis() - started < 180000) {
@@ -118,14 +130,25 @@ fun SharedMusicSheet(
         ) {
             Text("分你一只耳机", style = MaterialTheme.typography.headlineSmall)
             Text(
-                "和你的 AI 一起听网易云",
+                "和你的 AI 一起听歌",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (connection != null)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("netease", "qq").forEach { value ->
+                        FilterChip(
+                            selected = platform == value,
+                            onClick = { action { manager.switchPlatform(value) } },
+                            enabled = !busy,
+                            label = { Text(musicPlatformName(value)) },
+                        )
+                    }
+                }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (connection == null) {
-                Text("连接音乐服务后，用网易云扫码登录你自己的账号。")
+                Text("连接自己的音乐服务后，选择网易云或 QQ 音乐并登录。")
                 OutlinedTextField(
                     server,
                     { server = it },
@@ -155,15 +178,16 @@ fun SharedMusicSheet(
                     Text("连接")
                 }
                 Text(
-                    "先在自己的服务器部署配套音乐服务，再填写地址和部署时设置的访问口令。网易云登录在下一步扫码完成。",
+                    "先在自己的服务器部署配套音乐服务，再填写地址和部署时设置的访问口令。音乐账号登录在下一步扫码完成。",
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else if (!connected) {
-                Text("登录你的网易云账号", style = MaterialTheme.typography.titleMedium)
+                Text("登录你的$platformName 账号", style = MaterialTheme.typography.titleMedium)
                 Button(
                     onClick = {
                         action {
                             val result = manager.qr()
+                            qrImage = result["qrImage"]?.jsonPrimitive?.contentOrNull.orEmpty()
                             qrKey = result["key"]?.jsonPrimitive?.contentOrNull.orEmpty()
                             qrStatus = "等待扫码"
                         }
@@ -172,9 +196,10 @@ fun SharedMusicSheet(
                 ) {
                     Text(if (qrKey.isEmpty()) "生成登录二维码" else "重新生成二维码")
                 }
-                if (qrKey.isNotEmpty()) MusicLoginQr(qrKey, qrStatus)
+                if (qrKey.isNotEmpty()) MusicLoginQr(qrKey, qrStatus, platform, qrImage)
                 Text(
-                    "同一台手机：保存二维码，再到网易云「扫一扫」中从相册选择。请在网易云内确认授权。",
+                    if (platform == "qq") "使用手机 QQ 扫码授权 QQ 音乐。同一台手机可先保存二维码，再用 QQ 扫一扫从相册选择。"
+                    else "同一台手机：保存二维码，再到网易云「扫一扫」中从相册选择。请在网易云内确认授权。",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 TextButton(
@@ -192,7 +217,8 @@ fun SharedMusicSheet(
                 val profile = account?.get("profile") as? JsonObject
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        profile?.get("nickname")?.jsonPrimitive?.contentOrNull ?: "已登录网易云",
+                        profile?.get("nickname")?.jsonPrimitive?.contentOrNull
+                            ?: "已登录$platformName",
                         Modifier.weight(1f),
                     )
                     TextButton(
@@ -274,12 +300,24 @@ fun SharedMusicSheet(
                             if (query.isBlank() && sourceId == null) {
                                 item {
                                     Row {
-                                        TextButton(onClick = { sourceId = "daily" }) {
-                                            Text("每日推荐")
-                                        }
-                                        TextButton(onClick = { sourceId = "radar" }) {
-                                            Text("私人雷达")
-                                        }
+                                        (sources?.get("specials") as? JsonArray)
+                                            .orEmpty()
+                                            .forEach { entry ->
+                                                val item = entry.jsonObject
+                                                val id =
+                                                    item["id"]
+                                                        ?.jsonPrimitive
+                                                        ?.contentOrNull
+                                                        .orEmpty()
+                                                TextButton(onClick = { sourceId = id }) {
+                                                    Text(
+                                                        item["name"]
+                                                            ?.jsonPrimitive
+                                                            ?.contentOrNull
+                                                            .orEmpty()
+                                                    )
+                                                }
+                                            }
                                     }
                                 }
                                 items((sources?.get("playlists") as? JsonArray).orEmpty()) {
@@ -525,28 +563,44 @@ fun SharedMusicSheet(
 }
 
 @Composable
-private fun MusicLoginQr(key: String, status: String) {
+private fun MusicLoginQr(key: String, status: String, platform: String, image: String) {
     val context = LocalContext.current
     val bitmap =
-        remember(key) {
-            val login =
-                Uri.Builder()
-                    .scheme("https")
-                    .authority("music.163.com")
-                    .appendPath("login")
-                    .appendQueryParameter("codekey", key)
-                    .build()
-                    .toString()
-            val matrix = QRCodeWriter().encode(login, BarcodeFormat.QR_CODE, 400, 400)
-            Bitmap.createBitmap(400, 400, Bitmap.Config.RGB_565).apply {
-                val pixels =
-                    IntArray(400 * 400) { n ->
-                        if (matrix[n % 400, n / 400]) android.graphics.Color.BLACK
-                        else android.graphics.Color.WHITE
-                    }
-                setPixels(pixels, 0, 400, 0, 0, 400, 400)
+        remember(key, platform, image) {
+            if (platform == "qq") {
+                runCatching {
+                    require(image.startsWith("data:image/png;base64,") && image.length <= 700000)
+                    val bytes = java.util.Base64.getDecoder().decode(image.substringAfter(','))
+                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                    require(options.outWidth in 1..1024 && options.outHeight in 1..1024)
+                    requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+                }
+                    .getOrNull()
+            } else {
+                val login =
+                    Uri.Builder()
+                        .scheme("https")
+                        .authority("music.163.com")
+                        .appendPath("login")
+                        .appendQueryParameter("codekey", key)
+                        .build()
+                        .toString()
+                val matrix = QRCodeWriter().encode(login, BarcodeFormat.QR_CODE, 400, 400)
+                Bitmap.createBitmap(400, 400, Bitmap.Config.RGB_565).apply {
+                    val pixels =
+                        IntArray(400 * 400) { n ->
+                            if (matrix[n % 400, n / 400]) android.graphics.Color.BLACK
+                            else android.graphics.Color.WHITE
+                        }
+                    setPixels(pixels, 0, 400, 0, 0, 400, 400)
+                }
             }
         }
+    if (bitmap == null) {
+        Text("二维码无法显示，请重新生成", color = MaterialTheme.colorScheme.error)
+        return
+    }
     val scope = rememberCoroutineScope()
     var saveError by remember { mutableStateOf<String?>(null) }
     val save =
@@ -567,7 +621,11 @@ private fun MusicLoginQr(key: String, status: String) {
                 }
             }
         }
-    Image(bitmap.asImageBitmap(), contentDescription = "网易云登录二维码", modifier = Modifier.size(220.dp))
+    Image(
+        bitmap.asImageBitmap(),
+        contentDescription = "${musicPlatformName(platform)}登录二维码",
+        modifier = Modifier.size(220.dp),
+    )
     Text(status)
     saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     TextButton(
@@ -581,7 +639,7 @@ private fun MusicLoginQr(key: String, status: String) {
                                 ?.let { "保存失败，请重试" }
                         }
                 }
-            else save.launch("netease-login-qr.png")
+            else save.launch("$platform-login-qr.png")
         }
     ) {
         Text("保存二维码")
@@ -595,7 +653,7 @@ private fun saveMusicQrToGallery(context: Context, bitmap: Bitmap) {
         ContentValues().apply {
             put(
                 MediaStore.Images.Media.DISPLAY_NAME,
-                "netease-login-${System.currentTimeMillis()}.png",
+                "music-login-${System.currentTimeMillis()}.png",
             )
             put(MediaStore.Images.Media.MIME_TYPE, "image/png")
             put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/WatermelonChat")
