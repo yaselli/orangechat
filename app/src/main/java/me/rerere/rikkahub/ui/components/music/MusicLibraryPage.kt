@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
@@ -35,7 +36,7 @@ internal fun MusicLibraryPage(
     var songs by remember { mutableStateOf(emptyList<MusicSong>()) }
     var sources by remember { mutableStateOf<JsonObject?>(null) }
     var loading by remember { mutableStateOf(false) }
-    val connection = manager.connection.value
+    val connection by manager.connection.collectAsStateWithLifecycle()
     val remoteQuery = if (sourceId == null) query else ""
     LaunchedEffect(connection?.token, connection?.platform, remoteQuery, sourceId) {
         songs = emptyList()
