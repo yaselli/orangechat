@@ -27,6 +27,11 @@ val appModule = module {
     single { me.rerere.rikkahub.data.music.SharedMusicCredentials(get()) }
     single { me.rerere.rikkahub.data.music.SharedMusicApi(get()) }
     single { me.rerere.rikkahub.data.music.SharedMusicManager(get(), get(), get()) }
+    single(createdAtStart = true) {
+        me.rerere.rikkahub.data.music.MusicCommentaryCoordinator(
+            get(), get(), get(), get(), get(), get(), get(), get(),
+        ).also { it.start() }
+    }
     single { me.rerere.mediagen.provider.MediaGenerationManager(get()) }
     single { me.rerere.rikkahub.service.MediaCreationService(get(), get(), get(), get(), get(), get(), get()) }
 

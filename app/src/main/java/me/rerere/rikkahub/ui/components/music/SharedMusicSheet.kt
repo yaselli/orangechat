@@ -1,35 +1,19 @@
 package me.rerere.rikkahub.ui.components.music
 
-import android.content.ContentValues
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.net.Uri
-import android.os.Build
-import android.provider.MediaStore
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import me.rerere.rikkahub.data.music.*
 import org.koin.compose.koinInject
@@ -50,20 +34,9 @@ fun SharedMusicSheet(
     val error by manager.error.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
-    var server by remember { mutableStateOf(connection?.server.orEmpty()) }
-    var accessKey by remember { mutableStateOf("") }
-    var tab by remember { mutableIntStateOf(initialTab) }
-    var query by remember { mutableStateOf("") }
-    var sourceId by remember { mutableStateOf<String?>(null) }
-    var songs by remember { mutableStateOf(emptyList<MusicSong>()) }
-    var sources by remember { mutableStateOf<JsonObject?>(null) }
-    var qrKey by remember { mutableStateOf("") }
-    var qrStatus by remember { mutableStateOf("") }
-    var qrImage by remember { mutableStateOf("") }
-    val platform = connection?.platform ?: "netease"
-    val platformName = musicPlatformName(platform)
-    var selectedLines by remember(playback?.song?.songId) { mutableStateOf(emptySet<Int>()) }
+    var tab by remember { mutableIntStateOf(initialTab.coerceIn(0, 3)) }
     val connected = account?.get("connected")?.jsonPrimitive?.booleanOrNull == true
+    val current = playback?.takeIf { assistantId.isBlank() || it.assistantId == assistantId }
     fun action(block: suspend () -> Unit) {
         if (busy) return
         scope.launch {
@@ -75,485 +48,119 @@ fun SharedMusicSheet(
             }
         }
     }
-    LaunchedEffect(connection?.token, platform) {
+    LaunchedEffect(connection?.token, connection?.platform) {
         if (connection != null)
             manager.reportFailure {
                 manager.refreshAccount()
                 manager.refreshQueue()
             }
     }
-    LaunchedEffect(platform) {
-        qrKey = ""
-        qrImage = ""
-        qrStatus = ""
-        query = ""
-        sourceId = null
-        selectedLines = emptySet()
-    }
-    val remoteQuery = if (sourceId == null) query else ""
-    LaunchedEffect(connection?.token, platform, connected, remoteQuery, sourceId) {
-        songs = emptyList()
-        sources = null
-        if (connected)
-            manager.reportFailure {
-                if (remoteQuery.isNotBlank()) {
-                    delay(400)
-                    songs = manager.search(remoteQuery)
-                } else if (sourceId != null) songs = manager.sourceSongs(sourceId!!)
-                else sources = manager.sources()
-            }
-    }
-    LaunchedEffect(qrKey, connection?.token, platform) {
-        if (qrKey.isNotEmpty()) {
-            val started = System.currentTimeMillis()
-            while (System.currentTimeMillis() - started < 180000) {
-                delay(2000)
-                val result = runCatching { manager.pollQr(qrKey) }.getOrNull() ?: continue
-                qrStatus =
-                    when (result["status"]?.jsonPrimitive?.contentOrNull) {
-                        "success" -> "登录成功"
-                        "scanned" -> "已扫码，请在网易云确认"
-                        "expired" -> "二维码已过期，请重新生成"
-                        else -> "等待扫码"
-                    }
-                if (qrStatus == "登录成功" || qrStatus.startsWith("二维码已过期")) break
-            }
+    val share: ((MusicSong, List<MusicLyric>) -> Unit)? = onShare?.let { callback ->
+        { song, lines ->
+            callback(song, lines)
+            onDismiss()
         }
     }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(
-            Modifier.fillMaxWidth().fillMaxHeight(0.92f).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.fillMaxWidth().fillMaxHeight(.93f).padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("分你一只耳机", style = MaterialTheme.typography.headlineSmall)
-            Text(
-                "和你的 AI 一起听歌",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (connection != null)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("netease", "qq").forEach { value ->
-                        FilterChip(
-                            selected = platform == value,
-                            onClick = { action { manager.switchPlatform(value) } },
-                            enabled = !busy,
-                            label = { Text(musicPlatformName(value)) },
-                        )
-                    }
-                }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (connection == null) {
-                Text("连接自己的音乐服务后，选择网易云或 QQ 音乐并登录。")
-                OutlinedTextField(
-                    server,
-                    { server = it },
-                    label = { Text("音乐服务地址") },
-                    placeholder = { Text("https://音乐服务域名") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Outlined.Headphones,
+                    null,
+                    Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary,
                 )
-                OutlinedTextField(
-                    accessKey,
-                    { accessKey = it },
-                    label = { Text("音乐服务访问口令") },
-                    visualTransformation =
-                        androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(
-                    onClick = {
-                        action {
-                            manager.connect(server, accessKey)
-                            accessKey = ""
-                        }
-                    },
-                    enabled = !busy && server.isNotBlank() && accessKey.length >= 16,
-                ) {
-                    Text("连接")
-                }
-                Text(
-                    "先在自己的服务器部署配套音乐服务，再填写地址和部署时设置的访问口令。音乐账号登录在下一步扫码完成。",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            } else if (!connected) {
-                Text("登录你的$platformName 账号", style = MaterialTheme.typography.titleMedium)
-                Button(
-                    onClick = {
-                        action {
-                            val result = manager.qr()
-                            qrImage = result["qrImage"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                            qrKey = result["key"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                            qrStatus = "等待扫码"
-                        }
-                    },
-                    enabled = !busy,
-                ) {
-                    Text(if (qrKey.isEmpty()) "生成登录二维码" else "重新生成二维码")
-                }
-                if (qrKey.isNotEmpty()) MusicLoginQr(qrKey, qrStatus, platform, qrImage)
-                Text(
-                    if (platform == "qq") "使用手机 QQ 扫码授权 QQ 音乐。同一台手机可先保存二维码，再用 QQ 扫一扫从相册选择。"
-                    else "同一台手机：保存二维码，再到网易云「扫一扫」中从相册选择。请在网易云内确认授权。",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                TextButton(
-                    onClick = {
-                        action {
-                            manager.forgetConnection()
-                            server = ""
-                        }
-                    },
-                    enabled = !busy,
-                ) {
-                    Text("断开此音乐服务")
-                }
-            } else {
-                val profile = account?.get("profile") as? JsonObject
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                    Text("分你一只耳机", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        profile?.get("nickname")?.jsonPrimitive?.contentOrNull
-                            ?: "已登录$platformName",
-                        Modifier.weight(1f),
+                        if (connected)
+                            "${musicPlatformName(connection?.platform ?: "netease")} · 和 TA 一起听"
+                        else "两个人，一人一只耳机",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    TextButton(
-                        onClick = {
-                            action {
-                                manager.logout()
-                                qrKey = ""
-                            }
-                        },
-                        enabled = !busy,
-                    ) {
-                        Text("退出登录")
-                    }
                 }
-                if (assistantId.isNotBlank())
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("和当前角色一起听")
-                            Text(
-                                "让 TA 了解正在播放的歌曲，并能为你排歌、切歌",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        Switch(
-                            manager.isEnabled(assistantId),
-                            { enabled -> action { manager.enableAssistant(assistantId, enabled) } },
-                            enabled = !busy,
-                        )
-                    }
-                playback?.let { current ->
-                    MusicPlaybackControls(current, manager, onOpen = { tab = 2 })
+                MusicIcon(
+                    if (tab == 3) Icons.Outlined.LibraryMusic else Icons.Outlined.Settings,
+                    if (tab == 3) "返回音乐" else "一起听设置",
+                ) {
+                    tab = if (tab == 3) 0 else 3
                 }
+                MusicIcon(Icons.Outlined.KeyboardArrowDown, "收起播放器", onClick = onDismiss)
+            }
+            error?.let {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        it,
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
+            }
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (!connected || tab == 3) {
+                MusicAccountPage(
+                    manager,
+                    assistantId,
+                    connection,
+                    account,
+                    busy,
+                    ::action,
+                    Modifier.weight(1f),
+                )
+            } else {
                 PrimaryTabRow(tab) {
-                    listOf("找歌", "播放列表", "歌词").forEachIndexed { index, title ->
+                    listOf("为你推荐", "待播列表", "正在唱").forEachIndexed { index, title ->
                         Tab(tab == index, onClick = { tab = index }, text = { Text(title) })
                     }
                 }
                 when (tab) {
-                    0 -> {
-                        OutlinedTextField(
-                            query,
-                            { query = it },
-                            singleLine = true,
-                            label = { Text(if (sourceId == null) "搜歌曲、歌手" else "在这个歌单里找") },
-                            modifier = Modifier.fillMaxWidth(),
+                    0 ->
+                        MusicLibraryPage(
+                            manager,
+                            assistantId,
+                            conversationId,
+                            busy,
+                            ::action,
+                            share,
+                            Modifier.weight(1f),
                         )
-                        sourceId?.let { source ->
-                            Row {
-                                TextButton(
-                                    onClick = {
-                                        sourceId = null
-                                        query = ""
-                                    }
-                                ) {
-                                    Text("返回歌单")
-                                }
-                                if (source.all { it.isDigit() })
-                                    TextButton(
-                                        onClick = {
-                                            action { manager.importPlaylist(source) }
-                                        },
-                                        enabled = !busy,
-                                    ) {
-                                        Text("导入列表")
-                                    }
-                                TextButton(
-                                    onClick = {
-                                        action {
-                                            manager.loadSource(source, assistantId, conversationId)
-                                        }
-                                    },
-                                    enabled = !busy,
-                                ) {
-                                    Text("全部播放")
-                                }
-                            }
-                        }
-                        LazyColumn(Modifier.weight(1f)) {
-                            if (query.isBlank() && sourceId == null) {
-                                item {
-                                    Row {
-                                        (sources?.get("specials") as? JsonArray)
-                                            .orEmpty()
-                                            .forEach { entry ->
-                                                val item = entry.jsonObject
-                                                val id =
-                                                    item["id"]
-                                                        ?.jsonPrimitive
-                                                        ?.contentOrNull
-                                                        .orEmpty()
-                                                TextButton(onClick = { sourceId = id }) {
-                                                    Text(
-                                                        item["name"]
-                                                            ?.jsonPrimitive
-                                                            ?.contentOrNull
-                                                            .orEmpty()
-                                                    )
-                                                }
-                                            }
-                                    }
-                                }
-                                items((sources?.get("playlists") as? JsonArray).orEmpty()) {
-                                    playlist ->
-                                    val value = playlist.jsonObject
-                                    ListItem(
-                                        headlineContent = {
-                                            Text(
-                                                value["name"]
-                                                    ?.jsonPrimitive
-                                                    ?.contentOrNull
-                                                    .orEmpty()
-                                            )
-                                        },
-                                        supportingContent = {
-                                            Text(
-                                                "${value["count"]?.jsonPrimitive?.contentOrNull.orEmpty()} 首"
-                                            )
-                                        },
-                                        modifier =
-                                            Modifier.clickable {
-                                                sourceId =
-                                                    value["playlistId"]
-                                                        ?.jsonPrimitive
-                                                        ?.contentOrNull
-                                            },
-                                    )
-                                }
-                            }
-                            items(
-                                if (sourceId == null) songs
-                                else
-                                    songs.filter {
-                                        it.title.contains(query, true) ||
-                                            it.artist.contains(query, true)
-                                    }
-                            ) { song ->
-                                MusicSongRow(
-                                    song,
-                                    !busy,
-                                    onPlay = {
-                                        action { manager.play(song, assistantId, conversationId) }
-                                    },
-                                    onQueue = { action { manager.enqueue(song) } },
-                                    onShare =
-                                        onShare?.let { share ->
-                                            {
-                                                share(song, emptyList())
-                                                onDismiss()
-                                            }
-                                        },
-                                )
-                            }
-                        }
-                    }
-                    1 -> {
-                        Row {
-                            listOf("seq" to "顺序", "shuffle" to "随机", "one" to "单曲循环").forEach {
-                                (mode, name) ->
-                                FilterChip(
-                                    queue.mode == mode,
-                                    onClick = { action { manager.changeMode(mode) } },
-                                    label = { Text(name) },
-                                    enabled = !busy,
-                                    modifier = Modifier.padding(end = 6.dp),
-                                )
-                            }
-                        }
-                        var filter by remember { mutableStateOf("") }
-                        OutlinedTextField(
-                            filter,
-                            { filter = it },
-                            label = { Text("在列表里找") },
-                            modifier = Modifier.fillMaxWidth(),
+                    1 ->
+                        MusicQueuePage(
+                            manager,
+                            queue,
+                            assistantId,
+                            conversationId,
+                            busy,
+                            ::action,
+                            share,
+                            Modifier.weight(1f),
                         )
-                        val queueScroll = androidx.compose.foundation.lazy.rememberLazyListState()
-                        LaunchedEffect(Unit) {
-                            val at = queue.items.indexOfFirst { it.id == queue.currentId }
-                            if (at >= 0) queueScroll.scrollToItem(at)
-                        }
-                        LazyColumn(Modifier.weight(1f), state = queueScroll) {
-                            items(
-                                queue.items.filter {
-                                    it.title.contains(filter, true) ||
-                                        it.artist.contains(filter, true)
-                                },
-                                key = { it.id },
-                            ) { item ->
-                                Column {
-                                    MusicSongRow(
-                                        item.song(),
-                                        !busy,
-                                        onPlay = {
-                                            action {
-                                                manager.select(item, assistantId, conversationId)
-                                            }
-                                        },
-                                        onShare =
-                                            onShare?.let { share ->
-                                                {
-                                                    share(item.song(), emptyList())
-                                                    onDismiss()
-                                                }
-                                            },
-                                        note =
-                                            (if (item.id == queue.currentId) "正在播放 · " else "") +
-                                                if (item.addedBy == "ta") "TA：${item.note}" else "",
-                                    )
-                                    Row {
-                                        TextButton(
-                                            onClick = {
-                                                action {
-                                                    manager.move(
-                                                        item.id,
-                                                        (queue.items.indexOf(item) - 1)
-                                                            .coerceAtLeast(0),
-                                                    )
-                                                }
-                                            },
-                                            enabled = !busy,
-                                        ) {
-                                            Text("上移")
-                                        }
-                                        TextButton(
-                                            onClick = {
-                                                action {
-                                                    manager.move(
-                                                        item.id,
-                                                        (queue.items.indexOf(item) + 1)
-                                                            .coerceAtMost(queue.items.lastIndex),
-                                                    )
-                                                }
-                                            },
-                                            enabled = !busy,
-                                        ) {
-                                            Text("下移")
-                                        }
-                                        TextButton(
-                                            onClick = { action { manager.remove(item.id) } },
-                                            enabled = !busy,
-                                        ) {
-                                            Text("移除")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    2 -> {
-                        val current = playback
-                        if (current == null) Text("选一首歌，一起听吧。")
-                        else {
-                            Text(
-                                "${current.song.title} · ${current.song.artist}",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            if (current.trial) Text("当前为试听片段，歌词可浏览与分享")
-                            if (current.item.addedBy == "ta")
-                                Text("TA：${current.item.note.ifBlank { "这首放给你" }}")
-                            val lyricState =
-                                androidx.compose.foundation.lazy.rememberLazyListState()
-                            val active =
-                                if (current.trial) -1
-                                else
-                                    current.song.lyrics.indexOfLast {
-                                        it.timeMs <= current.positionMs + 300
-                                    }
-                            LaunchedEffect(current.song.songId, active) {
-                                if (active >= 0 && !lyricState.isScrollInProgress)
-                                    lyricState.animateScrollToItem((active - 2).coerceAtLeast(0))
-                            }
-                            LazyColumn(Modifier.weight(1f), state = lyricState) {
-                                items(current.song.lyrics, key = { it.index }) { line ->
-                                    Row(
-                                        Modifier.fillMaxWidth()
-                                            .clickable {
-                                                if (!current.trial)
-                                                    action { manager.seek(line.timeMs) }
-                                            }
-                                            .padding(vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        if (onShare != null)
-                                            Checkbox(
-                                                line.index in selectedLines,
-                                                { selected ->
-                                                    selectedLines =
-                                                        if (selected && selectedLines.size < 8)
-                                                            selectedLines + line.index
-                                                        else selectedLines - line.index
-                                                },
-                                            )
-                                        Column {
-                                            Text(
-                                                line.text,
-                                                color =
-                                                    if (line.index == active)
-                                                        MaterialTheme.colorScheme.primary
-                                                    else MaterialTheme.colorScheme.onSurface,
-                                            )
-                                            if (line.trans.isNotBlank())
-                                                Text(
-                                                    line.trans,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                )
-                                        }
-                                    }
-                                }
-                            }
-                            onShare?.let { share ->
-                                Row {
-                                    TextButton(
-                                        onClick = {
-                                            share(current.song, emptyList())
-                                            onDismiss()
-                                        }
-                                    ) {
-                                        Text("这首给 TA")
-                                    }
-                                    TextButton(
-                                        onClick = {
-                                            share(
-                                                current.song,
-                                                current.song.lyrics.filter {
-                                                    it.index in selectedLines
-                                                },
-                                            )
-                                            onDismiss()
-                                        },
-                                        enabled = selectedLines.isNotEmpty(),
-                                    ) {
-                                        Text("选几句给 TA 看（${selectedLines.size}/8）")
-                                    }
-                                }
-                            }
-                        }
+                    2 -> MusicLyricsPage(current, manager, share, Modifier.weight(1f))
+                }
+                if (tab != 2 && current != null) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ) {
+                        MusicPlaybackControls(
+                            current,
+                            manager,
+                            onOpen = { tab = 2 },
+                            compact = true,
+                        )
                     }
                 }
             }
@@ -563,162 +170,197 @@ fun SharedMusicSheet(
 }
 
 @Composable
-private fun MusicLoginQr(key: String, status: String, platform: String, image: String) {
-    val context = LocalContext.current
-    val bitmap =
-        remember(key, platform, image) {
-            if (platform == "qq") {
-                runCatching {
-                    require(image.startsWith("data:image/png;base64,") && image.length <= 700000)
-                    val bytes = java.util.Base64.getDecoder().decode(image.substringAfter(','))
-                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-                    require(options.outWidth in 1..1024 && options.outHeight in 1..1024)
-                    requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
-                }
-                    .getOrNull()
-            } else {
-                val login =
-                    Uri.Builder()
-                        .scheme("https")
-                        .authority("music.163.com")
-                        .appendPath("login")
-                        .appendQueryParameter("codekey", key)
-                        .build()
-                        .toString()
-                val matrix = QRCodeWriter().encode(login, BarcodeFormat.QR_CODE, 400, 400)
-                Bitmap.createBitmap(400, 400, Bitmap.Config.RGB_565).apply {
-                    val pixels =
-                        IntArray(400 * 400) { n ->
-                            if (matrix[n % 400, n / 400]) android.graphics.Color.BLACK
-                            else android.graphics.Color.WHITE
-                        }
-                    setPixels(pixels, 0, 400, 0, 0, 400, 400)
-                }
-            }
-        }
-    if (bitmap == null) {
-        Text("二维码无法显示，请重新生成", color = MaterialTheme.colorScheme.error)
-        return
+private fun MusicAccountPage(
+    manager: SharedMusicManager,
+    assistantId: String,
+    connection: MusicConnection?,
+    account: JsonObject?,
+    busy: Boolean,
+    action: (suspend () -> Unit) -> Unit,
+    modifier: Modifier,
+) {
+    var server by remember(connection?.server) { mutableStateOf(connection?.server.orEmpty()) }
+    var accessKey by remember { mutableStateOf("") }
+    var qrKey by remember { mutableStateOf("") }
+    var qrImage by remember { mutableStateOf("") }
+    var qrStatus by remember { mutableStateOf("") }
+    val platform = connection?.platform ?: "netease"
+    val connected = account?.get("connected")?.jsonPrimitive?.booleanOrNull == true
+    LaunchedEffect(platform) {
+        qrKey = ""
+        qrImage = ""
+        qrStatus = ""
     }
-    val scope = rememberCoroutineScope()
-    var saveError by remember { mutableStateOf<String?>(null) }
-    val save =
-        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri
-            ->
-            uri?.let {
-                scope.launch {
-                    saveError =
-                        withContext(Dispatchers.IO) {
-                            runCatching {
-                                requireNotNull(context.contentResolver.openOutputStream(uri)).use {
-                                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
-                                }
-                            }
-                                .exceptionOrNull()
-                                ?.let { "保存失败，请重试" }
-                        }
+    LaunchedEffect(qrKey, platform, connection?.token) {
+        if (qrKey.isBlank()) return@LaunchedEffect
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < 180_000) {
+            delay(2_000)
+            val result = runCatching { manager.pollQr(qrKey) }.getOrNull() ?: continue
+            val state = result["status"]?.jsonPrimitive?.contentOrNull
+            qrStatus =
+                when (state) {
+                    "success" -> "登录成功"
+                    "scanned" -> "已扫码，请在${if (platform == "qq") "QQ" else "网易云"}确认"
+                    "expired" -> "二维码已过期，请重新生成"
+                    else -> "等待扫码"
                 }
-            }
+            if (state in listOf("success", "expired")) break
         }
-    Image(
-        bitmap.asImageBitmap(),
-        contentDescription = "${musicPlatformName(platform)}登录二维码",
-        modifier = Modifier.size(220.dp),
-    )
-    Text(status)
-    saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    TextButton(
-        onClick = {
-            if (Build.VERSION.SDK_INT >= 29)
-                scope.launch {
-                    saveError =
-                        withContext(Dispatchers.IO) {
-                            runCatching { saveMusicQrToGallery(context, bitmap) }
-                                .exceptionOrNull()
-                                ?.let { "保存失败，请重试" }
-                        }
-                }
-            else save.launch("$platform-login-qr.png")
-        }
+        if (qrStatus == "等待扫码" || qrStatus.startsWith("已扫码")) qrStatus = "二维码已过期，请重新生成"
+    }
+    Column(
+        modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("保存二维码")
-    }
-}
-
-@androidx.annotation.RequiresApi(29)
-private fun saveMusicQrToGallery(context: Context, bitmap: Bitmap) {
-    val resolver = context.contentResolver
-    val values =
-        ContentValues().apply {
-            put(
-                MediaStore.Images.Media.DISPLAY_NAME,
-                "music-login-${System.currentTimeMillis()}.png",
+        if (connection == null) {
+            Text("连接自己的音乐服务", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "填写已部署的服务地址，接着扫码登录你的音乐账号。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/WatermelonChat")
-            put(MediaStore.Images.Media.IS_PENDING, 1)
+            OutlinedTextField(
+                server,
+                { server = it },
+                label = { Text("音乐服务地址") },
+                placeholder = { Text("https://音乐服务域名") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+            )
+            OutlinedTextField(
+                accessKey,
+                { accessKey = it },
+                label = { Text("音乐服务访问口令") },
+                visualTransformation =
+                    androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+            )
+            Button(
+                onClick = {
+                    action {
+                        manager.connect(server, accessKey)
+                        accessKey = ""
+                    }
+                },
+                enabled = !busy && server.isNotBlank() && accessKey.length >= 16,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("连接音乐服务")
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("netease", "qq").forEach { value ->
+                    FilterChip(
+                        platform == value,
+                        onClick = { action { manager.switchPlatform(value) } },
+                        enabled = !busy,
+                        label = { Text(if (value == "qq") "QQ 音乐 · 实验" else "网易云音乐") },
+                    )
+                }
+            }
+            if (platform == "qq")
+                Text(
+                    "QQ 播放尚未验证通过，微信账号登录暂未接入。这轮建议先使用网易云。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            if (!connected) {
+                Text(
+                    "登录你的${musicPlatformName(platform)}账号",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Button(
+                    onClick = {
+                        action {
+                            val qr = manager.qr()
+                            qrImage = qr["qrImage"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                            qrKey = qr["key"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                            qrStatus = "等待扫码"
+                        }
+                    },
+                    enabled = !busy,
+                ) {
+                    Text(if (qrKey.isBlank()) "生成登录二维码" else "重新生成二维码")
+                }
+                if (qrKey.isNotBlank()) MusicLoginQr(qrKey, qrStatus, platform, qrImage)
+                Text(
+                    if (platform == "qq") "用手机 QQ 扫码授权；同一台手机可保存二维码，再从 QQ 扫一扫的相册选择。"
+                    else "同一台手机可先保存二维码，再从网易云「扫一扫」的相册选择，并确认授权。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
+                val nickname =
+                    (account?.get("profile") as? JsonObject)
+                        ?.get("nickname")
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                ListItem(
+                    headlineContent = { Text(nickname ?: "已登录${musicPlatformName(platform)}") },
+                    leadingContent = { Icon(Icons.Outlined.AccountCircle, null) },
+                    trailingContent = {
+                        TextButton(
+                            onClick = {
+                                action {
+                                    manager.logout()
+                                    qrKey = ""
+                                }
+                            },
+                            enabled = !busy,
+                        ) {
+                            Text("退出")
+                        }
+                    },
+                )
+                if (assistantId.isNotBlank()) {
+                    MusicSettingRow(
+                        "和当前角色一起听",
+                        "让 TA 了解歌曲、进度和歌词，也可以为你排歌。",
+                        manager.isEnabled(assistantId),
+                        !busy,
+                    ) { value ->
+                        action { manager.enableAssistant(assistantId, value) }
+                    }
+                    MusicSettingRow(
+                        "听到喜欢的歌词时说一句",
+                        "开启会额外调用聊天模型。每首最多判断一次，至少间隔五分钟；TA 也可以安静听。遵循主动消息的免打扰时段。",
+                        manager.isCommentaryEnabled(assistantId),
+                        !busy && manager.isEnabled(assistantId),
+                    ) { value ->
+                        action { manager.enableCommentary(assistantId, value) }
+                    }
+                }
+            }
+            TextButton(onClick = { action { manager.forgetConnection() } }, enabled = !busy) {
+                Text("断开此音乐服务")
+            }
         }
-    val uri = requireNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
-    try {
-        requireNotNull(resolver.openOutputStream(uri)).use {
-            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
-        }
-        values.clear()
-        values.put(MediaStore.Images.Media.IS_PENDING, 0)
-        resolver.update(uri, values, null, null)
-    } catch (error: Exception) {
-        resolver.delete(uri, null, null)
-        throw error
     }
 }
 
 @Composable
-private fun MusicSongRow(
-    song: MusicSong,
+private fun MusicSettingRow(
+    title: String,
+    detail: String,
+    checked: Boolean,
     enabled: Boolean,
-    onPlay: () -> Unit,
-    onQueue: (() -> Unit)? = null,
-    onShare: (() -> Unit)? = null,
-    note: String = "",
+    onChecked: (Boolean) -> Unit,
 ) {
-    ListItem(
-        leadingContent = { AsyncImage(musicCoverUrl(song.coverUrl), null, Modifier.size(44.dp)) },
-        headlineContent = { Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        supportingContent = {
-            Column {
-                Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (note.isNotBlank()) Text(note, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-        },
-        trailingContent = {
-            Row {
-                onShare?.let {
-                    TextButton(
-                        onClick = it,
-                        enabled = enabled,
-                        contentPadding = PaddingValues(4.dp),
-                    ) {
-                        Text("分享")
-                    }
-                }
-                onQueue?.let {
-                    TextButton(
-                        onClick = it,
-                        enabled = enabled,
-                        contentPadding = PaddingValues(4.dp),
-                    ) {
-                        Text("＋")
-                    }
-                }
-                TextButton(
-                    onClick = onPlay,
-                    enabled = enabled,
-                    contentPadding = PaddingValues(4.dp),
-                ) {
-                    Text("播放")
-                }
-            }
-        },
-    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            Modifier.weight(1f).padding(end = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked, onChecked, enabled = enabled)
+    }
 }

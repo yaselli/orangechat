@@ -59,6 +59,7 @@ data class MusicConnection(
     val token: String = "",
     val assistants: Set<String> = emptySet(),
     val platform: String = "netease",
+    val commentaryAssistants: Set<String> = emptySet(),
 )
 
 data class MusicPlayback(

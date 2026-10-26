@@ -100,6 +100,22 @@ class SharedMusicManager(
     fun isEnabled(assistantId: String): Boolean =
         assistantId in _connection.value?.assistants.orEmpty()
 
+    fun isCommentaryEnabled(assistantId: String): Boolean =
+        isEnabled(assistantId) && assistantId in _connection.value?.commentaryAssistants.orEmpty()
+
+    suspend fun enableCommentary(assistantId: String, enabled: Boolean) = operations.withLock {
+        val current = _connection.value ?: error("请先连接音乐服务")
+        check(!enabled || isEnabled(assistantId)) { "请先开启和当前角色一起听" }
+        val updated =
+            current.copy(
+                commentaryAssistants =
+                    if (enabled) current.commentaryAssistants + assistantId
+                    else current.commentaryAssistants - assistantId
+            )
+        withContext(Dispatchers.IO) { credentials.save(updated) }
+        _connection.value = updated
+    }
+
     fun contextFor(assistantId: String): String? =
         if (isEnabled(assistantId))
             _playback.value?.contextFor(assistantId, System.currentTimeMillis())
