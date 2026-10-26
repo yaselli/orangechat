@@ -49,7 +49,6 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Icon1stBracket
 import me.rerere.hugeicons.stroke.McpServer
-import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.tools.ToolDiscoveryPolicy
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
@@ -375,7 +374,7 @@ fun McpPicker(
                         }
                     )
                 }
-                if (BuildConfig.DEBUG && assistant.toolDiscoveryEnabled && server.id in assistant.mcpServers) {
+                if (assistant.toolDiscoveryEnabled && server.id in assistant.mcpServers) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,

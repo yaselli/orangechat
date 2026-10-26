@@ -6,7 +6,6 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 
@@ -17,8 +16,7 @@ internal fun createToolDiscoverySession(
     registered: List<Tool>,
 ): ToolDiscoverySession? =
     if (
-        BuildConfig.DEBUG &&
-            assistant.toolDiscoveryEnabled &&
+        assistant.toolDiscoveryEnabled &&
             ModelAbility.TOOL in model.abilities &&
             (assistant.customBodies + model.customBodies).none {
                 it.key in
