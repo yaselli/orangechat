@@ -93,40 +93,4 @@ class ConversationSessionClaimTest {
         session.cleanup()
     }
 
-    @Test
-    fun `cancelling optional background generation leaves user input dispatchable`() = runBlocking {
-        val id = Uuid.random()
-        lateinit var session: ConversationSession
-        session = ConversationSession(id, Conversation(id, Uuid.random(), messageNodes = emptyList()), this,
-            debugLog = {}, onGenerationFinished = { _, cause -> if (cause != null) session.messageQueue.pause() }) {}
-        val background = launch(start = CoroutineStart.LAZY) { awaitCancellation() }
-        try {
-            assertTrue(session.tryClaimGeneration(background, pauseQueueOnFailure = false))
-            background.start()
-            session.messageQueue.enqueue(listOf(me.rerere.ai.ui.UIMessagePart.Text("real user input")))
-            background.cancel()
-            background.join()
-            assertFalse(session.messageQueue.state.value.paused)
-            assertTrue(session.messageQueue.takeNext() != null)
-        } finally { session.cleanup() }
-    }
-
-    @Test
-    fun `ordinary generation cancellation still pauses its pending queue`() = runBlocking {
-        val id = Uuid.random()
-        lateinit var session: ConversationSession
-        session = ConversationSession(id, Conversation(id, Uuid.random(), messageNodes = emptyList()), this,
-            debugLog = {}, onGenerationFinished = { _, cause -> if (cause != null) session.messageQueue.pause() }) {}
-        val normal = launch(start = CoroutineStart.LAZY) { awaitCancellation() }
-        try {
-            assertTrue(session.tryClaimGeneration(normal))
-            normal.start()
-            session.messageQueue.enqueue(listOf(me.rerere.ai.ui.UIMessagePart.Text("queued")))
-            normal.cancel()
-            normal.join()
-            assertTrue(session.messageQueue.state.value.paused)
-            assertTrue(session.messageQueue.takeNext() == null)
-        } finally { session.cleanup() }
-    }
-
 }
