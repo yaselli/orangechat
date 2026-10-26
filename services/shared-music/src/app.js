@@ -63,7 +63,7 @@ function createApp(options) {
       } catch (error) { next(error); }
     });
   }
-  route('get', '/status', t => t.authority.status());
+  route('get', '/status', (t, r) => ({ ...t.authority.status(), platform: r.get('X-Music-Platform') || 'netease' }));
   route('post', '/login/qr', t => t.authority.startQr());
   route('get', '/login/qr/:key', (t, r) => t.authority.pollQr(String(r.params.key).slice(0, 120)));
   route('post', '/logout', t => {

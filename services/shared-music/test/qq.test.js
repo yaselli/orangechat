@@ -45,6 +45,7 @@ async function fixture(t) {
 test('one paired device keeps independent account, queue and heartbeat for each platform', async t => {
   const f = await fixture(t);
   assert.equal((await f.call('/status')).body.connected, false);
+  assert.equal((await f.call('/status')).body.platform, 'qq');
   await f.login();
   assert.equal((await f.call('/status')).body.connected, true);
   assert.equal((await f.call('/status', undefined, 'netease')).body.connected, false);

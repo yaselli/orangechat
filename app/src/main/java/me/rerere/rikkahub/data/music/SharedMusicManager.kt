@@ -148,7 +148,13 @@ class SharedMusicManager(
     }
 
     suspend fun refreshAccount() {
-        _account.value = request(listOf("status"))
+        val account = request(listOf("status"))
+        if (_connection.value?.platform == "qq") {
+            check(account["platform"]?.jsonPrimitive?.contentOrNull == "qq") {
+                "请先将音乐服务更新到支持 QQ 音乐的版本"
+            }
+        }
+        _account.value = account
     }
 
     suspend fun logout() = operations.withLock {
@@ -241,9 +247,14 @@ class SharedMusicManager(
     }
 
     suspend fun play(song: MusicSong, assistantId: String, conversationId: String) {
+        val requested = epoch.incrementAndGet()
         operations.withLock {
+            if (epoch.get() != requested) return@withLock
+            // Switching platforms stops the old stream once. Any additional stop or play request
+            // cancels this request, including one arriving during account/queue refresh.
+            val turn = requested + if (song.platform != _connection.value?.platform) 1 else 0
             switchPlatformLocked(song.platform)
-            val turn = epoch.incrementAndGet()
+            if (epoch.get() != turn) return@withLock
             setQueue(
                 request(
                     listOf("queue", "now"),
