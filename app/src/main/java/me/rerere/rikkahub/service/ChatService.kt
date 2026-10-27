@@ -630,14 +630,24 @@ class ChatService(
         dispatchNextQueuedMessage(conversationId)
     }
 
-    fun enqueueVoiceMessage(id: Uuid, text: String): QueuedMessage {
+    fun enqueueVoiceMessage(id: Uuid, text: String): QueuedMessage =
+        enqueueVoiceMessage(id, listOf(UIMessagePart.Text(text)))
+
+    fun enqueueVoiceMessage(id: Uuid, parts: List<UIMessagePart>): QueuedMessage {
         check(!isChatBlocked(id)) { "当前会话已被拉黑" }
         val queue = getOrCreateSession(id).messageQueue
         check(!queue.state.value.paused || queue.state.value.messages.isEmpty()) { "请先继续或清空发送队列" }
         if (queue.state.value.messages.isEmpty()) queue.resume()
-        val queued = requireNotNull(queue.enqueue(listOf(UIMessagePart.Text(text)), reply = CompletableDeferred()))
+        val queued = requireNotNull(queue.enqueue(parts, reply = CompletableDeferred()))
         dispatchNextQueuedMessage(id)
         return queued
+    }
+
+    /** Barge-in/hang-up may cancel only this call's queued or actively submitting user turn. */
+    fun cancelVoiceReply(id: Uuid, messageId: Uuid) {
+        val session = sessions[id] ?: return
+        session.cancelVoiceReply(messageId)?.let(::cleanupQueuedAttachments)
+        dispatchNextQueuedMessage(id)
     }
 
     private fun dispatchNextQueuedMessage(id: Uuid) {
@@ -742,6 +752,20 @@ class ChatService(
                     me.rerere.rikkahub.data.service.ProactiveMessageService.resetTimer(context, proactiveSetting)
                 }
             } catch (e: CancellationException) {
+                if (queued.reply != null && content.any { it is UIMessagePart.Audio }) {
+                    withContext(NonCancellable) {
+                        session.saveMutex.withLock {
+                            val current = session.state.value
+                            val updated = finishVoiceReplyTools(current, queued.id, ::cancelToolByUser)
+                            if (updated != current) {
+                                updateConversation(conversationId, updated)
+                                if (conversationRepo.existsConversationById(conversationId)) {
+                                    conversationRepo.updateConversation(updated)
+                                }
+                            }
+                        }
+                    }
+                }
                 throw e
             } catch (e: Exception) {
                 session.messageQueue.pause()
@@ -754,6 +778,9 @@ class ChatService(
         job.invokeOnCompletion { cause ->
             if (cause != null) queued.reply?.completeExceptionally(cause)
             if (session.submittingMessage?.id == queued.id) session.submittingMessage = null
+            if (cause != null && queued.reply != null && content.any { it is UIMessagePart.Audio }) {
+                cleanupQueuedAttachments(queued)
+            }
         }
         session.setJob(job)
         job.start()

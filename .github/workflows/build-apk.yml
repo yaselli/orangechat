@@ -21,6 +21,7 @@ on:
       - fix/gemini-proactive-turn
       - feature/shared-music-multiuser
       - feature/tool-discovery
+      - feature/gemini-audio-call
       - feature/upstream-usage-stats
       - feature/upstream-usage-dashboard
 
@@ -30,7 +31,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref == 'refs/heads/build/stable-release' || github.ref == 'refs/heads/feature/shared-music-multiuser' || github.ref == 'refs/heads/feature/tool-discovery' }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/build/stable-release' || github.ref == 'refs/heads/feature/shared-music-multiuser' || github.ref == 'refs/heads/feature/tool-discovery' || github.ref == 'refs/heads/feature/gemini-audio-call' }}
 
 jobs:
   build:
@@ -188,6 +189,20 @@ jobs:
           name: WatermelonChat-music-ui-previews
           path: music-ui-previews
           if-no-files-found: ignore
+
+      - name: Enable KVM for native call microphone tests
+        if: github.ref == 'refs/heads/feature/gemini-audio-call'
+        run: sudo chmod 666 /dev/kvm
+      - name: Verify native call microphone lifecycle on Android
+        if: github.ref == 'refs/heads/feature/gemini-audio-call'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.audio.RawVoiceCallRecorderDeviceTest
 
       - name: Upload unit test diagnostics
         if: ${{ !cancelled() }}
