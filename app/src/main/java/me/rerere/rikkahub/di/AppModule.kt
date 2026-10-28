@@ -115,6 +115,8 @@ val appModule = module {
         UpdateChecker(get())
     }
 
+    single { me.rerere.rikkahub.utils.AppUpdateDownloader(get(), get()) }
+
     single {
         AppScope()
     }

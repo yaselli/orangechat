@@ -33,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +49,7 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
@@ -56,8 +58,10 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.easteregg.EmojiBurstHost
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.AppUpdateDialog
+import me.rerere.rikkahub.ui.components.ui.updateDownloadLabel
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.AppUpdateDownloader
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.ProjectLinks
 import me.rerere.rikkahub.utils.plus
@@ -69,14 +73,19 @@ import android.widget.Toast
 import org.koin.compose.koinInject
 
 @Composable
-fun SettingAboutPage() {
+fun SettingAboutPage(openUpdateDownload: Boolean = false) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val context = LocalContext.current
     val navController = LocalNavController.current
     val updateChecker: UpdateChecker = koinInject()
+    val downloads: AppUpdateDownloader = koinInject()
+    val download by downloads.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var checking by remember { mutableStateOf(false) }
     var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
+    LaunchedEffect(openUpdateDownload, download.info) {
+        if (openUpdateDownload && download.info != null) availableUpdate = download.info
+    }
     fun checkUpdates() {
         if (checking) return
         checking = true
@@ -103,7 +112,6 @@ fun SettingAboutPage() {
         AppUpdateDialog(
             info = info,
             onDismiss = { availableUpdate = null },
-            onDownload = { updateChecker.downloadUpdate(context, info.download); availableUpdate = null },
         )
     }
     val emojiOptions = remember {
@@ -202,6 +210,13 @@ fun SettingAboutPage() {
                                 Text(if (BuildConfig.APPLICATION_ID.endsWith(".debug")) "仅检查 Debug 测试版" else "仅检查正式版")
                             },
                         )
+                        download.info?.let { info ->
+                            item(
+                                onClick = { availableUpdate = info },
+                                headlineContent = { Text("更新下载 · ${info.version}") },
+                                supportingContent = { Text("${updateDownloadLabel(download)}\n${info.download.name}") },
+                            )
+                        }
                         item(
                             leadingContent = { Icon(HugeIcons.SmartPhone01, null) },
                             supportingContent = {

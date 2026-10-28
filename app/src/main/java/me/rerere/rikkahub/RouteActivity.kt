@@ -319,6 +319,15 @@ class RouteActivity : ComponentActivity() {
             }
         }
 
+        // Return to the persistent update entry from either progress or completion notifications.
+        if (intent.getBooleanExtra("openUpdateDownload", false)) {
+            navStack?.let { stack ->
+                Snapshot.withMutableSnapshot {
+                    if (stack.lastOrNull() != Screen.UpdateDownload) stack.add(Screen.UpdateDownload)
+                }
+                intent.removeExtra("openUpdateDownload")
+            }
+        }
         // 新增逻辑: 从语音通话通知点击, 回到通话页面
         intent.getStringExtra("openVoiceCallConversationId")?.let { convId ->
             navStack?.let { stack ->
@@ -382,6 +391,10 @@ class RouteActivity : ComponentActivity() {
 
         ShareHandler(backStack)
         LaunchedEffect(backStack) {
+            if (intent.getBooleanExtra("openUpdateDownload", false)) {
+                if (backStack.lastOrNull() != Screen.UpdateDownload) backStack.add(Screen.UpdateDownload)
+                intent.removeExtra("openUpdateDownload")
+            }
             intent.getStringExtra(me.rerere.rikkahub.service.MediaCreationForegroundService.EXTRA_MEDIA_SESSION_ID)
                 ?.takeIf { runCatching { Uuid.parse(it) }.isSuccess }?.let { id ->
                     backStack.add(Screen.MediaCreation(id))
@@ -613,6 +626,9 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SettingAbout> {
                                 SettingAboutPage()
+                            }
+                            entry<Screen.UpdateDownload> {
+                                SettingAboutPage(openUpdateDownload = true)
                             }
 
                             entry<Screen.SettingSearch> {
@@ -1037,6 +1053,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingAbout : Screen
+
+    @Serializable
+    data object UpdateDownload : Screen
 
     @Serializable
     data object SettingSearch : Screen
