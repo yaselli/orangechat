@@ -107,6 +107,8 @@ val appModule = module {
             workspaceRepository = get(),
             json = get(),
             sharedMusic = get(),
+            settingsStore = get(),
+            conversations = get(),
             memoryRepository = get(),
         )
     }

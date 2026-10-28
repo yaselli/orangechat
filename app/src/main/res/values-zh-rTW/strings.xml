@@ -303,8 +303,9 @@
   <string name="chat_page_search_chats">搜尋聊天</string>
   <string name="chat_page_today">今天</string>
   <string name="chat_page_yesterday">昨天</string>
-  <string name="chat_size_dialog_content">目前訊息數：%1$d。這可能導致應用程式崩潰或延遲，甚至遺失此對話資料。請盡快建立新對話以繼續聊天。</string>
-  <string name="chat_size_dialog_title">此對話資料過大</string>
+  <string name="chat_size_dialog_content">本機儲存了 %1$d 則訊息。可壓縮上下文以減少後續請求內容；如果操作卡頓，可備份後建立新對話繼續。</string>
+  <string name="chat_size_dialog_input_usage">最近一次回覆的輸入用量：%1$s tokens。</string>
+  <string name="chat_size_dialog_title">對話較長，請留意上下文用量</string>
   <string name="citations_count">%1$d 條引用</string>
   <string name="common_export">匯出</string>
   <string name="common_share">分享</string>

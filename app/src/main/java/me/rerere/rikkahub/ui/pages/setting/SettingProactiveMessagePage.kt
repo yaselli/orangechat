@@ -32,6 +32,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -54,17 +57,60 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
     val context = LocalContext.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val scheduleStore: me.rerere.rikkahub.data.datastore.SettingsStore = koinInject()
+    val scope = rememberCoroutineScope()
 
     var showProactiveRiskDialog by remember { mutableStateOf(false) }
     var editingQuietStart by remember { mutableStateOf<Boolean?>(null) }
     val testStatus by ProactiveMessageService.manualTestStatus.collectAsStateWithLifecycle()
 
     fun updateSchedule(change: (ProactiveMessageSetting) -> ProactiveMessageSetting) {
-        val before = vm.settings.value
-        vm.updateSettings(before.copy(proactiveMessageSetting = change(before.proactiveMessageSetting)), before) {
-            committed ->
-            if (vm.settings.value.proactiveMessageSetting == committed.proactiveMessageSetting) {
-                ProactiveMessageService.scheduleNext(context, committed.proactiveMessageSetting)
+        scope.launch {
+            try {
+                scheduleStore.update { current ->
+                    val changed = change(current.proactiveMessageSetting)
+                    val updated =
+                        if (changed.enabled && changed.allowAiWakeups) changed
+                        else
+                            changed.copy(
+                                aiWakeups =
+                                    changed.aiWakeups.map { wakeup ->
+                                        if (
+                                            wakeup.status in
+                                                setOf(
+                                                    me.rerere.rikkahub.data.datastore
+                                                        .ProactiveWakeupStatus
+                                                        .Pending,
+                                                    me.rerere.rikkahub.data.datastore
+                                                        .ProactiveWakeupStatus
+                                                        .Running,
+                                                )
+                                        )
+                                            wakeup.copy(
+                                                status =
+                                                    me.rerere.rikkahub.data.datastore
+                                                        .ProactiveWakeupStatus
+                                                        .Cancelled,
+                                                outcome = "用户已关闭主动唤醒",
+                                            )
+                                        else wakeup
+                                    }
+                            )
+                    current.copy(proactiveMessageSetting = updated)
+                }
+                ProactiveMessageService.scheduleNext(
+                    context,
+                    scheduleStore.settingsFlowRaw.first().proactiveMessageSetting,
+                )
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.widget.Toast.makeText(
+                        context,
+                        "保存主动消息设置失败，请重试",
+                        android.widget.Toast.LENGTH_SHORT,
+                    )
+                    .show()
             }
         }
     }
@@ -186,6 +232,10 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                         },
                     )
                 }
+            }
+            item {
+                ProactiveWakeupSettingsCard(settings.proactiveMessageSetting, settings.assistants,
+                    initialized = !settings.init, onChange = ::updateSchedule)
             }
             item {
                 CardGroup {
