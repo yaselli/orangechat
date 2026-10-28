@@ -193,7 +193,7 @@ jobs:
       - name: Enable KVM for native call microphone tests
         if: github.ref == 'refs/heads/feature/gemini-audio-call'
         run: sudo chmod 666 /dev/kvm
-      - name: Verify native call microphone and persistent update files on Android
+      - name: Verify native calls, update files and post-compression warnings on Android
         if: github.ref == 'refs/heads/feature/gemini-audio-call'
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -202,7 +202,7 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.audio.RawVoiceCallRecorderDeviceTest,me.rerere.rikkahub.utils.UpdateDownloadDeviceTest
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.audio.RawVoiceCallRecorderDeviceTest,me.rerere.rikkahub.utils.UpdateDownloadDeviceTest,me.rerere.rikkahub.ui.pages.chat.ConversationSizeWarningDeviceTest
 
       - name: Upload unit test diagnostics
         if: ${{ !cancelled() }}

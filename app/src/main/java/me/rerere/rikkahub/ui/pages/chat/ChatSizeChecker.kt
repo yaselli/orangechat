@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -6,8 +6,6 @@
 
 package me.rerere.rikkahub.ui.pages.chat
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Alert01
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -16,48 +14,29 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.res.stringResource
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import me.rerere.ai.core.MessageRole
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
-
-// 消息节点数量警告阈值
-const val MESSAGE_NODE_WARNING_THRESHOLD = 768
-const val LAST_ASSISTANT_INPUT_TOKEN_WARNING_THRESHOLD = 300_000
-
-data class ConversationSizeInfo(
-    val nodeCount: Int,
-    val lastAssistantInputTokens: Int,
-    val exceedNodeCountThreshold: Boolean,
-    val exceedInputTokenThreshold: Boolean,
-    val showWarning: Boolean
-)
-
-private val DefaultSizeInfo = ConversationSizeInfo(
-    nodeCount = 0,
-    lastAssistantInputTokens = 0,
-    exceedNodeCountThreshold = false,
-    exceedInputTokenThreshold = false,
-    showWarning = false
-)
+import me.rerere.rikkahub.utils.formatNumber
 
 @Composable
 fun rememberConversationSizeInfo(conversation: Conversation): ConversationSizeInfo {
-    return remember(conversation.messageNodes) {
-        val nodeCount = conversation.messageNodes.size
-        val lastAssistantInputTokens = conversation.messageNodes.asReversed()
-            .map { it.currentMessage }
-            .firstOrNull { it.role == MessageRole.ASSISTANT }
-            ?.usage
-            ?.promptTokens
-            ?: 0
-        val exceedNodeCountThreshold = nodeCount > MESSAGE_NODE_WARNING_THRESHOLD
-        val exceedInputTokenThreshold = lastAssistantInputTokens > LAST_ASSISTANT_INPUT_TOKEN_WARNING_THRESHOLD
-        ConversationSizeInfo(
-            nodeCount = nodeCount,
-            lastAssistantInputTokens = lastAssistantInputTokens,
-            exceedNodeCountThreshold = exceedNodeCountThreshold,
-            exceedInputTokenThreshold = exceedInputTokenThreshold,
-            showWarning = exceedNodeCountThreshold && exceedInputTokenThreshold
+    return remember(conversation.messageNodes, conversation.contextCompaction) {
+        val reply =
+            conversation.messageNodes
+                .asReversed()
+                .firstOrNull { it.currentMessage.role == MessageRole.ASSISTANT }
+                ?.currentMessage
+        conversationSizeInfo(
+            nodeCount = conversation.messageNodes.size,
+            inputTokens = reply?.usage?.promptTokens,
+            replyCreatedAtMillis =
+                reply?.createdAt?.toInstant(TimeZone.currentSystemDefault())?.toEpochMilliseconds(),
+            compactionCreatedAtMillis = conversation.contextCompaction?.createdAtMillis,
         )
     }
 }
@@ -65,7 +44,7 @@ fun rememberConversationSizeInfo(conversation: Conversation): ConversationSizeIn
 @Composable
 fun ConversationSizeWarningDialog(
     sizeInfo: ConversationSizeInfo,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -73,19 +52,27 @@ fun ConversationSizeWarningDialog(
             Icon(
                 imageVector = HugeIcons.Alert01,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.tertiary
+                tint = MaterialTheme.colorScheme.tertiary,
             )
         },
         title = {
             Text(text = stringResource(R.string.chat_size_dialog_title))
         },
         text = {
-            Text(text = stringResource(R.string.chat_size_dialog_content, sizeInfo.nodeCount))
+            Text(
+                text =
+                    stringResource(R.string.chat_size_dialog_content, sizeInfo.nodeCount) +
+                        "\n\n" +
+                        stringResource(
+                            R.string.chat_size_dialog_input_usage,
+                            sizeInfo.lastAssistantInputTokens.formatNumber(),
+                        )
+            )
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.confirm))
             }
-        }
+        },
     )
 }

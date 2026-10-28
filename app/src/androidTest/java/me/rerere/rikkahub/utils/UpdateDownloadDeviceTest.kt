@@ -4,6 +4,7 @@ import android.content.pm.PackageManager
 import androidx.core.content.FileProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
 import java.util.UUID
 import org.junit.Assert.*
 import org.junit.Test
@@ -60,12 +61,22 @@ class UpdateDownloadDeviceTest {
         val manager = context.packageManager
         val flags = PackageManager.GET_SIGNING_CERTIFICATES
         val installed = updateApkIdentity(manager.getPackageInfo(context.packageName, flags))
-        val archive =
-            updateApkIdentity(
-                manager.getPackageArchiveInfo(context.applicationInfo.sourceDir, flags)!!
-            )
+        val archive = updateApkArchiveIdentity(context, File(context.applicationInfo.sourceDir))
         assertEquals(installed, archive)
         assertEquals(context.packageName, installed.packageName)
         assertTrue(installed.signers.isNotEmpty())
+    }
+
+    @Test
+    fun unreadableArchiveCannotSupplyAChannelIdentity() {
+        val file = File(context.cacheDir, "invalid-update-${UUID.randomUUID()}.apk")
+        try {
+            file.writeBytes(byteArrayOf(1, 2, 3))
+            assertThrows(InvalidUpdateException::class.java) {
+                updateApkArchiveIdentity(context, file)
+            }
+        } finally {
+            file.delete()
+        }
     }
 }
