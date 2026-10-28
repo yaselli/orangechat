@@ -160,8 +160,6 @@ import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSystemToolsPage
 import me.rerere.rikkahub.ui.pages.setting.SecuritySettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProactiveMessagePage
-import me.rerere.rikkahub.ui.pages.setting.SettingWeixinBotPage
-import me.rerere.rikkahub.ui.pages.setting.SettingQqBotPage
 import me.rerere.rikkahub.plugin.webview.PluginWebViewPage
 import me.rerere.rikkahub.ui.pages.memory.MemoryBankPage
 import me.rerere.rikkahub.ui.components.ui.EmojiPickerPage
@@ -724,14 +722,6 @@ entry<Screen.Extensions> {
                                 SettingExtraInjectionPage()
                             }
 
-                            entry<Screen.SettingWeixinBot> {
-                                SettingWeixinBotPage()
-                            }
-
-                            entry<Screen.SettingQqBot> {
-                                SettingQqBotPage()
-                            }
-
                             entry<Screen.Workflows> {
                                 me.rerere.rikkahub.workflow.ui.WorkflowsScreen()
                             }
@@ -1115,12 +1105,6 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingExtraInjection : Screen
-
-    @Serializable
-    data object SettingWeixinBot : Screen
-
-    @Serializable
-    data object SettingQqBot : Screen
 
     @Serializable
     data object Health : Screen
