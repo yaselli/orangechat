@@ -18,6 +18,15 @@ class OpenAIRelayCompatibilityTest {
     private val result = """{"type":"function_call_output","call_id":"call_1","output":"found"}"""
 
     @Test
+    fun `chat relay details reach the reasoning part instead of the answer`() {
+        val chat = ChatCompletionsAPI(OkHttpClient(), KeyRoulette.default())
+        val message = chat.parseMessage(obj("""{"role":"assistant","content":"answer",
+            "reasoning_content":"", "reasoning_details":[{"type":"reasoning.text","text":"thought"}]}"""))
+        assertEquals("thought", message.parts.filterIsInstance<UIMessagePart.Reasoning>().single().reasoning)
+        assertEquals("answer", message.parts.filterIsInstance<UIMessagePart.Text>().single().text)
+    }
+
+    @Test
     fun `non-object keepalives are skipped and multiline JSON remains one payload`() {
         for (line in listOf("null", "[]", "42", "\"ping\"", " ")) assertNull(parseOpenAIStreamObject(line))
         assertEquals(obj("""{"id":"r1","choices":[]}"""), parseOpenAIStreamObject("{\n\"id\":\"r1\",\n\"choices\":[]\n}"))
