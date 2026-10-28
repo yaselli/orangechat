@@ -1,25 +1,32 @@
-name: Verify reasoning compatibility
+name: Verify app changes
 
 on:
   pull_request:
     branches: [build/stable-release]
     paths:
+      - "app/**"
       - "ai/**"
-      - "app/src/main/java/me/rerere/rikkahub/data/ai/transformers/**"
-      - "app/src/test/java/me/rerere/rikkahub/data/ai/transformers/**"
-      - ".github/workflows/verify-reasoning.yml"
+      - "common/**"
+      - "speech/**"
+      - "web/**"
+      - "web-ui/**"
+      - "document/**"
+      - "workspace/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - ".github/workflows/verify-app.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: reasoning-${{ github.event.pull_request.number }}
+  group: app-checks-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  test:
+  checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Download color utilities
@@ -39,18 +46,19 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      # Use the runner's preinstalled Android SDK, as the APK build workflows do.
       - uses: gradle/actions/setup-gradle@v4
-      - name: Test provider parsing and message transformers
+      - name: Test app and providers and run Android Lint
         run: |
           chmod +x gradlew
-          ./gradlew :ai:testDebugUnitTest :app:testDebugUnitTest --continue
-      - name: Upload test results
+          ./gradlew :ai:testDebugUnitTest :app:testDebugUnitTest :app:lintDebug --continue
+      - name: Upload verification results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reasoning-test-results
+          name: app-verification-results
           path: |
             **/build/reports/tests/**
             **/build/test-results/**
+            **/build/reports/lint-results*
           if-no-files-found: warn
