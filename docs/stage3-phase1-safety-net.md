@@ -8,12 +8,10 @@
 |---|---|---|---|
 | 普通聊天 | `ChatVM -> ChatService.sendMessage -> handleMessageComplete -> GenerationHandler.generateText` | `ChatService` 更新 session 并持久化 | 工具审批、取消、标题、建议、通知 |
 | Web 前端 | `ConversationRoutes -> ChatService.sendMessage` | 与普通聊天共用 | 等待同一生成完成事件 |
-| QQ 机器人 | `QqBotService -> ChatService.sendMessage` | 与普通聊天共用后转发 | 平台消息收发 |
-| 微信机器人 | `WeixinBotService -> ChatService.sendMessage` | 与普通聊天共用后转发 | 平台消息收发 |
 | 主动消息 | `ProactiveMessageTriggerService -> generateWithTools` | 自行流式更新，再经 `ChatService` 的会话锁保存 | 闲置判断、`PASS/WAIT/STOP`、后台通知、查岗许可 |
 | 语音拒接回复 | `ChatService.notifyVoiceCallDeclined` 直接调用 Provider | 作为独立 assistant 消息追加 | 轻量单轮生成，不走工具循环 |
 
-普通聊天、Web、QQ 和微信已经共用 `GenerationHandler`。第三阶段主要重复点在主动消息的 `generateWithTools()`；语音拒接是后续小入口，不在第一刀中改动。
+普通聊天和 Web 已经共用 `GenerationHandler`。外部聊天平台机器人入口已于 2026-10-28 移除。第三阶段主要重复点在主动消息的 `generateWithTools()`；语音拒接是后续小入口，不在第一刀中改动。
 
 ## 已有自动保护
 

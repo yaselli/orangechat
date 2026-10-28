@@ -187,12 +187,6 @@ class SettingsStore(
         // Removed Supabase external-memory setting. Keep the key only so upgrades can erase it.
         val EXTERNAL_MEMORIES = stringPreferencesKey("external_memories")
 
-        // 微信 Bot (iLink 协议)
-        val WECHAT_BOT_SETTING = stringPreferencesKey("wechat_bot_setting")
-
-        // QQ Bot (API v2, WebSocket 网关)
-        val QQ_BOT_SETTING = stringPreferencesKey("qq_bot_setting")
-
         // Mini App
         val MINI_APPS = stringPreferencesKey("mini_apps")
 
@@ -219,8 +213,6 @@ class SettingsStore(
             ASR_PROVIDERS,
             WEB_SERVER_ACCESS_PASSWORD,
             SYSTEM_TOOLS_SETTING,
-            WECHAT_BOT_SETTING,
-            QQ_BOT_SETTING,
             MINI_APPS,
         )
     }
@@ -231,6 +223,12 @@ class SettingsStore(
         // Existing installs used plaintext strings. Upgrade them in place on first launch while
         // still allowing the read path below to understand plaintext during the migration.
         scope.launch(Dispatchers.IO) {
+            // Retired credentials must be erased even when an unrelated encryption migration fails.
+            runCatching {
+                dataStore.edit { preferences -> preferences.removeRetiredChatBotSettings() }
+            }.onFailure { error ->
+                Log.e(TAG, "Failed to erase retired channel settings", error)
+            }
             runCatching {
                 dataStore.edit { preferences ->
                     preferences.remove(EXTERNAL_MEMORIES)
@@ -352,12 +350,6 @@ class SettingsStore(
                 proactiveMessageSetting = preferences[PROACTIVE_MESSAGE_SETTING]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: ProactiveMessageSetting(),
-                wechatBotSetting = preferences.getSecret(WECHAT_BOT_SETTING)?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: WechatBotSetting(),
-                qqBotSetting = preferences.getSecret(QQ_BOT_SETTING)?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: QqBotSetting(),
                 keepAliveEnabled = preferences[KEEP_ALIVE_ENABLED] == true,
                 miniApps = preferences.getSecret(MINI_APPS)?.let {
                     JsonInstant.decodeFromString(it)
@@ -593,14 +585,6 @@ class SettingsStore(
                     settings.systemToolsSetting != previous.systemToolsSetting,
                 ) { JsonInstant.encodeToString(settings.systemToolsSetting) }
                 preferences[PROACTIVE_MESSAGE_SETTING] = JsonInstant.encodeToString(settings.proactiveMessageSetting)
-                preferences.putSecretIfChanged(
-                    WECHAT_BOT_SETTING,
-                    settings.wechatBotSetting != previous.wechatBotSetting,
-                ) { JsonInstant.encodeToString(settings.wechatBotSetting) }
-                preferences.putSecretIfChanged(
-                    QQ_BOT_SETTING,
-                    settings.qqBotSetting != previous.qqBotSetting,
-                ) { JsonInstant.encodeToString(settings.qqBotSetting) }
                 preferences[KEEP_ALIVE_ENABLED] = settings.keepAliveEnabled
                 preferences.putSecretIfChanged(
                     MINI_APPS,
@@ -798,8 +782,6 @@ data class Settings(
     val sponsorAlertDismissedAt: Int = 0,
     val systemToolsSetting: SystemToolsSetting = SystemToolsSetting(),
     val proactiveMessageSetting: ProactiveMessageSetting = ProactiveMessageSetting(),
-    val wechatBotSetting: WechatBotSetting = WechatBotSetting(),
-    val qqBotSetting: QqBotSetting = QqBotSetting(),
     val keepAliveEnabled: Boolean = false,
     val miniApps: List<MiniApp> = emptyList(),
     val forceConfirmToolCalls: Boolean = true,

@@ -77,8 +77,6 @@ import me.rerere.hugeicons.stroke.Share04
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.hugeicons.stroke.Time02
 import me.rerere.hugeicons.stroke.WavingHand01
-import me.rerere.hugeicons.stroke.MessageMultiple01
-import me.rerere.hugeicons.stroke.Message01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
@@ -313,18 +311,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Time02, null) },
                         supportingContent = { Text("时间、天气、位置、屏幕、通知和记忆等上下文") },
                         headlineContent = { Text("额外注入") },
-                    )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingWeixinBot) },
-                        leadingContent = { Icon(HugeIcons.MessageMultiple01, null) },
-                        supportingContent = { Text("把微信号变成 AI 入口，扫码登录后用微信收发消息") },
-                        headlineContent = { Text("微信 Bot") },
-                    )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingQqBot) },
-                        leadingContent = { Icon(HugeIcons.Message01, null) },
-                        supportingContent = { Text("填 AppID/Secret，用 QQ 私聊跟 AI 对话") },
-                        headlineContent = { Text("QQ Bot") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Workflows) },
