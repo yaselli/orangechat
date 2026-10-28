@@ -39,6 +39,7 @@ import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.plugin.di.pluginModule
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.datastore.recoverWakeupsBefore
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.service.DailySummaryService
 import me.rerere.rikkahub.data.service.ProactiveMessageService
@@ -182,16 +183,34 @@ class RikkaHubApp : Application() {
     }
 
     private fun rescheduleProactiveMessageIfEnabled() {
+        val recoveryCutoff = System.currentTimeMillis()
         get<AppScope>().launch {
             runCatching {
-                val settings = get<SettingsStore>().settingsFlowRaw.first()
+                val store = get<SettingsStore>()
+                if (
+                    store.settingsFlowRaw.first().proactiveMessageSetting.aiWakeups.any {
+                        it.status == me.rerere.rikkahub.data.datastore.ProactiveWakeupStatus.Running &&
+                            (it.startedAtMillis ?: 0L) < recoveryCutoff
+                    }
+                )
+                    store.update { current ->
+                        current.copy(
+                            proactiveMessageSetting =
+                                current.proactiveMessageSetting.recoverWakeupsBefore(recoveryCutoff)
+                        )
+                    }
+                val settings = store.settingsFlowRaw.first()
                 if (settings.proactiveMessageSetting.enabled) {
-                    ProactiveMessageService.scheduleNext(this@RikkaHubApp, settings.proactiveMessageSetting)
+                    ProactiveMessageService.scheduleNext(
+                        this@RikkaHubApp,
+                        settings.proactiveMessageSetting,
+                    )
                     Log.i(TAG, "Rescheduled proactive message alarm on app start")
                 }
-            }.onFailure {
-                Log.e(TAG, "rescheduleProactiveMessageIfEnabled failed", it)
             }
+                .onFailure {
+                    Log.e(TAG, "rescheduleProactiveMessageIfEnabled failed", it)
+                }
         }
     }
 

@@ -107,6 +107,8 @@ val appModule = module {
             workspaceRepository = get(),
             json = get(),
             sharedMusic = get(),
+            settingsStore = get(),
+            conversations = get(),
             memoryRepository = get(),
         )
     }
@@ -114,6 +116,8 @@ val appModule = module {
     single {
         UpdateChecker(get())
     }
+
+    single { me.rerere.rikkahub.utils.AppUpdateDownloader(get(), get()) }
 
     single {
         AppScope()

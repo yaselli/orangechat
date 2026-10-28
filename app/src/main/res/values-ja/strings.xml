@@ -303,8 +303,9 @@
   <string name="chat_page_search_chats">チャットを検索</string>
   <string name="chat_page_today">今日</string>
   <string name="chat_page_yesterday">昨日</string>
-  <string name="chat_size_dialog_content">現在のメッセージ数: %1$d。これによりアプリがクラッシュしたり動作が遅くなったり、この会話データが失われる可能性があります。チャットを続けるには、できるだけ早く新しい会話を作成してください。</string>
-  <string name="chat_size_dialog_title">この会話データは大きすぎます</string>
+  <string name="chat_size_dialog_content">この会話には %1$d 件のメッセージが保存されています。コンテキストを圧縮すると、以降のリクエストに含む履歴を減らせます。動作が遅い場合は、会話をバックアップして新しいチャットで続けてください。</string>
+  <string name="chat_size_dialog_input_usage">直近の返信の入力使用量：%1$s トークン。</string>
+  <string name="chat_size_dialog_title">長い会話：コンテキスト使用量をご確認ください</string>
   <string name="citations_count">%1$d 件の引用</string>
   <string name="common_export">エクスポート</string>
   <string name="common_share">共有</string>

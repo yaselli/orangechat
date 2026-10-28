@@ -33,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -203,13 +204,17 @@ fun VoiceCallPage(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             // 顶部: 状态标签 (用当前状态主色, 与光球/背景同色系)
-            Text(
-                text = statusText(uiState.status),
-                color = accentColor,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(top = 80.dp)
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 80.dp)) {
+                Text(
+                    text = statusText(uiState.status),
+                    color = accentColor,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                if (uiState.rawAudioInput) {
+                    Text("原声输入 · TTS 回复", color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp)
+                }
+            }
 
             // 中部: 流动光球 (颜色随状态变化)
             Column(
@@ -265,6 +270,13 @@ fun VoiceCallPage(
                 )
             }
 
+            if (uiState.status == VoiceCallStatus.Speaking ||
+                (uiState.rawAudioInput && uiState.status == VoiceCallStatus.Processing)) {
+                TextButton(onClick = { boundService?.interruptSpeaking() }) {
+                    Text("打断，继续说", color = Color.White)
+                }
+            }
+
             // 底部: 只有两个按钮 (ChatGPT 风格)
             // 左: 静音, 右: 挂断.
             Row(
@@ -273,7 +285,8 @@ fun VoiceCallPage(
                 modifier = Modifier.padding(bottom = 64.dp)
             ) {
                 // 静音按钮
-                val canControl = boundService != null
+                val canControl = boundService != null && uiState.status != VoiceCallStatus.Idle &&
+                    uiState.status != VoiceCallStatus.Error
                 ControlButton(
                     icon = if (uiState.isMuted) HugeIcons.MicOff01 else HugeIcons.Mic01,
                     contentDescription = "静音",

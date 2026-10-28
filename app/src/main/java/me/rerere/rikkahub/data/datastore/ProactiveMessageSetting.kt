@@ -11,6 +11,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ProactiveMessageSetting(
     val enabled: Boolean = false,
+    val allowAiWakeups: Boolean = false,
+    val aiWakeups: List<ProactiveWakeup> = emptyList(),
     val minIntervalMinutes: Int = 30,
     val maxIntervalMinutes: Int = 90,
     // Phone-local daily quiet window; equal endpoints mean no quiet window.

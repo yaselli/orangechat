@@ -72,4 +72,9 @@ class ToolSurfacePolicyTest {
         assertFalse(policy.workspaceAllowed(null, null))
         assertFalse(policy.workspaceAllowed("  ", null))
     }
+    @Test fun `blocked chat cannot expose proactive wakeup scheduling`() {
+        assertFalse(ToolSurfacePolicy.forChat(false, true).allowProactiveWakeup)
+        assertTrue(ToolSurfacePolicy.forChat(false, false).allowProactiveWakeup)
+    }
+
 }

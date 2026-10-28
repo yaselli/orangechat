@@ -21,6 +21,7 @@ object ToolDiscoveryPolicy {
             "get_time_info",
             "set_alarm",
             "set_timer",
+            "proactive_wakeup",
             "calendar_tool",
             "text_to_speech",
             "ask_user",

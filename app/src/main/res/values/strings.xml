@@ -306,8 +306,9 @@
   <string name="chat_page_search_chats">Search Chats</string>
   <string name="chat_page_today">Today</string>
   <string name="chat_page_yesterday">Yesterday</string>
-  <string name="chat_size_dialog_content">Current message count: %1$d. This may cause the application to crash or lag, or even lose this conversation data. Please create a new conversation as soon as possible to continue chatting.</string>
-  <string name="chat_size_dialog_title">This conversation data is too large</string>
+  <string name="chat_size_dialog_content">This conversation stores %1$d messages locally. Compress the context to reduce subsequent requests. If the app becomes sluggish, back up the conversation and continue in a new chat.</string>
+  <string name="chat_size_dialog_input_usage">Latest reply input: %1$s tokens.</string>
+  <string name="chat_size_dialog_title">Long conversation: check context usage</string>
   <string name="citations_count">%1$d Citations</string>
   <string name="common_export">Export</string>
   <string name="common_share">Share</string>

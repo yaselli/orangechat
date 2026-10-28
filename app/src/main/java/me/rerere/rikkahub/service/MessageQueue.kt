@@ -8,6 +8,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyInputMessage
+import me.rerere.ai.ui.finishPendingTools
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.localFileUrls
 import kotlin.uuid.Uuid
@@ -44,6 +45,25 @@ internal fun queuedReplyText(messages: List<UIMessage>, userMessageId: Uuid): St
     if (index < 0) return ""
     return messages.drop(index + 1).takeWhile { it.role != MessageRole.USER }
         .filter { it.role == MessageRole.ASSISTANT }.joinToString("\n") { it.toText() }
+}
+
+/** Settle only the interrupted voice turn before its generation releases the queue claim. */
+internal fun finishVoiceReplyTools(
+    conversation: Conversation,
+    userMessageId: Uuid,
+    finish: (UIMessagePart.Tool) -> UIMessagePart.Tool,
+): Conversation {
+    val messages = conversation.currentMessages
+    val index = messages.indexOfFirst { it.id == userMessageId && it.role == MessageRole.USER }
+    if (index < 0) return conversation
+    val replyIds = messages.drop(index + 1).takeWhile { it.role != MessageRole.USER }
+        .filter { it.role == MessageRole.ASSISTANT }.mapTo(hashSetOf()) { it.id }
+    val nodes = conversation.messageNodes.map { node ->
+        node.copy(messages = node.messages.map { message ->
+            if (message.id in replyIds) message.finishPendingTools(finish) else message
+        })
+    }
+    return if (nodes == conversation.messageNodes) conversation else conversation.copy(messageNodes = nodes)
 }
 
 /** Pending input is kept outside conversation history until dispatched. */

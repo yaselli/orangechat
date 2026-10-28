@@ -151,6 +151,8 @@ class SettingsStore(
         // ASR
         val ASR_PROVIDERS = stringPreferencesKey("asr_providers")
         val SELECTED_ASR_PROVIDER = stringPreferencesKey("selected_asr_provider")
+        val VOICE_CALL_RAW_AUDIO = booleanPreferencesKey("voice_call_raw_audio")
+        val VOICE_CALL_LISTEN_WHILE_REPLYING = booleanPreferencesKey("voice_call_listen_while_replying")
 
         // Web Server
         val WEB_SERVER_ENABLED = booleanPreferencesKey("web_server_enabled")
@@ -323,6 +325,8 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 selectedASRProviderId = preferences[SELECTED_ASR_PROVIDER]?.let { Uuid.parse(it) },
+                voiceCallRawAudio = preferences[VOICE_CALL_RAW_AUDIO] ?: false,
+                voiceCallListenWhileReplying = preferences[VOICE_CALL_LISTEN_WHILE_REPLYING] ?: true,
                 modeInjections = preferences[MODE_INJECTIONS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -568,6 +572,8 @@ class SettingsStore(
                 settings.selectedASRProviderId?.let {
                     preferences[SELECTED_ASR_PROVIDER] = it.toString()
                 } ?: preferences.remove(SELECTED_ASR_PROVIDER)
+                preferences[VOICE_CALL_RAW_AUDIO] = settings.voiceCallRawAudio
+                preferences[VOICE_CALL_LISTEN_WHILE_REPLYING] = settings.voiceCallListenWhileReplying
                 preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
                 preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
                 preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
@@ -778,6 +784,7 @@ data class Settings(
     val asrProviders: List<ASRProviderSetting> = emptyList(),
     val selectedASRProviderId: Uuid? = null,
     val voiceCallListenWhileReplying: Boolean = true,
+    val voiceCallRawAudio: Boolean = false,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),

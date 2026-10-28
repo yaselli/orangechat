@@ -166,6 +166,13 @@ class ConversationSession(
 
     fun getJob(): Job? = _generationJob.value
 
+    /** Cancel a voice turn by identity; never cancel another normal/proactive turn in this session. */
+    internal fun cancelVoiceReply(messageId: Uuid): QueuedMessage? = withGenerationLock {
+        val removed = messageQueue.remove(messageId)
+        if (submittingMessage?.id == messageId) getJob()?.cancel()
+        removed
+    }
+
     internal fun <T> withGenerationLock(block: () -> T): T = synchronized(claimLock, block)
 
     /**

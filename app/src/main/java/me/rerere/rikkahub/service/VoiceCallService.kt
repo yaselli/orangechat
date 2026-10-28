@@ -18,6 +18,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,11 +36,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.supportsRawAudioInput
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.VOICE_CALL_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.ui.hooks.CustomAsrState
 import me.rerere.rikkahub.ui.hooks.CustomTtsState
 import me.rerere.rikkahub.ui.hooks.createCustomAsrState
@@ -67,6 +72,7 @@ class VoiceCallService : Service(), KoinComponent {
     private val chatService: ChatService by inject()
     private val httpClient: OkHttpClient by inject()
     private val settingsStore: SettingsStore by inject()
+    private val filesManager: FilesManager by inject()
 
     private val serviceScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main + CoroutineExceptionHandler { _, e ->
@@ -77,6 +83,10 @@ class VoiceCallService : Service(), KoinComponent {
     private lateinit var conversationId: Uuid
     private lateinit var asr: CustomAsrState
     private lateinit var tts: CustomTtsState
+    private var initializationJob: Job? = null
+    private var rawInput: RawVoiceCallInput? = null
+    private var rawAudioInput = false
+    @Volatile private var ending = false
 
     private val _uiState = MutableStateFlow(VoiceCallUiState())
     val uiState: StateFlow<VoiceCallUiState> = _uiState.asStateFlow()
@@ -87,7 +97,7 @@ class VoiceCallService : Service(), KoinComponent {
     // 任务协程
     private var vadJob: Job? = null
     private var speakingMonitorJob: Job? = null
-    private var listenWhileReplying = true
+    @Volatile private var listenWhileReplying = true
     private var voiceMessageId: kotlin.uuid.Uuid? = null
     private var conversationMonitorJob: Job? = null
     private var asrMonitorJob: Job? = null
@@ -209,19 +219,37 @@ class VoiceCallService : Service(), KoinComponent {
             return START_NOT_STICKY
         }
 
-        serviceScope.launch {
+        ending = false
+        initializationJob = serviceScope.launch {
             try {
                 // 关键修复: 两个工厂函数现在是 suspend 函数, 会真正挂起等待
                 // provider 设置完成后才返回实例, 消除了之前 controller 为 null 的竞态.
-                listenWhileReplying = settingsStore.settingsFlowRaw.first().voiceCallListenWhileReplying
-                asr = createCustomAsrState(applicationContext, httpClient, settingsStore)
+                val settings = settingsStore.settingsFlowRaw.first()
+                listenWhileReplying = settings.voiceCallListenWhileReplying
+                rawAudioInput = settings.voiceCallRawAudio
+                _uiState.update { it.copy(rawAudioInput = rawAudioInput) }
+                if (rawAudioInput) {
+                    val model = settings.getChatModelOf(conversation.value)
+                    check(model != null && supportsRawAudioInput(model.findProvider(settings.providers))) {
+                        "当前模型接口不支持原声输入。请选择支持音频的 Gemini / OpenAI 兼容模型，或关闭「通话时发送原声」。"
+                    }
+                } else {
+                    asr = createCustomAsrState(applicationContext, httpClient, settingsStore)
+                }
                 tts = createCustomTtsState(applicationContext, settingsStore)
+
+                if (rawAudioInput) launch {
+                    tts.error.collect { message ->
+                        if (!ending && !message.isNullOrBlank()) failRawCall("朗读失败: $message")
+                    }
+                }
 
                 startCall()
                 launch {
                     settingsStore.settingsFlowRaw.map { it.voiceCallListenWhileReplying }.distinctUntilChanged().collect {
                         if (listenWhileReplying != it) {
                             listenWhileReplying = it
+                            rawInput?.invalidateCapture()
                             interruptDetectJob?.cancel()
                             updateVoiceCapture()
                             if (_uiState.value.status == VoiceCallStatus.Speaking) startInterruptDetection()
@@ -243,7 +271,7 @@ class VoiceCallService : Service(), KoinComponent {
                 }
 
                 // Service 自己订阅 asr.state, 同步振幅数据 + 捕获底层 ASR 错误
-                launch {
+                if (!rawAudioInput) launch {
                     asr.state.collect { asrState ->
                         updateAmplitudes(asrState.amplitudes)
                         if (asrState.status == me.rerere.asr.ASRStatus.Error) {
@@ -258,6 +286,8 @@ class VoiceCallService : Service(), KoinComponent {
                         }
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 Log.e(TAG, "初始化语音通话失败, conversationId=$conversationId")
                 _uiState.update {
@@ -332,6 +362,58 @@ class VoiceCallService : Service(), KoinComponent {
         startVadDetection()
     }
 
+    private fun startRawCapture() {
+        rawInput = RawVoiceCallInput(
+            context = applicationContext,
+            scope = serviceScope,
+            files = filesManager,
+            canCapture = {
+                !ending && shouldCaptureVoice(_uiState.value.status, _uiState.value.isMuted, listenWhileReplying)
+            },
+            onLevel = { level -> updateAmplitudes(_uiState.value.amplitudes.takeLast(39) + level) },
+            onSpeechStarted = {
+                interruptRawReply()
+                _uiState.update { it.copy(userTranscript = "正在录音，说完会自动发送…") }
+            },
+            onSending = {
+                voiceMessageId = null
+                _uiState.update { it.copy(status = VoiceCallStatus.Processing,
+                    userTranscript = "原声录音正在发送…", assistantText = "") }
+            },
+            onAudioReady = { parts ->
+                if (ending) false else submitVoiceMessage(parts).also { sent ->
+                    if (sent) _uiState.update { it.copy(userTranscript = "原声录音已发送") }
+                }
+            },
+            onFailure = ::failRawCall,
+        ).also { it.start() }
+    }
+
+    /** Preserve the incoming PCM utterance while stopping only this call's previous reply. */
+    private fun interruptRawReply() {
+        if (_uiState.value.status !in listOf(VoiceCallStatus.Processing, VoiceCallStatus.Speaking)) return
+        rawInput?.interruptPendingSend()
+        speakingMonitorJob?.cancel()
+        val previous = voiceMessageId
+        voiceMessageId = null
+        previous?.let { chatService.cancelVoiceReply(conversationId, it) }
+        if (::tts.isInitialized) tts.stop()
+        ttsSentLength = 0
+        lastAssistantText = ""
+        _uiState.update { it.copy(status = VoiceCallStatus.Listening, assistantText = "", errorMessage = null) }
+    }
+
+    private fun failRawCall(message: String) {
+        if (ending) return
+        rawInput?.close()
+        speakingMonitorJob?.cancel()
+        val previous = voiceMessageId
+        voiceMessageId = null
+        previous?.let { chatService.cancelVoiceReply(conversationId, it) }
+        if (::tts.isInitialized) tts.stop()
+        _uiState.update { it.copy(status = VoiceCallStatus.Error, errorMessage = message) }
+    }
+
     /**
      * VAD: 检测用户停顿后自动发送 (仅 Listening 状态生效).
      *
@@ -339,6 +421,7 @@ class VoiceCallService : Service(), KoinComponent {
      * 阈值参数 (800ms / 2 字符 / 2 秒音量超时) 保持不变, 不要动.
      */
     private fun startVadDetection() {
+        if (rawAudioInput) return
         vadJob?.cancel()
         vadJob = serviceScope.launch {
             var lastTranscript = ""
@@ -403,6 +486,10 @@ class VoiceCallService : Service(), KoinComponent {
             return
         }
 
+        submitVoiceMessage(listOf(UIMessagePart.Text(transcript)))
+    }
+
+    private fun submitVoiceMessage(parts: List<UIMessagePart>): Boolean {
         _uiState.update {
             it.copy(
                 status = VoiceCallStatus.Processing,
@@ -411,10 +498,10 @@ class VoiceCallService : Service(), KoinComponent {
         }
         ttsSentLength = 0
         lastAssistantText = ""
-        if (!listenWhileReplying && !updateVoiceCapture()) return
+        if (!listenWhileReplying && !updateVoiceCapture()) return false
 
         try {
-            val queued = chatService.enqueueVoiceMessage(conversationId, transcript)
+            val queued = chatService.enqueueVoiceMessage(conversationId, parts)
             voiceMessageId = queued.id
             speakingMonitorJob?.cancel()
             speakingMonitorJob = serviceScope.launch {
@@ -424,16 +511,19 @@ class VoiceCallService : Service(), KoinComponent {
                     if (result == null) {
                         startListening()
                     } else {
+                        check(!rawAudioInput || result.isNotBlank()) { "模型没有返回可朗读的正文" }
                         _uiState.update { it.copy(assistantText = result) }
                         onGenerationDone()
                     }
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
-                    _uiState.update { it.copy(status = VoiceCallStatus.Error,
+                    if (rawAudioInput) failRawCall("生成失败: ${error.message}")
+                    else _uiState.update { it.copy(status = VoiceCallStatus.Error,
                         errorMessage = "生成失败: ${error.message}") }
                 }
             }
+            return true
         } catch (e: Exception) {
             Log.e(
                 TAG,
@@ -446,6 +536,7 @@ class VoiceCallService : Service(), KoinComponent {
                     errorMessage = "发送失败: ${e.message}"
                 )
             }
+            return false
         }
     }
 
@@ -535,7 +626,7 @@ class VoiceCallService : Service(), KoinComponent {
         // 改用 "活动超时": 跟踪 TTS 最后一次处于活动状态的时间,
         // 连续 5 秒没有新的播放活动(不是 Playing/Buffering 且 isSpeaking 为 false)
         // 就认为说完了. 另勠 5 分钟硬截止兜底.
-        val idleTimeoutMs = 5_000L
+        val idleTimeoutMs = if (rawAudioInput) 1_000L else 5_000L
         val hardDeadlineMs = 300_000L
         val startTime = System.currentTimeMillis()
         var lastActiveTime = System.currentTimeMillis()
@@ -613,6 +704,7 @@ class VoiceCallService : Service(), KoinComponent {
      */
     private fun startInterruptDetection() {
         interruptDetectJob?.cancel()
+        if (rawAudioInput) return // PCM speech onset drives barge-in; no ASR transcript is involved.
         if (!listenWhileReplying) return
         interruptDetectJob = serviceScope.launch {
             var baselineTranscript = _uiState.value.userTranscript
@@ -647,6 +739,10 @@ class VoiceCallService : Service(), KoinComponent {
      * 切回聆听状态，由采集策略恢复麦克风。
      */
     fun interruptSpeaking() {
+        if (rawAudioInput) {
+            interruptRawReply()
+            return
+        }
         if (_uiState.value.status != VoiceCallStatus.Speaking) return
         speakingMonitorJob?.cancel()
         interruptDetectJob?.cancel()
@@ -660,6 +756,7 @@ class VoiceCallService : Service(), KoinComponent {
      * 加了 !isMuted 判断, 避免静音操作本身触发的 Recording→非Recording 跳变被误判成"该发送了".
      */
     private fun startAsrMonitor() {
+        if (rawAudioInput) return
         asrMonitorJob?.cancel()
         asrMonitorJob = serviceScope.launch {
             var wasRecording = false
@@ -694,6 +791,7 @@ class VoiceCallService : Service(), KoinComponent {
      * 静音 = 模型听不到; 取消静音后仍遵守回复期间是否监听的设置。
      */
     fun toggleMute() {
+        rawInput?.invalidateCapture()
         isMuted = !isMuted
         _uiState.update { it.copy(isMuted = isMuted) }
 
@@ -701,16 +799,21 @@ class VoiceCallService : Service(), KoinComponent {
     }
 
     private fun updateVoiceCapture(): Boolean = try {
-        if (shouldCaptureVoice(_uiState.value.status, isMuted, listenWhileReplying)) {
-            asr.start { transcript ->
-                if (shouldCaptureVoice(_uiState.value.status, isMuted, listenWhileReplying)) {
-                    _uiState.update { it.copy(userTranscript = transcript) }
-                }
-            }
+        if (rawAudioInput) {
+            if (rawInput == null && !ending) startRawCapture()
+            true
         } else {
-            asr.stop()
+            if (shouldCaptureVoice(_uiState.value.status, isMuted, listenWhileReplying)) {
+                asr.start { transcript ->
+                    if (shouldCaptureVoice(_uiState.value.status, isMuted, listenWhileReplying)) {
+                        _uiState.update { it.copy(userTranscript = transcript) }
+                    }
+                }
+            } else {
+                asr.stop()
+            }
+            true
         }
-        true
     } catch (error: Exception) {
         _uiState.update { it.copy(status = VoiceCallStatus.Error, errorMessage = "麦克风切换失败: ${error.message}") }
         false
@@ -728,13 +831,21 @@ class VoiceCallService : Service(), KoinComponent {
      * 额外复位 _activeConversationId 和移除前台通知.
      */
     fun endCall() {
+        ending = true
+        initializationJob?.cancel()
+        rawInput?.close()
+        rawInput = null
+        if (rawAudioInput && ::conversationId.isInitialized) {
+            voiceMessageId?.let { chatService.cancelVoiceReply(conversationId, it) }
+        }
+        voiceMessageId = null
         vadJob?.cancel()
         speakingMonitorJob?.cancel()
         conversationMonitorJob?.cancel()
         asrMonitorJob?.cancel()
         interruptDetectJob?.cancel()
-        asr.stop()
-        tts.stop()
+        if (::asr.isInitialized) asr.stop()
+        if (::tts.isInitialized) tts.stop()
         _uiState.update {
             it.copy(status = VoiceCallStatus.Idle)
         }
@@ -805,5 +916,6 @@ class VoiceCallService : Service(), KoinComponent {
             Log.e(TAG, "onDestroy 清理失败")
         }
         serviceScope.cancel()
+        if (::tts.isInitialized) tts.cleanup()
     }
 }

@@ -14,8 +14,13 @@ internal fun updateDownloadBase(url: String, tag: String? = null): String? = tru
 
 enum class UpdateChannel(val assetName: String) { RELEASE("release"), DEBUG("debug") }
 
-data class UpdateDownload(val name: String, val url: String, val size: String)
+@Serializable
+data class UpdateDownload(
+    val name: String, val url: String, val size: String,
+    val bytes: Long = 0, val sha256: String? = null,
+)
 
+@Serializable
 data class UpdateInfo(
     val version: String,
     val versionCode: Int,
@@ -38,6 +43,7 @@ internal data class GithubAsset(
     val name: String,
     val size: Long,
     @SerialName("browser_download_url") val browserDownloadUrl: String,
+    val digest: String? = null,
 )
 
 // Asset names are generated from the APK's actual package/version/ABI by the build script.
@@ -66,14 +72,16 @@ internal fun selectAppUpdate(
         val abiRank = if (abi == "universal") supportedAbis.size else supportedAbis.indexOf(abi)
         val releaseBase = updateDownloadBase(asset.browserDownloadUrl, release.tagName)
         if (assetVersion != version || assetChannel != channel.assetName || code <= currentVersionCode ||
-            abiRank < 0 || releaseBase == null
+            abiRank < 0 || releaseBase == null || asset.size <= 0 ||
+            (asset.digest != null && !asset.digest.matches(Regex("sha256:[0-9a-fA-F]{64}")))
         ) return@mapNotNull null
         val size = String.format(Locale.ROOT, "%.1f MB", asset.size / (1024.0 * 1024.0))
         abiRank to UpdateInfo(
             version = version,
             versionCode = code,
             changelog = release.body?.takeIf { it.isNotBlank() } ?: "暂无更新说明",
-            download = UpdateDownload(asset.name, asset.browserDownloadUrl, size),
+            download = UpdateDownload(asset.name, asset.browserDownloadUrl, size,
+                asset.size, asset.digest?.substringAfter(":")?.lowercase()),
             releaseUrl = "$releaseBase/tag/${release.tagName}",
         )
     }

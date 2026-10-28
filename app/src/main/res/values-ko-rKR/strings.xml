@@ -303,8 +303,9 @@
   <string name="chat_page_search_chats">채팅 검색</string>
   <string name="chat_page_today">오늘</string>
   <string name="chat_page_yesterday">어제</string>
-  <string name="chat_size_dialog_content">현재 메시지 수: %1$d. 이로 인해 앱이 강제 종료되거나 느려질 수 있으며, 대화 데이터가 손실될 수도 있습니다. 계속 대화하려면 새 대화를 만들어 주세요.</string>
-  <string name="chat_size_dialog_title">이 대화 데이터가 너무 큽니다</string>
+  <string name="chat_size_dialog_content">이 대화에는 메시지 %1$d개가 저장되어 있습니다. 컨텍스트를 압축하면 이후 요청에 포함되는 기록을 줄일 수 있습니다. 앱이 느려지면 대화를 백업하고 새 채팅에서 계속해 주세요.</string>
+  <string name="chat_size_dialog_input_usage">최근 응답의 입력 사용량: %1$s 토큰.</string>
+  <string name="chat_size_dialog_title">긴 대화: 컨텍스트 사용량을 확인해 주세요</string>
   <string name="citations_count">%1$d 출처</string>
   <string name="common_export">내보내기</string>
   <string name="common_share">공유</string>

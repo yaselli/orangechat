@@ -6,12 +6,7 @@
 
 package me.rerere.rikkahub.utils
 
-import android.app.DownloadManager
-import android.content.Context
 import android.os.Build
-import android.os.Environment
-import android.widget.Toast
-import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -80,24 +75,4 @@ class UpdateChecker(
     /** At most one automatic prompt per version in this process, even after switching chats. */
     @Synchronized
     fun claimAutomaticPrompt(versionCode: Int): Boolean = prompted.add(versionCode)
-
-    fun downloadUpdate(context: Context, download: UpdateDownload) {
-        runCatching {
-            require(updateDownloadBase(download.url) != null)
-            val request = DownloadManager.Request(download.url.toUri()).apply {
-                setTitle(download.name)
-                setDescription("正在下载西瓜瓣更新…")
-                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
-                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, download.name)
-                setMimeType("application/vnd.android.package-archive")
-            }
-            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            dm.enqueue(request)
-            Toast.makeText(context, "开始下载，完成后请从通知栏打开安装包。", Toast.LENGTH_LONG).show()
-        }.onFailure {
-            Toast.makeText(context, "无法启动下载，正在打开下载页面。", Toast.LENGTH_SHORT).show()
-            context.openUrl(updateDownloadBase(download.url) ?: UPDATE_RELEASES_URL)
-        }
-    }
 }

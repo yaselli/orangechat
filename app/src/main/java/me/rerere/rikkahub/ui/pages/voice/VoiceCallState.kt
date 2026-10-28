@@ -32,6 +32,7 @@ data class VoiceCallUiState(
     val amplitudes: List<Float> = emptyList(),
     val isMuted: Boolean = false,
     val autoSendEnabled: Boolean = true,
+    val rawAudioInput: Boolean = false,
 ) {
     val isActive: Boolean
         get() = status != VoiceCallStatus.Idle
