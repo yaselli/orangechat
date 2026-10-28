@@ -207,6 +207,20 @@ class PublishUpdateTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             module.verify_source('b' * 40, SOURCE, bad_build_change)
 
+    def test_new_version_notes_are_allowed_without_allowing_other_source_files(self):
+        def changed_paths(paths):
+            def run(args, check=True):
+                output = '\n'.join(paths) if '--name-only' in args else ''
+                return subprocess.CompletedProcess(args, 0, output, '')
+            return run
+
+        module.verify_source('b' * 40, SOURCE, changed_paths(['docs/releases/2.3.5.md']))
+        module.verify_source('b' * 40, SOURCE, changed_paths(['docs/releases/12.34.56.md']))
+        for path in ('docs/releases/2.3.5.py', 'docs/releases/../2.3.5.md',
+                     'docs/releases/draft.md', 'app/src/main/java/ChatService.kt'):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                module.verify_source('b' * 40, SOURCE, changed_paths([path]))
+
 
 if __name__ == '__main__':
     unittest.main()

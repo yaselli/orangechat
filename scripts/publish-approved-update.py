@@ -15,7 +15,7 @@ APPROVED_REPOSITORIES = frozenset({'yaselli/watermelon-chat', 'yaselli/orangecha
 ALLOWED_RELEASE_FILES = {
     'app/build.gradle.kts', '.github/release-plan.json',
     '.github/workflows/build-apk.yml', '.github/workflows/build-isolated-apk.yml',
-    'docs/releases/2.3.2.md', 'docs/releases/2.3.3.md', 'docs/releases/2.3.4.md', 'docs/app-updates.md',
+    'docs/app-updates.md', 'docs/proactive-wakeups.md',
     'scripts/publish-approved-update.py', 'scripts/test-publish-approved-update.py',
 }
 
@@ -32,7 +32,9 @@ def verify_source(tested, source, run=command):
         raise ValueError('Invalid source commit')
     run(['git', 'merge-base', '--is-ancestor', tested, source])
     changed = set(run(['git', 'diff', '--name-only', tested, source]).stdout.splitlines())
-    if changed - ALLOWED_RELEASE_FILES:
+    unapproved = {path for path in changed if path not in ALLOWED_RELEASE_FILES
+                  and not re.fullmatch(r'docs/releases/\d+\.\d+\.\d+\.md', path)}
+    if unapproved:
         raise ValueError('Untested application changes are not part of this release approval')
     version_diff = run(['git', 'diff', '--unified=0', tested, source, '--', 'app/build.gradle.kts']).stdout
     changes = [line for line in version_diff.splitlines()
