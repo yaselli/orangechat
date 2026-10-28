@@ -1,0 +1,64 @@
+name: Verify app changes
+
+on:
+  pull_request:
+    branches: [build/stable-release]
+    paths:
+      - "app/**"
+      - "ai/**"
+      - "common/**"
+      - "speech/**"
+      - "web/**"
+      - "web-ui/**"
+      - "document/**"
+      - "workspace/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - ".github/workflows/verify-app.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download color utilities
+        run: git submodule update --init --depth 1 material3/material-color-utilities
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+      - name: Install web dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      # Use the runner's preinstalled Android SDK, as the APK build workflows do.
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test app and providers and run Android Lint
+        run: |
+          chmod +x gradlew
+          ./gradlew :ai:testDebugUnitTest :app:testDebugUnitTest :app:lintDebug --continue
+      - name: Upload verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-verification-results
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+            **/build/reports/lint-results*
+          if-no-files-found: warn

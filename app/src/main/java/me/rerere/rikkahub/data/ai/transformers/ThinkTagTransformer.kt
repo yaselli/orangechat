@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 橘瓣 OrangeChat
  * 衍生自 RikkaHub (https://github.com/rikkahub/rikkahub)，原作者 RE
  * 本项目基于 GNU AGPL v3 开源，详见根目录 LICENSE 文件
@@ -6,15 +6,13 @@
 
 package me.rerere.rikkahub.data.ai.transformers
 
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import kotlin.time.Clock
-
-private val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
-private val CLOSING_TAG_REGEX = Regex("</think>")
 
 // 部分供应商不会返回reasoning parts, 所以需要这个transformer
 object ThinkTagTransformer : OutputMessageTransformer {
@@ -22,65 +20,42 @@ object ThinkTagTransformer : OutputMessageTransformer {
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        return messages.map { message ->
-            if (message.role == MessageRole.ASSISTANT && message.hasPart<UIMessagePart.Text>()) {
-                message.copy(
-                    parts = message.parts.flatMap { part ->
-                        if (part is UIMessagePart.Text && THINKING_REGEX.containsMatchIn(part.text)) {
-                            val stripped = part.text.replace(THINKING_REGEX, "")
-                            val reasoning =
-                                THINKING_REGEX.find(part.text)?.groupValues?.getOrNull(1)?.trim()
-                                    ?: ""
-                            val hasClosingTag = CLOSING_TAG_REGEX.containsMatchIn(part.text)
-                            listOf(
-                                UIMessagePart.Reasoning(
-                                    reasoning = reasoning,
-                                    createdAt = message.createdAt.toInstant(timeZone = TimeZone.currentSystemDefault()),
-                                    finishedAt = if (hasClosingTag) Clock.System.now() else null,
-                                ),
-                                part.copy(text = stripped),
-                            )
-                        } else {
-                            listOf(part)
-                        }
-                    }
-                )
-            } else {
-                message
-            }
-        }
+        return transformThinkTags(messages, finished = false)
     }
 
     override suspend fun onGenerationFinish(
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        val now = Clock.System.now()
-        return messages.map { message ->
-            if (message.role == MessageRole.ASSISTANT && message.hasPart<UIMessagePart.Text>()) {
-                message.copy(
-                    parts = message.parts.flatMap { part ->
-                        if (part is UIMessagePart.Text && THINKING_REGEX.containsMatchIn(part.text)) {
-                            val stripped = part.text.replace(THINKING_REGEX, "")
-                            val reasoning =
-                                THINKING_REGEX.find(part.text)?.groupValues?.getOrNull(1)?.trim()
-                                    ?: ""
-                            listOf(
-                                UIMessagePart.Reasoning(
-                                    reasoning = reasoning,
-                                    createdAt = message.createdAt.toInstant(timeZone = TimeZone.currentSystemDefault()),
-                                    finishedAt = now,
-                                ),
-                                part.copy(text = stripped),
+        return transformThinkTags(messages, finished = true)
+    }
+}
+
+internal fun transformThinkTags(messages: List<UIMessage>, finished: Boolean): List<UIMessage> {
+    val now = Clock.System.now()
+    return messages.map { message ->
+        if (message.role != MessageRole.ASSISTANT) return@map message
+        val createdAt = message.createdAt.toInstant(TimeZone.currentSystemDefault())
+        var reasoningIndex = 0
+        message.copy(
+            parts =
+                message.parts.flatMap { part ->
+                    if (part !is UIMessagePart.Text) return@flatMap listOf(part)
+                    val segments = splitThinkingText(part.text)
+                    if (segments.none { it.reasoning }) return@flatMap listOf(part)
+                    segments.map { segment ->
+                        if (segment.reasoning)
+                            UIMessagePart.Reasoning(
+                                reasoning = segment.text,
+                                // The UI keys reasoning steps by createdAt; keep multiple tag
+                                // blocks distinct and stable.
+                                createdAt = createdAt + (reasoningIndex++).nanoseconds,
+                                finishedAt = if (finished || segment.closed) now else null,
+                                metadata = part.metadata,
                             )
-                        } else {
-                            listOf(part)
-                        }
+                        else part.copy(text = segment.text)
                     }
-                )
-            } else {
-                message
-            }
-        }
+                }
+        )
     }
 }
