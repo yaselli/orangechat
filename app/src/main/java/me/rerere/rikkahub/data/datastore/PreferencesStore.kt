@@ -829,6 +829,7 @@ data class AnniversaryEntry(
 
 @Serializable
 data class DisplaySetting(
+    val chatDisplayMode: ChatDisplayMode = ChatDisplayMode.STANDARD,
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
     val useAppIconStyleLoadingIndicator: Boolean = true,

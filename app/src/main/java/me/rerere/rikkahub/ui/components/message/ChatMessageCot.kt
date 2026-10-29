@@ -9,6 +9,7 @@ package me.rerere.rikkahub.ui.components.message
 import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
+import me.rerere.rikkahub.data.datastore.ChatDisplayMode
 import me.rerere.rikkahub.ui.components.charts.ChartSpec
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlinx.serialization.json.JsonObject
@@ -27,6 +28,11 @@ sealed interface ThinkingStep {
         val tool: UIMessagePart.Tool,
     ) : ThinkingStep
 }
+
+/** Presentation only: pending confirmations/questions must remain reachable in everyday chat. */
+internal fun List<ThinkingStep>.forChatDisplay(mode: ChatDisplayMode): List<ThinkingStep> =
+    if (mode == ChatDisplayMode.STANDARD) this
+    else filter { it is ThinkingStep.ToolStep && !it.tool.isExecuted && it.tool.isPending }
 
 /**
  * 消息部分块类型，用于保持渲染顺序
