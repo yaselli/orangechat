@@ -6,10 +6,6 @@
 
 package me.rerere.rikkahub.ui.pages.chat
 
-import me.rerere.rikkahub.ui.theme.LocalDarkMode
-
-import me.rerere.rikkahub.ui.theme.glassSurface
-
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Forward02
@@ -20,7 +16,6 @@ import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -64,14 +59,11 @@ import androidx.paging.compose.itemKey
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.theme.extendColors
-import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
-import java.time.ZoneId
 import kotlin.uuid.Uuid
+import me.rerere.rikkahub.ui.theme.themeMaterial
 
-/**
- * Represents different types of items in the conversation list
- */
+/** Represents different types of items in the conversation list */
 sealed class ConversationListItem {
     data class DateHeader(
         val date: LocalDate,
@@ -204,10 +196,9 @@ private fun DateHeaderItem(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (glassStyleEnabled) Modifier.glassSurface(
+                if (glassStyleEnabled) Modifier.themeMaterial(
                     shape = headerShape,
                     tint = MaterialTheme.colorScheme.surfaceContainerLow,
-                    dark = LocalDarkMode.current,
                     opacity = 0.65f * drawerItemAlpha,
                 ) else Modifier.background(
                     MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = drawerItemAlpha)
@@ -236,10 +227,9 @@ private fun PinnedHeader(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (glassStyleEnabled) Modifier.glassSurface(
+                if (glassStyleEnabled) Modifier.themeMaterial(
                     shape = headerShape,
                     tint = MaterialTheme.colorScheme.surfaceContainerLow,
-                    dark = LocalDarkMode.current,
                     opacity = 0.65f * drawerItemAlpha,
                 ) else Modifier.background(
                     MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = drawerItemAlpha)
@@ -310,14 +300,13 @@ private fun ConversationItem(
                 }
             )
             .then(
-                if (glassStyleEnabled) Modifier.glassSurface(
+                if (glassStyleEnabled) Modifier.themeMaterial(
                     shape = itemShape,
                     tint = backgroundColor,
-                    dark = LocalDarkMode.current,
                     opacity = (if (selected) 1f else 0.65f) * drawerItemAlpha,
                     borderColor = borderColor,
                 ) else Modifier.background(backgroundColor)
-            ),
+            )
     ) {
         Row(
             modifier = Modifier

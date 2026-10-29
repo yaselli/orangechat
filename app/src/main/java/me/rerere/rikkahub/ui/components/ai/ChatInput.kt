@@ -6,10 +6,6 @@
 
 package me.rerere.rikkahub.ui.components.ai
 
-import me.rerere.rikkahub.ui.theme.LocalDarkMode
-
-import me.rerere.rikkahub.ui.theme.glassSurface
-
 import androidx.compose.ui.platform.LocalResources
 import android.net.Uri
 import android.util.Log
@@ -22,7 +18,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.content.MediaType
@@ -58,7 +53,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -118,7 +112,6 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.UiMaterialStyle
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
-import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
@@ -133,9 +126,7 @@ import me.rerere.rikkahub.ui.context.LocalASRState
 import me.rerere.rikkahub.ui.context.LocalCurrentAssistant
 import me.rerere.rikkahub.ui.context.LocalCurrentChatModel
 import me.rerere.rikkahub.ui.context.LocalDisplaySettings
-import me.rerere.rikkahub.ui.context.LocalProviders
 import me.rerere.rikkahub.ui.context.LocalQuickMessages
-import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.SoundEffectPlayer
@@ -144,6 +135,9 @@ import coil3.compose.AsyncImage
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
+import me.rerere.rikkahub.ui.theme.LocalThemeMaterial
+import me.rerere.rikkahub.ui.theme.MaterialRole
+import me.rerere.rikkahub.ui.theme.themeMaterial
 
 enum class ExpandState {
     Collapsed, Files,
@@ -523,12 +517,11 @@ fun ChatInput(
         )
     }
 
-    val inputMaterialStyle = settings.displaySetting.inputMaterialStyle
+    val inputMaterialStyle = LocalThemeMaterial.current.style
     val scrollCaptureInProgress = LocalScrollCaptureInProgress.current
 
     Surface(
-        color = Color.Transparent,
-    ) {
+        color = Color.Transparent) {
         Column(
             modifier = modifier
                 .imePadding()
@@ -552,16 +545,17 @@ fun ChatInput(
                     )
                     .clip(MaterialTheme.shapes.largeIncreased)
                     .then(
-                        if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS) {
-                            Modifier.hazeEffect(
-                                state = hazeState,
-                                style = HazeMaterials.ultraThin(
-                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f),
-                                ),
-                            ) {
-                                blurEnabled = !scrollCaptureInProgress
-                            }
-                        } else if (settings.displaySetting.enableBlurEffect) {
+                        if (inputMaterialStyle != UiMaterialStyle.ORIGINAL) {
+                            Modifier.themeMaterial(
+                                    shape = MaterialTheme.shapes.largeIncreased,
+                                    tint =
+                                        settings.displaySetting.inputFieldColor?.let {
+                                            it.toComposeColor()
+                                        } ?: MaterialTheme.colorScheme.surface,
+                                    role = MaterialRole.INPUT,
+                                    drawFill = inputBgFile == null
+                                )
+                            } else if (settings.displaySetting.enableBlurEffect) {
                             Modifier.hazeEffect(
                                 state = hazeState,
                                 style = HazeMaterials.ultraThin(containerColor = hazeTintColor)
@@ -570,54 +564,20 @@ fun ChatInput(
                             }
                         }
                         else Modifier
-                    )
-                    .then(
-                        if (inputMaterialStyle == UiMaterialStyle.FROSTED ||
-                            (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS && inputBgFile != null)
-                        ) {
-                            Modifier.border(
-                                1.dp,
-                                if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS) {
-                                    Color.White.copy(alpha = 0.50f)
-                                } else {
-                                    Color.White.copy(alpha = 0.34f)
-                                },
-                                MaterialTheme.shapes.largeIncreased,
-                            )
-                        } else Modifier
                     ),
                 shape = MaterialTheme.shapes.largeIncreased,
                 tonalElevation = 0.dp,
                 // When background image is set, make surface transparent so image is visible
-                color = if (inputBgFile != null) Color.Transparent
-                    else if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS) {
-                        if (scrollCaptureInProgress) {
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.62f)
-                        } else {
-                            Color.Transparent
-                        }
-                    }
-                    else if (inputMaterialStyle == UiMaterialStyle.FROSTED) {
-                        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.74f)
-                    }
-                    else if (
+                color = if (inputBgFile != null ||
+                            inputMaterialStyle != UiMaterialStyle.ORIGINAL ||
+                            (
                         settings.displaySetting.enableBlurEffect && !scrollCaptureInProgress
-                    ) {
+                    )
+                    )
                         Color.Transparent
-                    }
                     else settings.displaySetting.inputFieldColor?.let { it.toComposeColor() } ?: hazeTintColor,
             ) {
-                // Keep custom background images in control of their own appearance.
-                Box(
-                    modifier = if (inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS && inputBgFile == null) {
-                        Modifier.glassSurface(
-                            shape = MaterialTheme.shapes.largeIncreased,
-                            tint = MaterialTheme.colorScheme.surface,
-                            dark = LocalDarkMode.current,
-                            drawFill = false,
-                        )
-                    } else Modifier,
-                ) {
+                Box {
                     // Background image inside input area (matches content size exactly)
                     if (inputBgFile != null) {
                         AsyncImage(
@@ -714,8 +674,8 @@ fun ChatInput(
                                     onClick = {
                                         dismissExpand()
                                         showStickerPicker = true
-                                    },
-                                ) {
+                                    }
+                            ) {
                                     Text(
                                         text = "🙂",
                                         style = MaterialTheme.typography.titleMedium,
@@ -838,8 +798,7 @@ fun ChatInput(
                     .fillMaxWidth()
             ) {
                 BackHandler(
-                    enabled = expand != ExpandState.Collapsed,
-                ) {
+                    enabled = expand != ExpandState.Collapsed) {
                     dismissExpand()
                 }
                 if (expand == ExpandState.Files) {
@@ -876,7 +835,8 @@ fun ChatInput(
                                 onConversationSettings()
                             },
                             conversationSettingsEnabled = !loading,
-                            onSharedMusic = { dismissExpand(); onSharedMusic() },
+                            onSharedMusic = { dismissExpand()
+                                onSharedMusic() },
                             onCompressContext = onCompressContext,
                             onUpdateAssistant = onUpdateAssistant,
                             showInjectionSheet = showInjectionSheet,

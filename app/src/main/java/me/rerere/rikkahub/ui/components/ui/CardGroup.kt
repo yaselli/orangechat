@@ -7,15 +7,7 @@
 package me.rerere.rikkahub.ui.components.ui
 
 import androidx.compose.ui.graphics.Color
-
 import me.rerere.rikkahub.data.datastore.UiMaterialStyle
-
-import me.rerere.rikkahub.ui.context.LocalDisplaySettings
-
-import me.rerere.rikkahub.ui.theme.LocalDarkMode
-
-import me.rerere.rikkahub.ui.theme.glassSurface
-
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
@@ -37,7 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -48,6 +39,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.ui.theme.LocalThemeMaterial
+import me.rerere.rikkahub.ui.theme.themeMaterial
 
 private val CardGroupCorner = 20.dp
 private val CardGroupItemSpacing = 2.dp
@@ -120,7 +113,7 @@ private fun CardGroupListItem(
         bottomEnd = bottomCorner,
     )
     val colors = item.colors ?: CustomColors.listItemColors
-    val useGlass = LocalDisplaySettings.current.bubbleMaterialStyle == UiMaterialStyle.LIQUID_GLASS
+    val useGlass = LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL
 
     ListItem(
         headlineContent = item.headlineContent,
@@ -128,10 +121,9 @@ private fun CardGroupListItem(
             .fillMaxWidth()
             .clip(shape)
             .then(
-                if (useGlass) Modifier.glassSurface(
+                if (useGlass) Modifier.themeMaterial(
                     shape = shape,
                     tint = colors.containerColor,
-                    dark = LocalDarkMode.current,
                 ) else Modifier
             )
             .then(
@@ -209,8 +201,7 @@ private fun CardGroupPreview() {
                 title = { Text("About") },
             ) {
                 item(
-                    headlineContent = { Text("第一项") },
-                )
+                    headlineContent = { Text("第一项") })
                 item(
                     headlineContent = { Text("第二项") },
                     supportingContent = { Text("支持文本") },

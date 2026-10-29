@@ -7,24 +7,17 @@
 package me.rerere.rikkahub.ui.components.message
 
 import me.rerere.rikkahub.data.music.musicCard
-
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
-
-import me.rerere.rikkahub.ui.theme.glassSurface
-
 import android.content.Intent
 import android.media.MediaPlayer
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,7 +58,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -100,7 +92,6 @@ import me.rerere.rikkahub.data.datastore.UiMaterialStyle
 import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.File02
-import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.PlayCircle
 import me.rerere.hugeicons.stroke.PauseCircle
 import me.rerere.hugeicons.stroke.Video01
@@ -137,6 +128,10 @@ import me.rerere.rikkahub.utils.splitIntoBubbleSegments
 import me.rerere.rikkahub.utils.urlDecode
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
+import me.rerere.rikkahub.ui.theme.LocalThemeMaterial
+import me.rerere.rikkahub.ui.theme.MaterialRole
+import me.rerere.rikkahub.ui.theme.profile
+import me.rerere.rikkahub.ui.theme.themeMaterial
 
 @Composable
 fun ChatMessage(
@@ -328,7 +323,8 @@ fun ChatMessage(
         MessageReactionPicker(
             reactionSegments(message, assistant ?: Assistant()),
             onDismiss = { showReactionPicker = false },
-            onSelect = { emoji, quote -> onReact(emoji, quote); showReactionPicker = false },
+            onSelect = { emoji, quote -> onReact(emoji, quote)
+                showReactionPicker = false },
         )
     }
 
@@ -514,8 +510,7 @@ private fun MessagePartsBlock(
                                         displayText.splitIntoBubbleSegments()
                                     }
                                     Column(
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    ) {
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         bubbleSegments.fastForEachIndexed { segIndex, segment ->
                                             key(segIndex) {
                                                 if (displaySettings.showAssistantBubble) {
@@ -706,8 +701,9 @@ private fun MessagePartsBlock(
                     }
 
                     else -> {
-                        // Skip unknown part types (e.g., deprecated ToolCall, ToolResult, Search)
-                    }
+                            // Skip unknown part types (e.g., deprecated ToolCall, ToolResult,
+                            // Search)
+                        }
                 }
             }
         }
@@ -716,8 +712,7 @@ private fun MessagePartsBlock(
     // Annotations (always rendered at the end)
     if (annotations.isNotEmpty()) {
         Column(
-            modifier = Modifier.animateContentSize(),
-        ) {
+            modifier = Modifier.animateContentSize()) {
             var expand by remember { mutableStateOf(false) }
             if (expand) {
                 ProvideTextStyle(
@@ -793,23 +788,27 @@ private fun BubbleSurface(
     content: @Composable () -> Unit,
 ) {
     val hasImage = imagePath.isNotBlank() && java.io.File(imagePath).exists()
-    val materialStyle = LocalDisplaySettings.current.bubbleMaterialStyle
+    val materialStyle = LocalThemeMaterial.current.style
     val bubbleShape = RoundedCornerShape(cornerRadius)
 
-    if (materialStyle == UiMaterialStyle.LIQUID_GLASS) {
+    if (materialStyle != UiMaterialStyle.ORIGINAL) {
         Box(
             modifier = Modifier
                 .animateContentSize()
                 .shadow(
-                    elevation = 5.dp,
+                    elevation =
+                            LocalThemeMaterial.current
+                                .profile(LocalDarkMode.current, MaterialRole.BUBBLE)
+                                .elevation
+                                .dp,
                     shape = bubbleShape,
                     ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                     spotColor = Color.Black.copy(alpha = 0.10f),
                 )
-                .glassSurface(
+                .themeMaterial(
                     shape = bubbleShape,
                     tint = color,
-                    dark = LocalDarkMode.current,
+                        role = MaterialRole.BUBBLE,
                     opacity = bubbleAlpha,
                     drawFill = !hasImage,
                 )
@@ -829,29 +828,6 @@ private fun BubbleSurface(
                     )
                 }
             }
-            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)) {
-                content()
-            }
-        }
-    } else if (materialStyle == UiMaterialStyle.FROSTED) {
-        Box(
-            modifier = Modifier
-                .animateContentSize()
-                .shadow(
-                    elevation = 4.dp,
-                    shape = bubbleShape,
-                    ambientColor = Color.Transparent,
-                    spotColor = Color.Black.copy(alpha = 0.08f),
-                )
-                .clip(bubbleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
-                .border(
-                    width = 0.8.dp,
-                    color = Color.White.copy(alpha = 0.38f),
-                    shape = bubbleShape,
-                )
-                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-        ) {
             Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)) {
                 content()
             }

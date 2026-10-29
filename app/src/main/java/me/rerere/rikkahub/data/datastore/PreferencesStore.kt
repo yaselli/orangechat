@@ -807,13 +807,6 @@ enum class ChatFontFamily {
 }
 
 @Serializable
-enum class UiMaterialStyle {
-    ORIGINAL,
-    LIQUID_GLASS,
-    FROSTED,
-}
-
-@Serializable
 enum class VisualThemePalette {
     ORIGINAL,
     SEA_SALT,
@@ -867,7 +860,8 @@ data class DisplaySetting(
     val enableAutoScroll: Boolean = true,
     val enableLatexRendering: Boolean = true,
     val enableBlurEffect: Boolean = false,
-    // 可独立启用的水玻璃界面效果，默认关闭以保持原有体验
+    val themeMaterial: ThemeMaterialSetting = ThemeMaterialSetting(),
+    // Retained for reading/writing older backups; appearance now uses themeMaterial.
     val enableGlassDrawer: Boolean = false,
     val enableDrawerCardTransform: Boolean = false,
     val enableGlassCardsAndBubbles: Boolean = false,

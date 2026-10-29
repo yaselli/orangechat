@@ -27,7 +27,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import kotlinx.serialization.Serializable
-import me.rerere.rikkahub.data.datastore.VisualThemePalette
 import me.rerere.rikkahub.ui.components.ui.toComposeColor
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
@@ -45,7 +44,7 @@ private val AMOLED_DARK_BACKGROUND = Color(0xFF000000)
 enum class ColorMode {
     SYSTEM,
     LIGHT,
-    DARK
+    DARK,
 }
 
 @Composable
@@ -91,6 +90,7 @@ fun RikkahubTheme(
         settings.displaySetting.primaryColor,
         settings.displaySetting.globalTextColor,
         settings.displaySetting.visualThemePalette,
+            settings.displaySetting.themeMaterial,
         settings.themeId,
     ) {
         var scheme = colorSchemeConverted
@@ -133,8 +133,8 @@ fun RikkahubTheme(
                 surfaceVariant = scheme.surfaceVariant.copy(alpha = glassAlpha),
             )
         }
-        scheme
-    }
+        scheme.withThemeMaterial(settings.displaySetting.themeMaterial, darkTheme)
+        }
 
     // 更新状态栏图标颜色
     val view = LocalView.current
@@ -150,13 +150,16 @@ fun RikkahubTheme(
 
     CompositionLocalProvider(
         LocalDarkMode provides darkTheme,
+        LocalThemeMaterial provides settings.displaySetting.themeMaterial,
         LocalExtendColors provides extendColors,
         LocalOverscrollFactory provides null
     ) {
         MaterialExpressiveTheme(
             colorScheme = finalColorScheme,
             typography = Typography,
-            content = content,
+            content = {
+                MaterialBackdrop(background = { ThemeMaterialBackground() }) { content() }
+            },
             motionScheme = MotionScheme.expressive()
         )
     }

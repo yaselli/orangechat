@@ -7,7 +7,6 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import me.rerere.rikkahub.data.datastore.VisualThemePalette
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,15 +15,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ui.toComposeColor
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.ui.theme.ThemeMaterialBackground
 
 @Composable
 fun AssistantBackground(setting: Settings) {
+    ThemeMaterialBackground()
     val assistant = setting.getCurrentAssistant()
     val chatBackgroundColor = setting.displaySetting.chatBackgroundColor?.let { it.toComposeColor() }
 

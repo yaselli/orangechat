@@ -11,7 +11,6 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -30,7 +29,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -53,14 +51,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.Alert01
-import me.rerere.hugeicons.stroke.CloudServer
 import me.rerere.hugeicons.stroke.Book01
-import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Clapping01
 import me.rerere.hugeicons.stroke.Database02
-import me.rerere.hugeicons.stroke.Developer
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
 import me.rerere.hugeicons.stroke.InLove
@@ -98,6 +93,8 @@ import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.io.File
+import me.rerere.rikkahub.ui.theme.MaterialBackdrop
+import me.rerere.rikkahub.ui.theme.ThemeMaterialBackground
 
 @Composable
 fun SettingPage(vm: SettingVM = koinViewModel()) {
@@ -120,8 +117,10 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     )
     if (showCommunity) ProjectCommunityDialog(onDismiss = { showCommunity = false })
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        settingsBackground?.let { path ->
+    MaterialBackdrop(
+        background = {
+            ThemeMaterialBackground()
+            settingsBackground?.let { path ->
             val bitmap = remember(path) { BitmapFactory.decodeFile(path) }
             bitmap?.let {
                 Image(
@@ -132,8 +131,9 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 )
             }
         }
-
-    Scaffold(
+        }
+    ) {
+        Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {

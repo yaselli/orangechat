@@ -4,7 +4,6 @@ import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +25,7 @@ import me.rerere.rikkahub.data.audio.recordRawAudio
 import me.rerere.rikkahub.data.files.FilesManager
 import org.koin.compose.koinInject
 import java.io.File
+import me.rerere.rikkahub.ui.theme.MaterialAlertDialog as AlertDialog
 
 @Composable
 internal fun RawAudioRecordingDialog(onRecorded: (Uri) -> Unit, onDismiss: () -> Unit) {
