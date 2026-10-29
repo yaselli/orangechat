@@ -49,6 +49,7 @@ enum class ColorMode {
 
 @Composable
 fun RikkahubTheme(
+    materialBlurEnabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val settings by rememberUserSettingsState()
@@ -90,7 +91,7 @@ fun RikkahubTheme(
         settings.displaySetting.primaryColor,
         settings.displaySetting.globalTextColor,
         settings.displaySetting.visualThemePalette,
-            settings.displaySetting.themeMaterial,
+        settings.displaySetting.themeMaterial,
         settings.themeId,
     ) {
         var scheme = colorSchemeConverted
@@ -134,7 +135,7 @@ fun RikkahubTheme(
             )
         }
         scheme.withThemeMaterial(settings.displaySetting.themeMaterial, darkTheme)
-        }
+    }
 
     // 更新状态栏图标颜色
     val view = LocalView.current
@@ -151,6 +152,7 @@ fun RikkahubTheme(
     CompositionLocalProvider(
         LocalDarkMode provides darkTheme,
         LocalThemeMaterial provides settings.displaySetting.themeMaterial,
+        LocalMaterialBlurEnabled provides materialBlurEnabled,
         LocalExtendColors provides extendColors,
         LocalOverscrollFactory provides null
     ) {

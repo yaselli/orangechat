@@ -465,7 +465,7 @@ private fun ExportedChatImage(
     val navigator = Navigator(navBackStack)
     val highlighter = koinInject<Highlighter>()
     val toasterState = rememberToasterState()
-    RikkahubTheme {
+    RikkahubTheme(materialBlurEnabled = false) {
         CompositionLocalProvider(
             LocalNavController provides navigator,
             LocalHighlighter provides highlighter,

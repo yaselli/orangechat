@@ -225,7 +225,7 @@ fun ChatDrawerContent(
                         .themeMaterial(
                             shape = drawerShape,
                             tint = glassTint,
-                                role = MaterialRole.DRAWER,
+                            role = MaterialRole.DRAWER,
                         )
                 } else {
                     Modifier

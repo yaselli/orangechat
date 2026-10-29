@@ -808,7 +808,7 @@ private fun BubbleSurface(
                 .themeMaterial(
                     shape = bubbleShape,
                     tint = color,
-                        role = MaterialRole.BUBBLE,
+                    role = MaterialRole.BUBBLE,
                     opacity = bubbleAlpha,
                     drawFill = !hasImage,
                 )

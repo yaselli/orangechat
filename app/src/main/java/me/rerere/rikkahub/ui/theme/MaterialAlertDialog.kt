@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.theme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -30,26 +31,31 @@ internal fun MaterialAlertDialog(
     properties: DialogProperties = DialogProperties(),
 ) {
     val active = LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        confirmButton = confirmButton,
-        modifier =
-            modifier.themeMaterial(
-                shape,
-                containerColor,
-                role = MaterialRole.DIALOG,
-                hazeState = null,
-            ),
-        dismissButton = dismissButton,
-        icon = icon,
-        title = title,
-        text = text,
-        shape = shape,
-        containerColor = if (active) Color.Transparent else containerColor,
-        iconContentColor = iconContentColor,
-        titleContentColor = titleContentColor,
-        textContentColor = textContentColor,
-        tonalElevation = if (active) 0.dp else tonalElevation,
-        properties = properties,
-    )
+    CompositionLocalProvider(
+        LocalMaterialBackdrop provides null,
+        LocalMaterialBlurEnabled provides false,
+    ) {
+        AlertDialog(
+            onDismissRequest = onDismissRequest,
+            confirmButton = confirmButton,
+            modifier =
+                modifier.themeMaterial(
+                    shape,
+                    containerColor,
+                    role = MaterialRole.DIALOG,
+                    hazeState = null,
+                ),
+            dismissButton = dismissButton,
+            icon = icon,
+            title = title,
+            text = text,
+            shape = shape,
+            containerColor = if (active) Color.Transparent else containerColor,
+            iconContentColor = iconContentColor,
+            titleContentColor = titleContentColor,
+            textContentColor = textContentColor,
+            tonalElevation = if (active) 0.dp else tonalElevation,
+            properties = properties,
+        )
+    }
 }

@@ -34,7 +34,8 @@ import me.rerere.rikkahub.data.datastore.UiMaterialStyle
 internal val LocalThemeMaterial = compositionLocalOf {
     ThemeMaterialSetting(style = UiMaterialStyle.ORIGINAL)
 }
-private val LocalMaterialBackdrop = compositionLocalOf<HazeState?> { null }
+internal val LocalMaterialBackdrop = compositionLocalOf<HazeState?> { null }
+internal val LocalMaterialBlurEnabled = compositionLocalOf { true }
 
 /** Capture only the wallpaper, never the material/content which samples it. */
 @Composable
@@ -43,7 +44,9 @@ internal fun MaterialBackdrop(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val state = rememberHazeState()
-    val active = LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL
+    val active =
+        LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL &&
+            LocalMaterialBlurEnabled.current
     val capture = LocalScrollCaptureInProgress.current
     CompositionLocalProvider(
         LocalMaterialBackdrop provides if (active && !capture) state else null
@@ -109,7 +112,12 @@ internal fun Modifier.themeMaterial(
     val profile = material.profile(dark, role)
     val strength = if (opacity.isFinite()) opacity.coerceIn(0f, 1f) else 1f
     val capture = LocalScrollCaptureInProgress.current
-    val useHaze = hazeState != null && drawFill && !capture && role != MaterialRole.DIALOG
+    val useHaze =
+        hazeState != null &&
+            drawFill &&
+            !capture &&
+            LocalMaterialBlurEnabled.current &&
+            role != MaterialRole.DIALOG
     val background = MaterialTheme.colorScheme.background.copy(alpha = 1f)
     val hazeStyle =
         remember(profile, tint, background, strength) {
