@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.ui.theme
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -67,33 +66,15 @@ internal fun MaterialBackdrop(
 
 @Composable
 internal fun ThemeMaterialBackground() {
-    val colors = MaterialTheme.colorScheme
-    val active = LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL
-    Canvas(Modifier.fillMaxSize()) {
-        drawRect(colors.background.copy(alpha = 1f))
-        if (active) {
-            drawRect(
-                Brush.linearGradient(
-                    listOf(
-                        colors.primaryContainer.copy(alpha = 0.24f),
-                        Color.Transparent,
-                        colors.tertiaryContainer.copy(alpha = 0.18f),
-                    )
-                )
-            )
-            drawCircle(
-                colors.primary.copy(alpha = 0.07f),
-                radius = size.width * 0.58f,
-                center = Offset(size.width * 1.12f, size.height * 0.60f),
-            )
-            drawCircle(
-                colors.tertiary.copy(alpha = 0.06f),
-                radius = size.width * 0.43f,
-                center = Offset(-size.width * 0.18f, size.height * 0.17f),
-            )
-        }
-    }
+    // A material changes surfaces, not the user's wallpaper. Keep the initial frame and
+    // uncovered areas plain while an image loads or navigation restores the chat screen.
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(alpha = 1f)))
 }
+
+/** Legacy per-input colors belong to the original appearance, not unified theme materials. */
+internal fun ColorScheme.inputMaterialTint(style: UiMaterialStyle, customColor: Color?): Color =
+    if (style == UiMaterialStyle.ORIGINAL) customColor ?: surfaceContainerLow
+    else surface.copy(alpha = 1f)
 
 /** One implementation for all material surfaces. Does not blur text or foreground controls. */
 @Composable
