@@ -138,6 +138,7 @@ import kotlin.uuid.Uuid
 import me.rerere.rikkahub.ui.theme.LocalThemeMaterial
 import me.rerere.rikkahub.ui.theme.MaterialRole
 import me.rerere.rikkahub.ui.theme.themeMaterial
+import me.rerere.rikkahub.ui.theme.inputMaterialTint
 
 enum class ExpandState {
     Collapsed, Files,
@@ -518,6 +519,10 @@ fun ChatInput(
     }
 
     val inputMaterialStyle = LocalThemeMaterial.current.style
+    val inputTint = MaterialTheme.colorScheme.inputMaterialTint(
+        inputMaterialStyle,
+        settings.displaySetting.inputFieldColor?.let { it.toComposeColor() },
+    )
     val scrollCaptureInProgress = LocalScrollCaptureInProgress.current
 
     Surface(
@@ -548,10 +553,7 @@ fun ChatInput(
                         if (inputMaterialStyle != UiMaterialStyle.ORIGINAL) {
                             Modifier.themeMaterial(
                                     shape = MaterialTheme.shapes.largeIncreased,
-                                    tint =
-                                        settings.displaySetting.inputFieldColor?.let {
-                                            it.toComposeColor()
-                                        } ?: MaterialTheme.colorScheme.surface,
+                                    tint = inputTint,
                                     role = MaterialRole.INPUT,
                                     drawFill = inputBgFile == null
                                 )
@@ -993,8 +995,12 @@ private fun TextInputRow(
             colors = TextFieldDefaults.colors().copy(
                 unfocusedIndicatorColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                focusedContainerColor = if (LocalThemeMaterial.current.style == UiMaterialStyle.ORIGINAL) {
+                    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
+                } else Color.Transparent,
+                unfocusedContainerColor = if (LocalThemeMaterial.current.style == UiMaterialStyle.ORIGINAL) {
+                    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
+                } else Color.Transparent,
             ),
             trailingIcon = {
                 if (isFocused) {

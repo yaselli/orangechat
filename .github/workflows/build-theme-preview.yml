@@ -15,7 +15,7 @@ concurrency:
 jobs:
   package:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,16 +28,26 @@ jobs:
           import json
           import os
           import subprocess
+          import time
           import urllib.request
 
-          source = '8c299892b34e007dafb0197b528110b88f4fcf22'
+          source = '04211e73629e31db10697534d07184b85dbeca3e'
           request = urllib.request.Request(
-              'https://api.github.com/repos/yaselli/watermelon-chat/actions/runs/40813199353',
+              'https://api.github.com/repos/yaselli/watermelon-chat/actions/runs/40837798915',
               headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
                        'Accept': 'application/vnd.github+json'},
           )
-          with urllib.request.urlopen(request, timeout=30) as response:
-              run = json.load(response)
+          for attempt in range(60):
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  run = json.load(response)
+              if run['head_sha'] != source:
+                  raise SystemExit('Verification is for another source commit')
+              if run['status'] == 'completed':
+                  break
+              print('Waiting for full PR checks and Android rendering regressions...', flush=True)
+              time.sleep(30)
+          else:
+              raise SystemExit('Timed out waiting for source verification')
           if (run['head_sha'] != source or run['conclusion'] != 'success'
                   or run['event'] != 'pull_request'
                   or run['path'] != '.github/workflows/verify-app.yml'):
@@ -47,7 +57,7 @@ jobs:
           ).splitlines()
           if changed != ['.github/workflows/build-theme-preview.yml']:
               raise SystemExit('Application source differs from the tested source')
-          print('Verified PR #30 source, unit tests and Lint; package without repeating those checks.')
+          print('Verified PR #30 source, unit tests, Lint and Android rendering regressions.')
           PY
       - name: Download color utilities
         run: git submodule update --init --depth 1 material3/material-color-utilities
@@ -93,7 +103,7 @@ jobs:
       - name: Upload downloadable test APKs
         uses: actions/upload-artifact@v4
         with:
-          name: Xiguaban-theme-materials-test-debug
+          name: Xiguaban-theme-materials-fixed-debug
           path: theme-preview/*
           if-no-files-found: error
           compression-level: 0
