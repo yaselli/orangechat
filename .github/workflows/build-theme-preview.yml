@@ -1,0 +1,103 @@
+name: Build theme materials test APK
+
+on:
+  push:
+    branches: [test/theme-materials-preview]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: theme-materials-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 8
+      - name: Verify the exact source already passed full PR checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import urllib.request
+
+          source = '8c299892b34e007dafb0197b528110b88f4fcf22'
+          request = urllib.request.Request(
+              'https://api.github.com/repos/yaselli/watermelon-chat/actions/runs/40813199353',
+              headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                       'Accept': 'application/vnd.github+json'},
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              run = json.load(response)
+          if (run['head_sha'] != source or run['conclusion'] != 'success'
+                  or run['event'] != 'pull_request'
+                  or run['path'] != '.github/workflows/verify-app.yml'):
+              raise SystemExit('The expected source has not passed its full PR verification')
+          changed = subprocess.check_output(
+              ['git', 'diff', '--name-only', source, 'HEAD'], text=True,
+          ).splitlines()
+          if changed != ['.github/workflows/build-theme-preview.yml']:
+              raise SystemExit('Application source differs from the tested source')
+          print('Verified PR #30 source, unit tests and Lint; package without repeating those checks.')
+          PY
+      - name: Download color utilities
+        run: git submodule update --init --depth 1 material3/material-color-utilities
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+      - name: Install web dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore the existing Debug signing identity
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_DEBUG_KEYSTORE_BASE64" ]; then
+            echo '::error::The shared Debug signing key is unavailable.'
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > app/debug.keystore
+      - name: Build Debug test APKs
+        run: bash gradlew :app:assembleDebug
+      - name: Verify APKs and prepare checksums
+        run: |
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          test -n "$AAPT"
+          test -n "$APKSIGNER"
+          for apk in app/build/outputs/apk/debug/*.apk; do
+            "$APKSIGNER" verify "$apk"
+          done
+          python3 scripts/prepare-update-assets.py --apk-dir app/build/outputs/apk/debug --output-dir theme-preview --channel debug --aapt "$AAPT"
+          python3 scripts/report-apk-size.py --apk-dir app/build/outputs/apk/debug --output theme-preview/apk-size.json
+      - name: Upload downloadable test APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiguaban-theme-materials-test-debug
+          path: theme-preview/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Remove signing files
+        if: always()
+        run: rm -f app/debug.keystore
