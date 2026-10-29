@@ -15,7 +15,7 @@ concurrency:
 jobs:
   package:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,13 +31,13 @@ jobs:
           import time
           import urllib.request
 
-          source = '04211e73629e31db10697534d07184b85dbeca3e'
+          source = 'b58fadb1f5ebf57133954652105af8cd17163e34'
           request = urllib.request.Request(
-              'https://api.github.com/repos/yaselli/watermelon-chat/actions/runs/40837798915',
+              'https://api.github.com/repos/yaselli/watermelon-chat/actions/runs/40843457057',
               headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
                        'Accept': 'application/vnd.github+json'},
           )
-          for attempt in range(60):
+          for attempt in range(120):
               with urllib.request.urlopen(request, timeout=30) as response:
                   run = json.load(response)
               if run['head_sha'] != source:
@@ -47,7 +47,12 @@ jobs:
               print('Waiting for full PR checks and Android rendering regressions...', flush=True)
               time.sleep(30)
           else:
-              raise SystemExit('Timed out waiting for source verification')
+              raise SystemExit('Source verification is still running after 60 minutes; APK build did not start')
+          if run['conclusion'] != 'success':
+              raise SystemExit(
+                  'Source verification finished with ' + str(run['conclusion'])
+                  + '; APK build did not start. See ' + run['html_url']
+              )
           if (run['head_sha'] != source or run['conclusion'] != 'success'
                   or run['event'] != 'pull_request'
                   or run['path'] != '.github/workflows/verify-app.yml'):

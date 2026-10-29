@@ -101,31 +101,31 @@ class ThemeMaterialRenderingDeviceTest {
             Color.Green,
             lightColorScheme().inputMaterialTint(UiMaterialStyle.ORIGINAL, Color.Green),
         )
+    }
 
-        @Test
-        fun reasoningIconContainsTheSketchesHighDiagonalTip() {
-            compose.setContent {
-                Box(Modifier.background(Color.White)) {
-                    Icon(
-                        painterResource(R.drawable.ic_watermelon_thinking),
-                        contentDescription = "思考图标",
-                        tint = Color.Black,
-                        modifier = Modifier.size(48.dp).testTag("reasoning-icon"),
-                    )
-                }
+    @Test
+    fun reasoningIconContainsTheSketchesHighDiagonalTip() {
+        compose.setContent {
+            Box(Modifier.background(Color.White)) {
+                Icon(
+                    painterResource(R.drawable.ic_watermelon_thinking),
+                    contentDescription = "思考图标",
+                    tint = Color.Black,
+                    modifier = Modifier.size(48.dp).testTag("reasoning-icon"),
+                )
             }
-            val pixels = compose.onNodeWithTag("reasoning-icon").captureToImage().toPixelMap()
-            var ink = 0
-            for (y in 0 until (pixels.height * 0.18f).toInt()) {
-                for (x in 0 until pixels.width) {
-                    val pixel = pixels[x, y]
-                    if (pixel.alpha > 0.5f && maxOf(pixel.red, pixel.green, pixel.blue) < 0.5f)
-                        ink++
-                }
-            }
-            // The former horizontal slice had no path above viewport y=5.65 / 24.
-            assertTrue("The old horizontal reasoning icon was packaged", ink > 0)
         }
+        val pixels = compose.onNodeWithTag("reasoning-icon").captureToImage().toPixelMap()
+        var ink = 0
+        for (y in 0 until (pixels.height * 0.18f).toInt()) {
+            for (x in 0 until pixels.width) {
+                val pixel = pixels[x, y]
+                if (pixel.alpha > 0.5f && maxOf(pixel.red, pixel.green, pixel.blue) < 0.5f)
+                    ink++
+            }
+        }
+        // The former horizontal slice had no path above viewport y=5.65 / 24.
+        assertTrue("The old horizontal reasoning icon was packaged", ink > 0)
     }
 
     @Test
