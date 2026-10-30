@@ -2,6 +2,8 @@ package me.rerere.rikkahub.ui.theme
 
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
+import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -57,5 +59,25 @@ internal fun MaterialAlertDialog(
             tonalElevation = if (active) 0.dp else tonalElevation,
             properties = properties,
         )
+    }
+}
+
+/** Content-only dialogs retain their custom layout and receive the same safe popup backdrop. */
+@Composable
+internal fun MaterialAlertDialog(
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    properties: DialogProperties = DialogProperties(),
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(LocalMaterialBackdrop provides null, LocalMaterialBlurEnabled provides false) {
+        BasicAlertDialog(onDismissRequest = onDismissRequest, modifier = modifier, properties = properties) {
+            Box(Modifier.themeMaterial(
+                shape = AlertDialogDefaults.shape,
+                tint = AlertDialogDefaults.containerColor,
+                role = MaterialRole.DIALOG,
+                hazeState = null,
+            )) { content() }
+        }
     }
 }

@@ -898,7 +898,7 @@ data class DisplaySetting(
     val drawerBackgroundPath: String = "",
     // 侧边栏元素透明度
     val drawerItemAlpha: Float = 1f,
-    // 设置主页背景与卡片透明度
+    // 设置主页及全部子页面的共用背景与卡片不透明度
     val settingsBackgroundPath: String = "",
     val settingsUiAlpha: Float = 0.88f,
     // 颜色自定义
