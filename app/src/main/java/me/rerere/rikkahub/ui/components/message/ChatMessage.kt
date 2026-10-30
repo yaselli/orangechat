@@ -782,15 +782,14 @@ internal fun BubbleSurface(
             // Only the background needs a sampled/offscreen layer. Streamed text stays
             // on the normal canvas, and layout follows each update without restarting
             // a size tween (and resizing two nested render targets) every 50 ms.
-            Box(
-                Modifier.matchParentSize().themeMaterial(
-                    shape = bubbleShape,
-                    tint = color,
-                    role = MaterialRole.BUBBLE,
-                    opacity = bubbleAlpha,
-                    drawFill = !hasImage,
-                )
+            val materialBackground = Modifier.matchParentSize().themeMaterial(
+                shape = bubbleShape,
+                tint = color,
+                role = MaterialRole.BUBBLE,
+                opacity = bubbleAlpha,
+                drawFill = !hasImage,
             )
+            if (!hasImage) Box(materialBackground)
             if (hasImage) {
                 AsyncImage(
                     model = imagePath,
@@ -804,6 +803,7 @@ internal fun BubbleSurface(
                             .background(color.copy(alpha = bubbleAlpha))
                     )
                 }
+                Box(materialBackground)
             }
             Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)) {
                 content()
