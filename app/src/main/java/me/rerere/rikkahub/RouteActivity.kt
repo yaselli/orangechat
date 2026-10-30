@@ -115,6 +115,7 @@ import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.disclaimer.LegalPage
+import me.rerere.rikkahub.ui.theme.withSettingsBackdropMetadata
 import me.rerere.rikkahub.ui.theme.rememberSettingsBackdropDecorator
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
@@ -876,7 +877,7 @@ entry<Screen.Extensions> {
                                 )
                             }
 
-                        }
+                        }.withSettingsBackdropMetadata()
                     )
                     AnimatedVisibility(
                         visible = migrationState is MigrationState.Migrating,

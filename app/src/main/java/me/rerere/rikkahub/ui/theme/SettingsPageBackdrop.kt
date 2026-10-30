@@ -11,12 +11,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import coil3.compose.AsyncImage
 import java.io.File
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DisplaySetting
+
+private const val SETTINGS_BACKDROP_METADATA = "watermelon.settingsBackdrop"
+
+/** Resolve route policy while the provider still has the public route key. */
+internal fun <T : NavKey> ((T) -> NavEntry<T>).withSettingsBackdropMetadata(): (T) -> NavEntry<T> =
+    { key ->
+        val entry = invoke(key)
+        NavEntry(
+            key = key,
+            contentKey = entry.contentKey,
+            metadata =
+                entry.metadata +
+                    (SETTINGS_BACKDROP_METADATA to
+                        ((key as? Screen)?.usesSettingsBackdrop == true)),
+        ) {
+            entry.Content()
+        }
+    }
 
 internal val LocalMaterialSurfaceOpacity = compositionLocalOf { 1f }
 internal val LocalSettingsWallpaperActive = compositionLocalOf { false }
@@ -26,7 +45,7 @@ internal fun rememberSettingsBackdropDecorator(display: DisplaySetting): NavEntr
     val currentDisplay by rememberUpdatedState(display)
     return remember {
         NavEntryDecorator { entry ->
-            if ((entry.key as? Screen)?.usesSettingsBackdrop == true) {
+            if (entry.metadata[SETTINGS_BACKDROP_METADATA] == true) {
                 SettingsPageBackdrop(currentDisplay) { entry.Content() }
             } else entry.Content()
         }
