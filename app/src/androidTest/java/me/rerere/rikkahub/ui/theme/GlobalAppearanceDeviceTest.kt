@@ -88,11 +88,12 @@ class GlobalAppearanceDeviceTest {
                             backStack = stack,
                             entryDecorators = listOf(rememberSettingsBackdropDecorator(display)),
                             onBack = { stack.removeLastOrNull() },
-                            entryProvider = entryProvider {
-                                    entry<Screen.Setting> { Scene("设置主页") }
-                                    entry<Screen.SettingDisplayTheme> { Scene("主题子页面") }
-                                    entry<Screen.SettingProviderDetail> { Scene("提供商详情") }
-                                }
+                            entryProvider =
+                                entryProvider<NavKey> {
+                                        entry<Screen.Setting> { Scene("设置主页") }
+                                        entry<Screen.SettingDisplayTheme> { Scene("主题子页面") }
+                                        entry<Screen.SettingProviderDetail> { Scene("提供商详情") }
+                                    }
                                     .withSettingsBackdropMetadata(),
                         )
                     }
