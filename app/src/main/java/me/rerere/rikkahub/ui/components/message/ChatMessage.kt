@@ -499,7 +499,10 @@ private fun MessagePartsBlock(
     val groupedParts = remember(parts) {
         parts.filterNot { it.isExtraInfoInjectionPart() || it.musicCard() != null }.groupMessageParts()
     }
-    val quotedBlockIndex = groupedParts.filterIsInstance<MessagePartBlock.ContentBlock>().firstOrNull()?.index
+    val quotedBlockIndex = groupedParts.filterIsInstance<MessagePartBlock.ContentBlock>().firstOrNull {
+        val part = it.part
+        part !is UIMessagePart.Text || part.text.isNotBlank()
+    }?.index
     groupedParts.fastForEach { block ->
         when (block) {
             is MessagePartBlock.ChartBlock -> key("chart", block.index) {
