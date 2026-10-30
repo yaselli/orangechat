@@ -244,6 +244,7 @@ fun ChatMessageActionsSheet(
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
     onReact: (() -> Unit)? = null,
+    onQuote: (() -> Unit)? = null,
     onShowProcess: (() -> Unit)? = null,
     onMessageActions: (@Composable () -> Unit)? = null,
     onWebViewPreview: () -> Unit,
@@ -261,6 +262,15 @@ fun ChatMessageActionsSheet(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             onMessageActions?.invoke()
+            if (onQuote != null) {
+                Card(
+                    onClick = { onDismissRequest(); onQuote() },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text("引用", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
+                }
+            }
             if (onShowProcess != null) {
                 Card(
                     onClick = { onDismissRequest(); onShowProcess() },

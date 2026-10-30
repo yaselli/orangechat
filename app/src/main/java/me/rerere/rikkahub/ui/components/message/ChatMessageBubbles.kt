@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.data.datastore.ChatDisplayMode
 import me.rerere.rikkahub.data.interaction.MessageReaction
+import me.rerere.rikkahub.data.message.MessageQuote
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.replaceRegexes
@@ -81,7 +82,8 @@ internal fun ChatMessageTextBubbles(
     onUserMessageClick: (() -> Unit)?,
     onClickCitation: (String) -> Unit,
     avatar: @Composable () -> Unit,
-    onLongClick: (() -> Unit)?,
+    onLongClick: ((String) -> Unit)?,
+    quote: MessageQuote? = null,
 ) {
     val display = LocalDisplaySettings.current
     val everyday = display.chatDisplayMode == ChatDisplayMode.EVERYDAY
@@ -96,13 +98,21 @@ internal fun ChatMessageTextBubbles(
         }
     val showBubble = isUser || everyday || display.showAssistantBubble
     val scheme = MaterialTheme.colorScheme
-    BubbleTextSelection(enabled = !everyday) {
+    BubbleTextSelection(enabled = !everyday && onLongClick == null) {
         Column(
             verticalArrangement = Arrangement.spacedBy(if (everyday) 6.dp else 4.dp),
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
         ) {
             segments.forEachIndexed { index, segment ->
                 key(index) {
+                    val visibleSegment =
+                        segment.replaceRegexes(
+                            assistant = assistant,
+                            scope =
+                                if (isUser) AssistantAffectScope.USER
+                                else AssistantAffectScope.ASSISTANT,
+                            visual = true,
+                        )
                     ChatBubbleRow(everyday, isUser, avatar) {
                         if (showBubble) {
                             BubbleSurface(
@@ -120,31 +130,31 @@ internal fun ChatMessageTextBubbles(
                                 overlayEnabled = display.bubbleImageOverlayEnabled,
                                 bubbleAlpha = 1f - display.chatBubbleTransparency / 100f,
                                 onClick = if (isUser) onUserMessageClick else null,
-                                onLongClick = if (everyday) onLongClick else null,
+                                onLongClick =
+                                    onLongClick?.let { callback -> { callback(visibleSegment) } },
                                 shape = if (everyday) chatBubbleShape(isUser) else null,
                             ) {
+                                if (index == 0 && quote != null) MessageQuoteCard(quote)
                                 MarkdownBlock(
-                                    content =
-                                        segment.replaceRegexes(
-                                            assistant = assistant,
-                                            scope =
-                                                if (isUser) AssistantAffectScope.USER
-                                                else AssistantAffectScope.ASSISTANT,
-                                            visual = true,
-                                        ),
+                                    content = visibleSegment,
                                     onClickCitation = onClickCitation,
                                 )
                             }
                         } else {
+                            if (index == 0 && quote != null) MessageQuoteCard(quote)
                             MarkdownBlock(
-                                content =
-                                    segment.replaceRegexes(
-                                        assistant = assistant,
-                                        scope = AssistantAffectScope.ASSISTANT,
-                                        visual = true,
-                                    ),
+                                content = visibleSegment,
                                 onClickCitation = onClickCitation,
-                                modifier = Modifier.animateContentSize(),
+                                modifier =
+                                    Modifier.animateContentSize()
+                                        .then(
+                                            onLongClick?.let { callback ->
+                                                Modifier.combinedClickable(
+                                                    onClick = {},
+                                                    onLongClick = { callback(visibleSegment) },
+                                                )
+                                            } ?: Modifier
+                                        ),
                             )
                         }
                         MessageReactionBar(segment, reactions, onReact)

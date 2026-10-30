@@ -494,7 +494,7 @@ private fun ChatPageContent(
                                 return@ChatInput
                             }
                             vm.handleMessageSend(
-                                listOf(UIMessagePart.Text(markdown))
+                                inputState.consumeQuote() + listOf(UIMessagePart.Text(markdown))
                             )
                             scope.launch {
                                 chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
@@ -506,7 +506,7 @@ private fun ChatPageContent(
                                 return@ChatInput
                             }
                             vm.handleMessageSend(
-                                listOf(
+                                inputState.consumeQuote() + listOf(
                                     UIMessagePart.VoiceMessage(
                                         url = url,
                                         duration = duration,
@@ -572,6 +572,7 @@ private fun ChatPageContent(
                     reactions = reactions,
                     onReact = vm::toggleReaction,
                     onAvatarInteraction = vm::interactWithAvatar,
+                    onQuote = inputState::quoteMessage,
                     state = chatListState,
                     loading = loadingJob != null && !blockedChatState.waiting,
                     processingStatus = if (blockedChatState.waiting) null else processingStatus,

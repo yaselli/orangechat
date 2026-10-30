@@ -6,6 +6,8 @@
 
 package me.rerere.rikkahub.service
 
+import me.rerere.rikkahub.data.message.messageQuote
+
 import me.rerere.rikkahub.data.ai.UsageRecorder
 import me.rerere.rikkahub.data.ai.UsageSource
 import me.rerere.rikkahub.data.ai.UsageTag
@@ -1018,7 +1020,7 @@ class ChatService(
         return parts.map { part ->
             when (part) {
                 is UIMessagePart.Text -> {
-                    part.copy(
+                    if (part.messageQuote() != null) part else part.copy(
                         text = part.text.replaceRegexes(
                             assistant = assistant,
                             scope = AssistantAffectScope.USER,

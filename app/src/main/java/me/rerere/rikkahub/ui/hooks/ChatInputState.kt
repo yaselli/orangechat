@@ -12,18 +12,29 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import me.rerere.rikkahub.data.message.MessageQuote
+import me.rerere.rikkahub.data.message.messageQuote
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.music.musicCard
 import kotlin.uuid.Uuid
 
 class ChatInputState {
+    var quotedMessage by mutableStateOf<MessageQuote?>(null)
+        private set
     val textContent = TextFieldState()
     var messageContent by mutableStateOf(listOf<UIMessagePart>())
     var editingMessage by mutableStateOf<Uuid?>(null)
     private var editingParts: List<UIMessagePart>? = null
     private var editingAttachmentUrls: Set<String> = emptySet()
 
+    fun quoteMessage(quote: MessageQuote) { quotedMessage = quote }
+
+    fun clearQuote() { quotedMessage = null }
+
+    fun consumeQuote(): List<UIMessagePart> = listOfNotNull(quotedMessage?.toPart()).also { clearQuote() }
+
     fun clearInput() {
+        clearQuote()
         textContent.setTextAndPlaceCursorAtEnd("")
         messageContent = emptyList()
         editingMessage = null
@@ -42,6 +53,11 @@ class ChatInputState {
     }
 
     fun setContents(contents: List<UIMessagePart>) {
+        quotedMessage = contents.firstNotNullOfOrNull { it.messageQuote() }
+        setUnquotedContents(contents.filterNot { it.messageQuote() != null })
+    }
+
+    private fun setUnquotedContents(contents: List<UIMessagePart>) {
         val lastTextIndex = contents.indexOfLast { it is UIMessagePart.Text && it.musicCard() == null }
         val text = if (lastTextIndex >= 0) {
             (contents[lastTextIndex] as UIMessagePart.Text).text
@@ -54,7 +70,9 @@ class ChatInputState {
         editingAttachmentUrls = contents.mapNotNull { it.attachmentUrlOrNull() }.toSet()
     }
 
-    fun getContents(): List<UIMessagePart> {
+    fun getContents(): List<UIMessagePart> = listOfNotNull(quotedMessage?.toPart()) + getUnquotedContents()
+
+    private fun getUnquotedContents(): List<UIMessagePart> {
         val text = textContent.text.toString()
         if (isEditing()) {
             val originalParts = editingParts

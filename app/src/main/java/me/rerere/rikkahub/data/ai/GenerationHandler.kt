@@ -6,6 +6,8 @@
 
 package me.rerere.rikkahub.data.ai
  
+import me.rerere.rikkahub.data.message.quoteTurnUserId
+import me.rerere.rikkahub.data.ai.transformers.MessageQuoteTransformer
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
 import me.rerere.rikkahub.data.interaction.ReactionContextTurn
@@ -135,6 +137,7 @@ class GenerationHandler(
         var fullToolBytes = 0L
         var requestProfile: JsonElement? = null
         val originalMessageIds = messages.mapTo(hashSetOf()) { it.id }
+        val quoteTransformer = MessageQuoteTransformer(messages.quoteTurnUserId())
         val completedMessages = runGenerationToolLoop(
             initialMessages = messages,
             maxSteps = maxSteps,
@@ -212,7 +215,7 @@ class GenerationHandler(
                             )
                         )
                     },
-                    transformers = inputTransformers,
+                    transformers = listOf(quoteTransformer) + inputTransformers,
                     model = model,
                     providerImpl = providerImpl,
                     provider = provider,
