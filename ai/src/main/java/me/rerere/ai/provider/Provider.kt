@@ -8,7 +8,9 @@ package me.rerere.ai.provider
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.ImageAspectRatio
@@ -69,6 +71,8 @@ data class TextGenerationParams(
     val reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
+    /** Local-only observer of the final Chat Completions payload; never serialized or sent. */
+    @Transient val onRequestBuilt: ((JsonObject) -> Unit)? = null,
 )
 
 @Serializable
@@ -118,3 +122,4 @@ data class CustomBody(
     val key: String,
     val value: JsonElement
 )
+

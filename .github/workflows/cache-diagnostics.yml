@@ -1,0 +1,83 @@
+name: Cache request diagnostics preview
+
+on:
+  push:
+    branches: [fix/cache-prefix-diagnostics]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cache-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download color utilities
+        run: git submodule update --init --depth 1 material3/material-color-utilities
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+      - name: Install web dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test providers, request comparisons and app integration
+        run: bash gradlew :ai:testDebugUnitTest :app:testDebugUnitTest :app:lintDebug --continue
+      - name: Upload verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cache-diagnostics-verification
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+            **/build/reports/lint-results*
+          if-no-files-found: warn
+      - name: Restore shared Debug signing identity
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_DEBUG_KEYSTORE_BASE64" ]; then
+            echo '::error::The shared Debug signing key is unavailable.'
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > app/debug.keystore
+      - name: Build diagnostic Debug APKs
+        run: bash gradlew :app:assembleDebug
+      - name: Verify signatures and prepare test downloads
+        run: |
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          test -n "$AAPT"
+          test -n "$APKSIGNER"
+          for apk in app/build/outputs/apk/debug/*.apk; do
+            "$APKSIGNER" verify "$apk"
+          done
+          python3 scripts/prepare-update-assets.py --apk-dir app/build/outputs/apk/debug --output-dir cache-preview --channel debug --aapt "$AAPT"
+      - name: Upload diagnostic test APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiguaban-cache-diagnostics-debug
+          path: cache-preview/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Remove signing files
+        if: always()
+        run: rm -f app/debug.keystore

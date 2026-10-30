@@ -12,6 +12,7 @@ import me.rerere.rikkahub.data.interaction.ReactionContextTurn
 import me.rerere.rikkahub.data.music.withSharedMusicContext
 import android.content.Context
 import android.util.Log
+import me.rerere.common.android.Logging
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -99,6 +100,8 @@ class GenerationHandler(
     private val sharedMusic: me.rerere.rikkahub.data.music.SharedMusicManager,
     private val usageRecorder: UsageRecorder,
 ) {
+    private val cacheRequestDiagnostics by lazy { CacheRequestDiagnostics() }
+
     fun generateText(
         settings: Settings,
         model: Model,
@@ -408,7 +411,19 @@ class GenerationHandler(
         val internalMessages = memoryRecallService.apply(recallTurn,
             reactionTurn.apply(baseMessages).withSharedMusicContext(musicContext))
 
-        val params = buildGenerationRequestParameters(assistant, model, tools)
+        val params = buildGenerationRequestParameters(assistant, model, tools).let { parameters ->
+            if (collectProfile && conversationId != null) {
+                parameters.copy(onRequestBuilt = { payload ->
+                    val summary = runCatching {
+                        cacheRequestDiagnostics.compare(
+                            scope = "${assistant.id}:$conversationId:${provider.id}:${model.id}",
+                            payload = payload,
+                        ).summary()
+                    }.getOrElse { "诊断跳过：无法安全比较本次请求。" }
+                    Logging.log("缓存诊断", summary)
+                })
+            } else parameters
+        }
         // Sizes are local diagnostics, not billable token estimates. A diagnostics failure cannot stop chat.
         onRequestProfile(if (collectProfile) runCatching {
             val exposedTools = if (ModelAbility.TOOL in model.abilities) params.tools else emptyList()
@@ -567,3 +582,4 @@ private fun buildCodeBlockPrompt(): String = buildString {
     appendLine("   - The `edits` mode applies search/replace to the files from your previous `write_files` call. Files not mentioned in `edits` keep their content unchanged.")
     appendLine("   - Always use actual filenames (e.g. `MainActivity.kt`) as code block language tags, not just language names (e.g. `kotlin`).")
 }
+

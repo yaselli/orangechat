@@ -583,7 +583,11 @@ class ChatCompletionsAPI(
                     }
                 }
             }
-        }.mergeCustomBody(params.customBody)
+        }.mergeCustomBody(params.customBody).also { payload ->
+            // Observe the effective payload after custom overrides, without reading HTTP bodies.
+            // Diagnostics must never change request/stream behavior or prevent a reply.
+            runCatching { params.onRequestBuilt?.invoke(payload) }
+        }
     }
 
     private fun isModelAllowTemperature(model: Model): Boolean {
@@ -904,3 +908,4 @@ class ChatCompletionsAPI(
         return events
     }
 }
+
