@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.theme
 
+import android.content.Context
+import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -24,7 +26,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -36,11 +40,16 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
+import java.io.File
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.ThemeMaterialSetting
 import me.rerere.rikkahub.data.datastore.UiMaterialStyle
+import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.ui.pages.chat.AssistantBackground
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -195,6 +204,71 @@ class ThemeMaterialRenderingDeviceTest {
             assertEquals(expected.red, actual.red, 0.015f)
             assertEquals(expected.green, actual.green, 0.015f)
             assertEquals(expected.blue, actual.blue, 0.015f)
+        }
+    }
+
+    @Test
+    fun wallpaperKeepsItsOriginalColorsAndOnlyUsesExplicitUserOpacity() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val file = File.createTempFile("wallpaper-colors-", ".png", context.cacheDir)
+        val imageColor = Color(0xFF123456)
+        val bitmap = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
+        try {
+            bitmap.eraseColor(imageColor.toArgb())
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        } finally {
+            bitmap.recycle()
+        }
+        val assistant = Assistant(background = file.toURI().toString())
+        var style by mutableStateOf(UiMaterialStyle.FOG_GLASS)
+        var dark by mutableStateOf(false)
+        var opacity by mutableStateOf(1f)
+        try {
+            compose.setContent {
+                val material = ThemeMaterialSetting(style)
+                val scheme =
+                    if (dark) darkColorScheme(background = Color.Black)
+                    else lightColorScheme(background = Color.White)
+                MaterialTheme(colorScheme = scheme.withThemeMaterial(material, dark)) {
+                    CompositionLocalProvider(LocalThemeMaterial provides material) {
+                        MaterialBackdrop(
+                            background = {
+                                AssistantBackground(
+                                    Settings(
+                                        assistantId = assistant.id,
+                                        assistants =
+                                            listOf(assistant.copy(backgroundOpacity = opacity)),
+                                    )
+                                )
+                            }
+                        ) {
+                            Box(Modifier.fillMaxSize())
+                        }
+                    }
+                }
+            }
+            // Wait for Coil to decode the fixture. A blanket tint over the image cannot pass.
+            compose.waitUntil(timeoutMillis = 5_000) {
+                val pixels = compose.onRoot().captureToImage().toPixelMap()
+                val actual = pixels[pixels.width / 2, pixels.height / 2]
+                kotlin.math.abs(actual.red - imageColor.red) < 0.015f &&
+                    kotlin.math.abs(actual.blue - imageColor.blue) < 0.015f
+            }
+            for (material in UiMaterialStyle.entries) {
+                for (isDark in listOf(false, true)) {
+                    for (alpha in listOf(1f, 0.5f)) {
+                        compose.runOnIdle {
+                            style = material
+                            dark = isDark
+                            opacity = alpha
+                        }
+                        val base = if (isDark) Color.Black else Color.White
+                        assertBackdrop(imageColor.copy(alpha = alpha).compositeOver(base))
+                    }
+                }
+            }
+        } finally {
+            file.delete()
         }
     }
 

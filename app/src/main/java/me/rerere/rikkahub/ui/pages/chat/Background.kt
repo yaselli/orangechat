@@ -31,30 +31,17 @@ fun AssistantBackground(setting: Settings) {
     when {
         assistant.background != null -> {
             // 用户手动为助手设置的背景图，优先级最高
-            val backgroundColor = chatBackgroundColor ?: MaterialTheme.colorScheme.background
             val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
-            Box {
-                AsyncImage(
-                    model = assistant.background,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(backgroundOpacity)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    backgroundColor.copy(alpha = 0.2f),
-                                    backgroundColor.copy(alpha = 0.5f)
-                                )
-                            )
-                        )
-                )
-            }
+            // Preserve the wallpaper's colors. Material tints belong to surfaces,
+            // not to an automatic full-screen veil over the user's image.
+            AsyncImage(
+                model = assistant.background,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(backgroundOpacity)
+            )
         }
 
         chatBackgroundColor != null -> {
