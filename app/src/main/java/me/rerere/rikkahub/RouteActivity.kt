@@ -467,7 +467,7 @@ class RouteActivity : ComponentActivity() {
                             slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
                                 slideOutHorizontally { it }
                         },
-                        entryProvider = entryProvider {
+                        entryProvider = entryProvider<NavKey> {
                             entry<Screen.Chat>(
                                 metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
                                         + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
