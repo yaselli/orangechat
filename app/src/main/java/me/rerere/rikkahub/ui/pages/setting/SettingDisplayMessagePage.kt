@@ -42,8 +42,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.ChatFontFamily
+import me.rerere.rikkahub.data.datastore.ChatDisplayMode
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
@@ -101,6 +103,29 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
             contentPadding = contentPadding + PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("聊天模式") },
+                ) {
+                    item(
+                        headlineContent = { Text("日常聊天") },
+                        supportingContent = {
+                            Text("左右分气泡，每个气泡带头像；材质跟随主题。思考和工具记录仅隐藏，长按消息可查看。待确认的操作仍会显示。")
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.chatDisplayMode == ChatDisplayMode.EVERYDAY,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(
+                                        chatDisplayMode = if (it) ChatDisplayMode.EVERYDAY else ChatDisplayMode.STANDARD,
+                                    ))
+                                },
+                            )
+                        },
+                    )
+                }
+            }
             // 消息显示设置
             item {
                 CardGroup(
@@ -113,6 +138,7 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = displaySetting.showUserAvatar,
+                                enabled = displaySetting.chatDisplayMode == ChatDisplayMode.STANDARD,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(showUserAvatar = it))
                                 }
@@ -125,6 +151,7 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = displaySetting.showAssistantBubble,
+                                enabled = displaySetting.chatDisplayMode == ChatDisplayMode.STANDARD,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(showAssistantBubble = it))
                                 }
@@ -137,6 +164,7 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = displaySetting.showModelIcon,
+                                enabled = displaySetting.chatDisplayMode == ChatDisplayMode.STANDARD,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(showModelIcon = it))
                                 }
@@ -149,6 +177,7 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = displaySetting.showModelName,
+                                enabled = displaySetting.chatDisplayMode == ChatDisplayMode.STANDARD,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(showModelName = it))
                                 }
@@ -161,6 +190,7 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = displaySetting.showDateBelowName,
+                                enabled = displaySetting.chatDisplayMode == ChatDisplayMode.STANDARD,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(showDateBelowName = it))
                                 }
@@ -173,6 +203,7 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = displaySetting.showTokenUsage,
+                                enabled = displaySetting.chatDisplayMode == ChatDisplayMode.STANDARD,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(showTokenUsage = it))
                                 }
@@ -180,11 +211,38 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
+                        headlineContent = { Text("缓存请求诊断") },
+                        supportingContent = { Text("排查缓存未命中：在设置的请求日志查看差异位置。不保存聊天正文，不增加请求；支持 OpenAI 兼容聊天接口。") },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.cacheRequestDiagnosticsEnabled,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(cacheRequestDiagnosticsEnabled = it))
+                                },
+                            )
+                        },
+                    )
+                    if (BuildConfig.DEBUG) {
+                        item(
+                            headlineContent = { Text("显示记忆引用") },
+                            supportingContent = { Text("在新回复统计旁显示召回查看入口；仅控制显示，不影响记忆召回。") },
+                            trailingContent = {
+                                Switch(
+                                    checked = displaySetting.showMemoryRecallReferences,
+                                    onCheckedChange = {
+                                        updateDisplaySetting(displaySetting.copy(showMemoryRecallReferences = it))
+                                    },
+                                )
+                            },
+                        )
+                    }
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_show_thinking_content_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_show_thinking_content_desc)) },
                         trailingContent = {
                             Switch(
                                 checked = displaySetting.showThinkingContent,
+                                enabled = displaySetting.chatDisplayMode == ChatDisplayMode.STANDARD,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(showThinkingContent = it))
                                 }
@@ -197,6 +255,7 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = displaySetting.autoCloseThinking,
+                                enabled = displaySetting.chatDisplayMode == ChatDisplayMode.STANDARD,
                                 onCheckedChange = {
                                     updateDisplaySetting(displaySetting.copy(autoCloseThinking = it))
                                 }

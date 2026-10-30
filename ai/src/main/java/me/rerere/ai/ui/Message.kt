@@ -10,6 +10,8 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -33,12 +35,22 @@ data class UIMessage(
     val finishedAt: LocalDateTime? = null,
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
-    val translation: String? = null
+    // Omit absent timing even with encodeDefaults=true: historical memory fingerprints must not change.
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val generationTimeMs: Long? = null,
+    val translation: String? = null,
+    // Local UI diagnostics only. Providers must never receive this field. Omit the default even
+    // with encodeDefaults=true so older serialized history fingerprints remain byte-compatible.
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val localMetadata: JsonObject? = null,
 ) {
     private fun appendChunk(chunk: MessageChunk): UIMessage {
         val choice = chunk.choices.getOrNull(0)
         val message = choice?.delta ?: choice?.message
         return message?.let { delta ->
+            if (chunk.replaceContent) return@let copy(parts = delta.parts, annotations = delta.annotations)
             // Handle Parts
             var newParts = delta.parts.fold(parts) { acc, deltaPart ->
                 when (deltaPart) {
@@ -785,6 +797,15 @@ fun <T> List<T>.migrateToolNodes(
 
 @Serializable
 sealed class UIMessageAnnotation {
+    /** A real avatar interaction, displayed as a centered notice instead of a text bubble. */
+    @Serializable
+    @SerialName("avatar_interaction")
+    data class AvatarInteraction(
+        val actor: String,
+        val target: String,
+        val targetMessageId: String? = null,
+    ) : UIMessageAnnotation()
+
     @Serializable
     @SerialName("url_citation")
     data class UrlCitation(
@@ -799,6 +820,10 @@ data class MessageChunk(
     val model: String,
     val choices: List<UIMessageChoice>,
     val usage: TokenUsage? = null,
+    // Interactions delivers authoritative indexed-step snapshots. Never concatenate these as deltas.
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val replaceContent: Boolean = false,
 )
 
 @Serializable

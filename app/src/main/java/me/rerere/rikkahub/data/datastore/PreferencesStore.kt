@@ -121,6 +121,8 @@ class SettingsStore(
         val COMPRESS_PROMPT = stringPreferencesKey("compress_prompt")
 
         // 提供商
+        val MEDIA_GENERATION_PROVIDERS = stringPreferencesKey("media_generation_providers")
+        val UPLOAD_S3_CONFIG = stringPreferencesKey("upload_s3_config")
         val PROVIDERS = stringPreferencesKey("providers")
 
         // 助手
@@ -149,6 +151,8 @@ class SettingsStore(
         // ASR
         val ASR_PROVIDERS = stringPreferencesKey("asr_providers")
         val SELECTED_ASR_PROVIDER = stringPreferencesKey("selected_asr_provider")
+        val VOICE_CALL_RAW_AUDIO = booleanPreferencesKey("voice_call_raw_audio")
+        val VOICE_CALL_LISTEN_WHILE_REPLYING = booleanPreferencesKey("voice_call_listen_while_replying")
 
         // Web Server
         val WEB_SERVER_ENABLED = booleanPreferencesKey("web_server_enabled")
@@ -183,12 +187,6 @@ class SettingsStore(
         // Removed Supabase external-memory setting. Keep the key only so upgrades can erase it.
         val EXTERNAL_MEMORIES = stringPreferencesKey("external_memories")
 
-        // 微信 Bot (iLink 协议)
-        val WECHAT_BOT_SETTING = stringPreferencesKey("wechat_bot_setting")
-
-        // QQ Bot (API v2, WebSocket 网关)
-        val QQ_BOT_SETTING = stringPreferencesKey("qq_bot_setting")
-
         // Mini App
         val MINI_APPS = stringPreferencesKey("mini_apps")
 
@@ -209,12 +207,12 @@ class SettingsStore(
             MCP_SERVERS,
             WEBDAV_CONFIG,
             S3_CONFIG,
+            MEDIA_GENERATION_PROVIDERS,
+            UPLOAD_S3_CONFIG,
             TTS_PROVIDERS,
             ASR_PROVIDERS,
             WEB_SERVER_ACCESS_PASSWORD,
             SYSTEM_TOOLS_SETTING,
-            WECHAT_BOT_SETTING,
-            QQ_BOT_SETTING,
             MINI_APPS,
         )
     }
@@ -225,6 +223,12 @@ class SettingsStore(
         // Existing installs used plaintext strings. Upgrade them in place on first launch while
         // still allowing the read path below to understand plaintext during the migration.
         scope.launch(Dispatchers.IO) {
+            // Retired credentials must be erased even when an unrelated encryption migration fails.
+            runCatching {
+                dataStore.edit { preferences -> preferences.removeRetiredChatBotSettings() }
+            }.onFailure { error ->
+                Log.e(TAG, "Failed to erase retired channel settings", error)
+            }
             runCatching {
                 dataStore.edit { preferences ->
                     preferences.remove(EXTERNAL_MEMORIES)
@@ -282,6 +286,9 @@ class SettingsStore(
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                mediaGenerationProviders = JsonInstant.decodeFromString(
+                    preferences.getSecret(MEDIA_GENERATION_PROVIDERS) ?: "[]"),
+                uploadS3Config = JsonInstant.decodeFromString(preferences.getSecret(UPLOAD_S3_CONFIG) ?: "{}"),
                 providers = JsonInstant.decodeFromString(preferences.getSecret(PROVIDERS) ?: "[]"),
                 assistants = JsonInstant.decodeFromString(preferences.getSecret(ASSISTANTS) ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
@@ -316,6 +323,8 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 selectedASRProviderId = preferences[SELECTED_ASR_PROVIDER]?.let { Uuid.parse(it) },
+                voiceCallRawAudio = preferences[VOICE_CALL_RAW_AUDIO] ?: false,
+                voiceCallListenWhileReplying = preferences[VOICE_CALL_LISTEN_WHILE_REPLYING] ?: true,
                 modeInjections = preferences[MODE_INJECTIONS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -341,12 +350,6 @@ class SettingsStore(
                 proactiveMessageSetting = preferences[PROACTIVE_MESSAGE_SETTING]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: ProactiveMessageSetting(),
-                wechatBotSetting = preferences.getSecret(WECHAT_BOT_SETTING)?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: WechatBotSetting(),
-                qqBotSetting = preferences.getSecret(QQ_BOT_SETTING)?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: QqBotSetting(),
                 keepAliveEnabled = preferences[KEEP_ALIVE_ENABLED] == true,
                 miniApps = preferences.getSecret(MINI_APPS)?.let {
                     JsonInstant.decodeFromString(it)
@@ -401,6 +404,7 @@ class SettingsStore(
             settings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
+                        is ProviderSetting.Account -> provider.copyProvider(models = provider.models.distinctBy { model -> model.id })
                         is ProviderSetting.OpenAI -> provider.copy(
                             models = provider.models.distinctBy { model -> model.id }
                         )
@@ -473,7 +477,9 @@ class SettingsStore(
         }
     }
 
-    private suspend fun persistSettings(settings: Settings, previous: Settings) {
+    private suspend fun persistSettings(desired: Settings, previous: Settings, allowAccountCredentials: Boolean = false) {
+        val settings = if (allowAccountCredentials) desired else desired.copy(providers =
+            me.rerere.rikkahub.data.ai.account.preserveAccountCredentials(desired.providers, previous.providers))
         if(settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
             return
@@ -507,6 +513,12 @@ class SettingsStore(
                 preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
                 preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
+                preferences.putSecretIfChanged(MEDIA_GENERATION_PROVIDERS,
+                    settings.mediaGenerationProviders != previous.mediaGenerationProviders,
+                ) { JsonInstant.encodeToString(settings.mediaGenerationProviders) }
+                preferences.putSecretIfChanged(UPLOAD_S3_CONFIG,
+                    settings.uploadS3Config != previous.uploadS3Config,
+                ) { JsonInstant.encodeToString(settings.uploadS3Config) }
                 preferences.putSecretIfChanged(
                     PROVIDERS,
                     settings.providers != previous.providers,
@@ -552,6 +564,8 @@ class SettingsStore(
                 settings.selectedASRProviderId?.let {
                     preferences[SELECTED_ASR_PROVIDER] = it.toString()
                 } ?: preferences.remove(SELECTED_ASR_PROVIDER)
+                preferences[VOICE_CALL_RAW_AUDIO] = settings.voiceCallRawAudio
+                preferences[VOICE_CALL_LISTEN_WHILE_REPLYING] = settings.voiceCallListenWhileReplying
                 preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
                 preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
                 preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
@@ -571,14 +585,6 @@ class SettingsStore(
                     settings.systemToolsSetting != previous.systemToolsSetting,
                 ) { JsonInstant.encodeToString(settings.systemToolsSetting) }
                 preferences[PROACTIVE_MESSAGE_SETTING] = JsonInstant.encodeToString(settings.proactiveMessageSetting)
-                preferences.putSecretIfChanged(
-                    WECHAT_BOT_SETTING,
-                    settings.wechatBotSetting != previous.wechatBotSetting,
-                ) { JsonInstant.encodeToString(settings.wechatBotSetting) }
-                preferences.putSecretIfChanged(
-                    QQ_BOT_SETTING,
-                    settings.qqBotSetting != previous.qqBotSetting,
-                ) { JsonInstant.encodeToString(settings.qqBotSetting) }
                 preferences[KEEP_ALIVE_ENABLED] = settings.keepAliveEnabled
                 preferences.putSecretIfChanged(
                     MINI_APPS,
@@ -588,6 +594,13 @@ class SettingsStore(
                 preferences[WORKFLOW_HEADLESS_BLOCK_SENSITIVE] = settings.workflowHeadlessBlockSensitive
                 preferences[AUTO_APPROVE_ALL_TOOLS] = settings.autoApproveAllTools
             }
+        }
+    }
+
+    internal suspend fun updateAccountCredentials(fn: (Settings) -> Settings) {
+        updateMutex.withLock {
+            val previous = settingsFlowRaw.first()
+            persistSettings(fn(previous), previous, allowAccountCredentials = true)
         }
     }
 
@@ -715,6 +728,7 @@ private inline fun MutablePreferences.putSecretIfChanged(
 data class Settings(
     @Transient
     val init: Boolean = false,
+    // Legacy backup fields; no longer used to gate application startup.
     val disclaimerAccepted: Boolean = false,
     val disclaimerAcceptedAt: Int = 0,
     val dynamicColor: Boolean = true,
@@ -729,6 +743,7 @@ data class Settings(
     val imageGenerationModelId: Uuid = Uuid.random(),
     val titlePrompt: String = DEFAULT_TITLE_PROMPT,
     val translateModeId: Uuid = Uuid.random(),
+    val translateTargetLanguage: String = "zh-CN",
     val translatePrompt: String = DEFAULT_TRANSLATION_PROMPT,
     val translateThinkingBudget: Int = 0,
     val suggestionModelId: Uuid = Uuid.random(),
@@ -738,6 +753,8 @@ data class Settings(
     val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
+    val mediaGenerationProviders: List<me.rerere.mediagen.provider.MediaGenerationProviderSetting> = emptyList(),
+    val uploadS3Config: S3Config = S3Config(),
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
     val assistantTags: List<Tag> = emptyList(),
@@ -751,6 +768,8 @@ data class Settings(
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val asrProviders: List<ASRProviderSetting> = emptyList(),
     val selectedASRProviderId: Uuid? = null,
+    val voiceCallListenWhileReplying: Boolean = true,
+    val voiceCallRawAudio: Boolean = false,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
@@ -764,8 +783,6 @@ data class Settings(
     val sponsorAlertDismissedAt: Int = 0,
     val systemToolsSetting: SystemToolsSetting = SystemToolsSetting(),
     val proactiveMessageSetting: ProactiveMessageSetting = ProactiveMessageSetting(),
-    val wechatBotSetting: WechatBotSetting = WechatBotSetting(),
-    val qqBotSetting: QqBotSetting = QqBotSetting(),
     val keepAliveEnabled: Boolean = false,
     val miniApps: List<MiniApp> = emptyList(),
     val forceConfirmToolCalls: Boolean = true,
@@ -791,13 +808,6 @@ enum class ChatFontFamily {
 }
 
 @Serializable
-enum class UiMaterialStyle {
-    ORIGINAL,
-    LIQUID_GLASS,
-    FROSTED,
-}
-
-@Serializable
 enum class VisualThemePalette {
     ORIGINAL,
     SEA_SALT,
@@ -820,6 +830,7 @@ data class AnniversaryEntry(
 
 @Serializable
 data class DisplaySetting(
+    val chatDisplayMode: ChatDisplayMode = ChatDisplayMode.STANDARD,
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
     val useAppIconStyleLoadingIndicator: Boolean = true,
@@ -829,6 +840,8 @@ data class DisplaySetting(
     val showModelName: Boolean = true,
     val showDateBelowName: Boolean = false,
     val showTokenUsage: Boolean = true,
+    val cacheRequestDiagnosticsEnabled: Boolean = false,
+    val showMemoryRecallReferences: Boolean = true,
     val showThinkingContent: Boolean = true,
     val autoCloseThinking: Boolean = true,
     val showUpdates: Boolean = true,
@@ -850,7 +863,8 @@ data class DisplaySetting(
     val enableAutoScroll: Boolean = true,
     val enableLatexRendering: Boolean = true,
     val enableBlurEffect: Boolean = false,
-    // 可独立启用的水玻璃界面效果，默认关闭以保持原有体验
+    val themeMaterial: ThemeMaterialSetting = ThemeMaterialSetting(),
+    // Retained for reading/writing older backups; appearance now uses themeMaterial.
     val enableGlassDrawer: Boolean = false,
     val enableDrawerCardTransform: Boolean = false,
     val enableGlassCardsAndBubbles: Boolean = false,
@@ -885,7 +899,7 @@ data class DisplaySetting(
     val drawerBackgroundPath: String = "",
     // 侧边栏元素透明度
     val drawerItemAlpha: Float = 1f,
-    // 设置主页背景与卡片透明度
+    // 设置主页及全部子页面的共用背景与卡片不透明度
     val settingsBackgroundPath: String = "",
     val settingsUiAlpha: Float = 0.88f,
     // 颜色自定义

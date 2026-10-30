@@ -264,12 +264,12 @@
   <string name="chat_page_compress_additional_prompt">額外指示（選填）</string>
   <string name="chat_page_compress_additional_prompt_hint">指定要保留或聚焦的內容</string>
   <string name="chat_page_compress_context">壓縮歷史</string>
-  <string name="chat_page_compress_context_desc">將對話壓縮成摘要以節省 token</string>
+  <string name="chat_page_compress_context_desc">為後續請求總結較早對話，完整聊天記錄仍保留在原視窗</string>
   <string name="chat_page_compress_context_title">壓縮對話紀錄</string>
-  <string name="chat_page_compress_keep_recent">保留最近訊息</string>
+  <string name="chat_page_compress_keep_recent">直接傳送原文的近期訊息數</string>
   <string name="chat_page_compress_not_enough_messages">訊息不足，無法壓縮。請減少要保留的訊息數量，或新增更多訊息。</string>
   <string name="chat_page_compress_target_tokens">目標 Token 大小</string>
-  <string name="chat_page_compress_warning">⚠️ 壓縮上下文將重設目前對話中的所有訊息</string>
+  <string name="chat_page_compress_warning">原訊息、分支和附件均保留。產生摘要會呼叫所選壓縮模型。</string>
   <string name="chat_page_compressing">正在壓縮...</string>
   <string name="chat_page_conversation_system_prompt">對話系統提示</string>
   <string name="chat_page_conversation_system_prompt_clear">清除</string>
@@ -303,8 +303,9 @@
   <string name="chat_page_search_chats">搜尋聊天</string>
   <string name="chat_page_today">今天</string>
   <string name="chat_page_yesterday">昨天</string>
-  <string name="chat_size_dialog_content">目前訊息數：%1$d。這可能導致應用程式崩潰或延遲，甚至遺失此對話資料。請盡快建立新對話以繼續聊天。</string>
-  <string name="chat_size_dialog_title">此對話資料過大</string>
+  <string name="chat_size_dialog_content">本機儲存了 %1$d 則訊息。可壓縮上下文以減少後續請求內容；如果操作卡頓，可備份後建立新對話繼續。</string>
+  <string name="chat_size_dialog_input_usage">最近一次回覆的輸入用量：%1$s tokens。</string>
+  <string name="chat_size_dialog_title">對話較長，請留意上下文用量</string>
   <string name="citations_count">%1$d 條引用</string>
   <string name="common_export">匯出</string>
   <string name="common_share">分享</string>
@@ -338,7 +339,7 @@
   <string name="donate_page_donation_methods">贊助方式</string>
   <string name="donate_page_kofi_desc">供全球用戶使用</string>
   <string name="donate_page_sponsor_list">贊助用戶列表</string>
-  <string name="donate_page_title">贊助</string>
+  <string name="donate_page_title">支持專案</string>
   <string name="edit">編輯</string>
   <string name="editing">編輯中</string>
   <string name="emoji_picker_search_placeholder">搜尋表情符號...</string>
@@ -799,8 +800,8 @@
   <string name="setting_page_display_setting_desc">管理顯示設定</string>
   <string name="setting_page_documentation">使用文檔</string>
   <string name="setting_page_documentation_desc">查看應用使用說明和幫助文檔</string>
-  <string name="setting_page_donate">贊助</string>
-  <string name="setting_page_donate_desc">如果你喜歡這個應用，請贊助作者的工作</string>
+  <string name="setting_page_donate">支持專案</string>
+  <string name="setting_page_donate_desc">專案主頁、問題回報與交流</string>
   <string name="setting_page_dynamic_color">動態顏色</string>
   <string name="setting_page_dynamic_color_desc">是否使用動態顏色</string>
   <string name="setting_page_extensions">擴充功能</string>
@@ -829,7 +830,7 @@
   <string name="setting_page_search_title">搜尋服務</string>
   <string name="setting_page_share">分享</string>
   <string name="setting_page_share_desc">分享本APP給朋友</string>
-  <string name="setting_page_share_text">西瓜瓣 - 開源安卓AI助手\n\n官網: https://github.com/sue1231513/orangechat</string>
+  <string name="setting_page_share_text">西瓜瓣 - 開源安卓AI助手\n\n專案頁面: https://github.com/yaselli/watermelon-chat</string>
   <string name="setting_page_sponsor_alert_confirm">捐款</string>
   <string name="setting_page_sponsor_alert_desc">您已啟動應用程式超過 100 次！如果您喜歡使用它，請考慮支持開發者。</string>
   <string name="setting_page_sponsor_alert_dismiss">稍後再說</string>
@@ -1105,17 +1106,17 @@
   <string name="legal_plugin_security_title">插件安全说明</string>
   <string name="legal_plugin_security_desc">第三方插件可能带来的风险</string>
 
-  <string name="disclaimer_user_agreement_text">欢迎使用西瓜瓣（OrangeChat）。\n\n1. 协议范围\n本协议是您与西瓜瓣开发者之间关于使用本软件及相关服务的协议。请您仔细阅读并理解本协议全部内容。一旦您安装、启动或以任何方式使用本软件，即视为您已阅读、理解并同意接受本协议全部条款的约束。\n\n2. 软件性质\n西瓜瓣是一款开源 AI 客户端软件，基于 RikkaHub 二次开发，源代码遵循 GNU AGPL v3 许可协议发布。本软件本身不提供底层 AI 模型能力，所有对话内容均由您自行配置的第三方模型提供商生成。\n\n3. 用户账号与数据\n本软件主要在本地运行和存储您的对话数据。当您启用 Web 服务器、QQ/微信 Bot、插件或第三方服务时，数据可能按照您的配置离开本机。您应自行评估相关风险并妥善保管 API Key、密码等敏感信息。\n\n4. 用户行为规范\n您不得使用本软件从事任何违反法律法规、侵犯他人合法权益或干扰第三方服务正常运行的行为。您应对自己配置的助手提示词、工具、插件和外部服务承担全部责任。\n\n5. 知识产权\n本软件及其衍生作品的知识产权归开发者所有。第三方模型、插件、图标、字体等内容的知识产权归 respective 权利人所有。\n\n6. 责任限制\n在法律允许的最大范围内，开发者不对因使用或无法使用本软件而导致的任何直接、间接、偶然、特殊或继发性的损失承担责任。\n\n7. 协议修改\n开发者有权随时修改本协议，修改后的协议将在软件更新或公告时生效。如您继续使用本软件，视为接受修改后的协议。</string>
+  <string name="disclaimer_user_agreement_text">欢迎使用西瓜瓣（OrangeChat）。\n\n1. 协议范围\n本协议是您与西瓜瓣开发者之间关于使用本软件及相关服务的协议。请您仔细阅读并理解本协议全部内容。一旦您安装、启动或以任何方式使用本软件，即视为您已阅读、理解并同意接受本协议全部条款的约束。\n\n2. 软件性质\n西瓜瓣是一款开源 AI 客户端软件，基于 RikkaHub 二次开发，源代码遵循 GNU AGPL v3 许可协议发布。本软件本身不提供底层 AI 模型能力，所有对话内容均由您自行配置的第三方模型提供商生成。\n\n3. 用户账号与数据\n本软件主要在本地运行和存储您的对话数据。当您启用 Web 服务器、插件或第三方服务时，数据可能按照您的配置离开本机。您应自行评估相关风险并妥善保管 API Key、密码等敏感信息。\n\n4. 用户行为规范\n您不得使用本软件从事任何违反法律法规、侵犯他人合法权益或干扰第三方服务正常运行的行为。您应对自己配置的助手提示词、工具、插件和外部服务承担全部责任。\n\n5. 知识产权\n本软件及其衍生作品的知识产权归开发者所有。第三方模型、插件、图标、字体等内容的知识产权归 respective 权利人所有。\n\n6. 责任限制\n在法律允许的最大范围内，开发者不对因使用或无法使用本软件而导致的任何直接、间接、偶然、特殊或继发性的损失承担责任。\n\n7. 协议修改\n开发者有权随时修改本协议，修改后的协议将在软件更新或公告时生效。如您继续使用本软件，视为接受修改后的协议。</string>
 
-  <string name="disclaimer_privacy_policy_text">西瓜瓣隐私政策\n\n1. 信息收集\n为了提供 AI 对话、系统工具、插件运行等服务，本软件可能在获得您授权后收集以下信息：\n- 设备型号、系统版本、应用版本等基本信息；\n- 您主动输入的对话、文件、图片等内容；\n- 在您开启相应权限后，位置、通知、短信、应用使用记录、相机、通讯录、日历、WiFi 信息等数据；\n- 崩溃日志和诊断信息（用于改进软件稳定性）。\n\n2. 信息使用\n上述信息仅用于向您提供本软件功能，不会出售给第三方。部分功能（如 Web 服务器、QQ/微信 Bot）会按照您的配置将数据发送到您指定的地址或服务。\n\n3. 信息共享\n除以下情形外，我们不会向第三方共享您的个人信息：\n- 获得您的明确同意；\n- 根据法律法规或政府主管部门要求；\n- 为保护开发者或用户的合法权益所必需。\n\n4. 信息安全\n我们采用本地存储、加密传输、权限最小化等措施保护您的数据，但互联网环境并非绝对安全，请您妥善保管敏感配置。\n\n5. 您的权利\n您可以随时在设置中关闭相关权限或删除本地数据。如需更多帮助，请通过 GitHub 提交 Issue。</string>
+  <string name="disclaimer_privacy_policy_text">西瓜瓣隐私政策\n\n1. 信息收集\n为了提供 AI 对话、系统工具、插件运行等服务，本软件可能在获得您授权后收集以下信息：\n- 设备型号、系统版本、应用版本等基本信息；\n- 您主动输入的对话、文件、图片等内容；\n- 在您开启相应权限后，位置、通知、短信、应用使用记录、相机、通讯录、日历、WiFi 信息等数据；\n- 崩溃日志和诊断信息（用于改进软件稳定性）。\n\n2. 信息使用\n上述信息仅用于向您提供本软件功能，不会出售给第三方。部分功能（如 Web 服务器）会按照您的配置将数据发送到您指定的地址或服务。\n\n3. 信息共享\n除以下情形外，我们不会向第三方共享您的个人信息：\n- 获得您的明确同意；\n- 根据法律法规或政府主管部门要求；\n- 为保护开发者或用户的合法权益所必需。\n\n4. 信息安全\n我们采用本地存储、加密传输、权限最小化等措施保护您的数据，但互联网环境并非绝对安全，请您妥善保管敏感配置。\n\n5. 您的权利\n您可以随时在设置中关闭相关权限或删除本地数据。如需更多帮助，请通过 GitHub 提交 Issue。</string>
 
-  <string name="disclaimer_disclaimer_text">重要提示：在使用西瓜瓣前，请您务必认真阅读以下免责声明。\n\n1. AI 生成内容\n西瓜瓣仅为 AI 模型的客户端，所有由 AI 生成的回复、建议、代码、图片等内容均不代表开发者的观点或立场。AI 可能产生错误、偏见、过时或不当信息，请您自行判断并核实，不要将其作为医疗诊断、法律意见、金融投资、专业咨询或任何重大决策的唯一依据。\n\n2. 权限与功能风险\n本软件申请了无障碍服务、短信读取、SIM 卡信息、WiFi 信息、设备存储、应用使用记录、定位、相机、日历、通知监听、闹钟、音乐控制、唤醒屏幕、设置壁纸、启动或锁定其他应用等权限。启用这些功能意味着您明确授权 AI 在特定场景下读取或控制您的设备和数据。请您仅在充分了解风险后开启，开发者不对因误操作、AI 误判或权限滥用导致的损失承担责任。\n\n3. 网络与数据外传\n开启 Web 服务器、QQ/微信 Bot、主动消息或插件等功能，可能导致您的对话内容、设备状态或隐私信息通过网络离开本机。请您确保网络环境可信，并自行承担由此带来的信息泄露风险。\n\n4. 插件与第三方服务\n插件运行在 QuickJS 沙箱中，但仍可访问网络和您已授权的系统数据。第三方插件不受开发者控制，可能存在恶意代码、后门或隐私收集行为。请您仅从可信来源安装插件，并自行对插件行为负责。\n\n5. 服务可用性\n开发者不保证软件在任何设备、任何网络环境下的可用性、稳定性或兼容性。软件更新、第三方 API 变动或设备限制可能导致部分功能失效。\n\n6. 未成年人\n如您是未成年人，请在监护人指导下使用本软件，并避免开启涉及敏感权限或外传数据的功能。</string>
+  <string name="disclaimer_disclaimer_text">重要提示：在使用西瓜瓣前，请您务必认真阅读以下免责声明。\n\n1. AI 生成内容\n西瓜瓣仅为 AI 模型的客户端，所有由 AI 生成的回复、建议、代码、图片等内容均不代表开发者的观点或立场。AI 可能产生错误、偏见、过时或不当信息，请您自行判断并核实，不要将其作为医疗诊断、法律意见、金融投资、专业咨询或任何重大决策的唯一依据。\n\n2. 权限与功能风险\n本软件申请了无障碍服务、短信读取、SIM 卡信息、WiFi 信息、设备存储、应用使用记录、定位、相机、日历、通知监听、闹钟、音乐控制、唤醒屏幕、设置壁纸、启动或锁定其他应用等权限。启用这些功能意味着您明确授权 AI 在特定场景下读取或控制您的设备和数据。请您仅在充分了解风险后开启，开发者不对因误操作、AI 误判或权限滥用导致的损失承担责任。\n\n3. 网络与数据外传\n开启 Web 服务器、主动消息或插件等功能，可能导致您的对话内容、设备状态或隐私信息通过网络离开本机。请您确保网络环境可信，并自行承担由此带来的信息泄露风险。\n\n4. 插件与第三方服务\n插件运行在 QuickJS 沙箱中，但仍可访问网络和您已授权的系统数据。第三方插件不受开发者控制，可能存在恶意代码、后门或隐私收集行为。请您仅从可信来源安装插件，并自行对插件行为负责。\n\n5. 服务可用性\n开发者不保证软件在任何设备、任何网络环境下的可用性、稳定性或兼容性。软件更新、第三方 API 变动或设备限制可能导致部分功能失效。\n\n6. 未成年人\n如您是未成年人，请在监护人指导下使用本软件，并避免开启涉及敏感权限或外传数据的功能。</string>
 
-  <string name="legal_user_agreement_text">欢迎使用西瓜瓣（OrangeChat）。\n\n1. 协议范围\n本协议是您与西瓜瓣开发者之间关于使用本软件及相关服务的协议。请您仔细阅读并理解本协议全部内容。一旦您安装、启动或以任何方式使用本软件，即视为您已阅读、理解并同意接受本协议全部条款的约束。\n\n2. 软件性质\n西瓜瓣是一款开源 AI 客户端软件，基于 RikkaHub 二次开发，源代码遵循 GNU AGPL v3 许可协议发布。本软件本身不提供底层 AI 模型能力，所有对话内容均由您自行配置的第三方模型提供商生成。\n\n3. 用户账号与数据\n本软件主要在本地运行和存储您的对话数据。当您启用 Web 服务器、QQ/微信 Bot、插件或第三方服务时，数据可能按照您的配置离开本机。您应自行评估相关风险并妥善保管 API Key、密码等敏感信息。\n\n4. 用户行为规范\n您不得使用本软件从事任何违反法律法规、侵犯他人合法权益或干扰第三方服务正常运行的行为。您应对自己配置的助手提示词、工具、插件和外部服务承担全部责任。\n\n5. 知识产权\n本软件及其衍生作品的知识产权归开发者所有。第三方模型、插件、图标、字体等内容的知识产权归 respective 权利人所有。\n\n6. 责任限制\n在法律允许的最大范围内，开发者不对因使用或无法使用本软件而导致的任何直接、间接、偶然、特殊或继发性的损失承担责任。\n\n7. 协议修改\n开发者有权随时修改本协议，修改后的协议将在软件更新或公告时生效。如您继续使用本软件，视为接受修改后的协议。</string>
+  <string name="legal_user_agreement_text">欢迎使用西瓜瓣（OrangeChat）。\n\n1. 协议范围\n本协议是您与西瓜瓣开发者之间关于使用本软件及相关服务的协议。请您仔细阅读并理解本协议全部内容。一旦您安装、启动或以任何方式使用本软件，即视为您已阅读、理解并同意接受本协议全部条款的约束。\n\n2. 软件性质\n西瓜瓣是一款开源 AI 客户端软件，基于 RikkaHub 二次开发，源代码遵循 GNU AGPL v3 许可协议发布。本软件本身不提供底层 AI 模型能力，所有对话内容均由您自行配置的第三方模型提供商生成。\n\n3. 用户账号与数据\n本软件主要在本地运行和存储您的对话数据。当您启用 Web 服务器、插件或第三方服务时，数据可能按照您的配置离开本机。您应自行评估相关风险并妥善保管 API Key、密码等敏感信息。\n\n4. 用户行为规范\n您不得使用本软件从事任何违反法律法规、侵犯他人合法权益或干扰第三方服务正常运行的行为。您应对自己配置的助手提示词、工具、插件和外部服务承担全部责任。\n\n5. 知识产权\n本软件及其衍生作品的知识产权归开发者所有。第三方模型、插件、图标、字体等内容的知识产权归 respective 权利人所有。\n\n6. 责任限制\n在法律允许的最大范围内，开发者不对因使用或无法使用本软件而导致的任何直接、间接、偶然、特殊或继发性的损失承担责任。\n\n7. 协议修改\n开发者有权随时修改本协议，修改后的协议将在软件更新或公告时生效。如您继续使用本软件，视为接受修改后的协议。</string>
 
-  <string name="legal_privacy_policy_text">西瓜瓣隐私政策\n\n1. 信息收集\n为了提供 AI 对话、系统工具、插件运行等服务，本软件可能在获得您授权后收集以下信息：\n- 设备型号、系统版本、应用版本等基本信息；\n- 您主动输入的对话、文件、图片等内容；\n- 在您开启相应权限后，位置、通知、短信、应用使用记录、相机、通讯录、日历、WiFi 信息等数据；\n- 崩溃日志和诊断信息（用于改进软件稳定性）。\n\n2. 信息使用\n上述信息仅用于向您提供本软件功能，不会出售给第三方。部分功能（如 Web 服务器、QQ/微信 Bot）会按照您的配置将数据发送到您指定的地址或服务。\n\n3. 信息共享\n除以下情形外，我们不会向第三方共享您的个人信息：\n- 获得您的明确同意；\n- 根据法律法规或政府主管部门要求；\n- 为保护开发者或用户的合法权益所必需。\n\n4. 信息安全\n我们采用本地存储、加密传输、权限最小化等措施保护您的数据，但互联网环境并非绝对安全，请您妥善保管敏感配置。\n\n5. 您的权利\n您可以随时在设置中关闭相关权限或删除本地数据。如需更多帮助，请通过 GitHub 提交 Issue。</string>
+  <string name="legal_privacy_policy_text">西瓜瓣隐私政策\n\n1. 信息收集\n为了提供 AI 对话、系统工具、插件运行等服务，本软件可能在获得您授权后收集以下信息：\n- 设备型号、系统版本、应用版本等基本信息；\n- 您主动输入的对话、文件、图片等内容；\n- 在您开启相应权限后，位置、通知、短信、应用使用记录、相机、通讯录、日历、WiFi 信息等数据；\n- 崩溃日志和诊断信息（用于改进软件稳定性）。\n\n2. 信息使用\n上述信息仅用于向您提供本软件功能，不会出售给第三方。部分功能（如 Web 服务器）会按照您的配置将数据发送到您指定的地址或服务。\n\n3. 信息共享\n除以下情形外，我们不会向第三方共享您的个人信息：\n- 获得您的明确同意；\n- 根据法律法规或政府主管部门要求；\n- 为保护开发者或用户的合法权益所必需。\n\n4. 信息安全\n我们采用本地存储、加密传输、权限最小化等措施保护您的数据，但互联网环境并非绝对安全，请您妥善保管敏感配置。\n\n5. 您的权利\n您可以随时在设置中关闭相关权限或删除本地数据。如需更多帮助，请通过 GitHub 提交 Issue。</string>
 
-  <string name="legal_disclaimer_text">重要提示：在使用西瓜瓣前，请您务必认真阅读以下免责声明。\n\n1. AI 生成内容\n西瓜瓣仅为 AI 模型的客户端，所有由 AI 生成的回复、建议、代码、图片等内容均不代表开发者的观点或立场。AI 可能产生错误、偏见、过时或不当信息，请您自行判断并核实，不要将其作为医疗诊断、法律意见、金融投资、专业咨询或任何重大决策的唯一依据。\n\n2. 权限与功能风险\n本软件申请了无障碍服务、短信读取、SIM 卡信息、WiFi 信息、设备存储、应用使用记录、定位、相机、日历、通知监听、闹钟、音乐控制、唤醒屏幕、设置壁纸、启动或锁定其他应用等权限。启用这些功能意味着您明确授权 AI 在特定场景下读取或控制您的设备和数据。请您仅在充分了解风险后开启，开发者不对因误操作、AI 误判或权限滥用导致的损失承担责任。\n\n3. 网络与数据外传\n开启 Web 服务器、QQ/微信 Bot、主动消息或插件等功能，可能导致您的对话内容、设备状态或隐私信息通过网络离开本机。请您确保网络环境可信，并自行承担由此带来的信息泄露风险。\n\n4. 插件与第三方服务\n插件运行在 QuickJS 沙箱中，但仍可访问网络和您已授权的系统数据。第三方插件不受开发者控制，可能存在恶意代码、后门或隐私收集行为。请您仅从可信来源安装插件，并自行对插件行为负责。\n\n5. 服务可用性\n开发者不保证软件在任何设备、任何网络环境下的可用性、稳定性或兼容性。软件更新、第三方 API 变动或设备限制可能导致部分功能失效。\n\n6. 未成年人\n如您是未成年人，请在监护人指导下使用本软件，并避免开启涉及敏感权限或外传数据的功能。</string>
+  <string name="legal_disclaimer_text">重要提示：在使用西瓜瓣前，请您务必认真阅读以下免责声明。\n\n1. AI 生成内容\n西瓜瓣仅为 AI 模型的客户端，所有由 AI 生成的回复、建议、代码、图片等内容均不代表开发者的观点或立场。AI 可能产生错误、偏见、过时或不当信息，请您自行判断并核实，不要将其作为医疗诊断、法律意见、金融投资、专业咨询或任何重大决策的唯一依据。\n\n2. 权限与功能风险\n本软件申请了无障碍服务、短信读取、SIM 卡信息、WiFi 信息、设备存储、应用使用记录、定位、相机、日历、通知监听、闹钟、音乐控制、唤醒屏幕、设置壁纸、启动或锁定其他应用等权限。启用这些功能意味着您明确授权 AI 在特定场景下读取或控制您的设备和数据。请您仅在充分了解风险后开启，开发者不对因误操作、AI 误判或权限滥用导致的损失承担责任。\n\n3. 网络与数据外传\n开启 Web 服务器、主动消息或插件等功能，可能导致您的对话内容、设备状态或隐私信息通过网络离开本机。请您确保网络环境可信，并自行承担由此带来的信息泄露风险。\n\n4. 插件与第三方服务\n插件运行在 QuickJS 沙箱中，但仍可访问网络和您已授权的系统数据。第三方插件不受开发者控制，可能存在恶意代码、后门或隐私收集行为。请您仅从可信来源安装插件，并自行对插件行为负责。\n\n5. 服务可用性\n开发者不保证软件在任何设备、任何网络环境下的可用性、稳定性或兼容性。软件更新、第三方 API 变动或设备限制可能导致部分功能失效。\n\n6. 未成年人\n如您是未成年人，请在监护人指导下使用本软件，并避免开启涉及敏感权限或外传数据的功能。</string>
 
   <string name="legal_plugin_security_text">插件安全说明\n\n1. 插件能力\n西瓜瓣支持用户安装基于 JavaScript 的插件。插件运行在 QuickJS 沙箱中，可调用 manifest 声明的工具、hooks 以及我们显式注入的 fetch、dataStore、memoryBank、musicPlayer 等桥接。\n\n2. 潜在风险\n- 插件可以发起网络请求，可能将您在软件内输入或 AI 读取到的隐私信息发送到任意服务器；\n- 插件无法直接反射调用 Java 代码或加载原生代码，但如果您的设备已授予本软件相关系统权限，插件可能通过桥接间接利用这些权限；\n- 恶意插件可能包含后门、诱导性提示词或数据收集逻辑。\n\n3. 安全建议\n- 请仅从您信任的来源安装插件；\n- 安装前尽量审查插件源码（manifest.json 和入口 JS 文件）；\n- 不要为来历不明的插件配置模型 API Key 或敏感账户信息；\n- 一旦发现插件行为异常，请立即在插件管理中禁用或删除。\n\n4. 责任边界\n开发者不提供插件市场审核，也不对第三方插件的行为、稳定性或安全性承担责任。因安装、使用插件导致的任何损失由您自行承担。</string>
 
@@ -1128,11 +1129,6 @@
   <string name="risk_web_server_message">开启后，同一网络下的其他设备可能通过浏览器访问您的对话记录、文件和部分设置。请务必设置强访问密码并启用 JWT，避免在公共网络中使用。</string>
   <string name="risk_web_server_public_title">确认暴露到局域网？</string>
   <string name="risk_web_server_public_message">当前未勾选“仅本机访问”，服务将监听所有网络接口。请确认您处于可信的家庭或私人网络，否则任何人只要知道 IP 和端口就能访问您的数据。</string>
-
-  <string name="risk_weixin_bot_title">确认开启微信 Bot？</string>
-  <string name="risk_weixin_bot_message">开启后，您的微信消息将被转发给 AI 处理，AI 的回复也会通过微信发送出去。这意味着您的微信聊天记录可能离开本机，请确认您了解相关隐私风险。</string>
-  <string name="risk_qq_bot_title">确认开启 QQ Bot？</string>
-  <string name="risk_qq_bot_message">开启后，QQ 私聊消息将被发送到 AI 处理并自动回复。请确保 Bot 账号、Token 等信息安全，避免被他人滥用。</string>
 
   <string name="risk_proactive_message_title">确认开启主动消息？</string>
   <string name="risk_proactive_message_message">开启后，AI 将在设定时间间隔内主动读取您的上下文并发送消息。这可能涉及后台唤醒、通知权限和长期运行服务，请确认您已阅读隐私政策并了解数据使用方式。</string>
@@ -1162,4 +1158,30 @@
 
   <string name="plugin_security_banner">⚠ 插件可執行網路請求並存取您已授權的系統資料。請僅從可信來源安裝插件。</string>
   <string name="web_server_security_warning_no_jwt">⚠ 未啟用 JWT 鑒權或密碼為空。目前任何可存取該位址的人都能讀取您的對話記錄，強烈建議立即設定密碼並開啟 JWT。</string>
+  <string name="setting_provider_page_rerank_model">重排</string>
+  <string name="chat_page_queue_paused_count">佇列已暫停（%1$d）</string>
+  <string name="chat_page_queue_pending_count">待傳送（%1$d）</string>
+  <string name="chat_page_queue_resume">繼續傳送</string>
+  <string name="chat_page_queue_image">[圖片]</string>
+  <string name="chat_page_queue_file">[檔案]</string>
+  <string name="chat_page_queue_audio">[錄音]</string>
+  <string name="chat_page_queue_video">[影片]</string>
+  <string name="chat_page_queue_editing">編輯中</string>
+  <string name="chat_page_queue_remove">撤回</string>
+  <string name="chat_page_queue_edit_title">編輯佇列訊息</string>
+  <string name="chart_series">系列</string>
+  <string name="chart_series_name">系列 %1$d</string>
+  <string name="chart_mode_chart">圖表</string>
+  <string name="chart_mode_table">表格</string>
+  <string name="translator_page_history">歷史</string>
+  <string name="translator_page_clear_history">清空歷史</string>
+  <string name="translator_page_clear_history_title">清空翻譯歷史？</string>
+  <string name="translator_page_clear_history_message">刪除所有已儲存的翻譯記錄？此操作無法復原。</string>
+
+    <string name="image_crop_rotate">旋轉</string>
+    <string name="image_crop_reset">重設</string>
+    <string name="image_crop_free">自由</string>
+    <string name="image_crop_original">原圖</string>
+    <string name="image_crop_load_failed">無法載入圖片</string>
+    <string name="image_crop_failed">無法裁切圖片</string>
 </resources>

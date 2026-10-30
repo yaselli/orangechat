@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.first
 import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import java.util.concurrent.TimeUnit
-import kotlin.random.Random
 
 /**
  * WorkManager-based fallback for proactive message scheduling.
@@ -42,20 +41,17 @@ class ProactiveMessageWorker(
         fun scheduleNext(
             context: Context,
             setting: me.rerere.rikkahub.data.datastore.ProactiveMessageSetting,
-            delayMinutesOverride: Int? = null,
+            triggerAtMillis: Long,
         ) {
             if (!setting.enabled) {
                 cancel(context)
                 return
             }
 
-            val minMinutes = setting.minIntervalMinutes.coerceAtLeast(1)
-            val maxMinutes = setting.maxIntervalMinutes.coerceAtLeast(minMinutes)
-            val delayMinutes = delayMinutesOverride?.coerceAtLeast(1)
-                ?: Random.nextInt(minMinutes, maxMinutes + 1)
+            val delayMillis = (triggerAtMillis - System.currentTimeMillis()).coerceAtLeast(0)
 
             val workRequest = OneTimeWorkRequestBuilder<ProactiveMessageWorker>()
-                .setInitialDelay(delayMinutes.toLong(), TimeUnit.MINUTES)
+                .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
                 .build()
 
             WorkManager.getInstance(context)
@@ -65,14 +61,7 @@ class ProactiveMessageWorker(
                     workRequest
                 )
 
-            // Also save trigger time to SharedPreferences for UI display
-            val triggerTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(delayMinutes.toLong())
-            context.getSharedPreferences("proactive_message_prefs", Context.MODE_PRIVATE)
-                .edit()
-                .putLong("next_trigger_time", triggerTime)
-                .apply()
-
-            Log.d(TAG, "Scheduled WorkManager proactive message in $delayMinutes minutes")
+            Log.d(TAG, "Scheduled WorkManager proactive fallback for $triggerAtMillis")
         }
 
         fun cancel(context: Context) {

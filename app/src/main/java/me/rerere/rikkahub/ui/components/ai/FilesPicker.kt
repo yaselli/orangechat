@@ -27,11 +27,11 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
+import me.rerere.rikkahub.ui.theme.MaterialListItem as ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
-import androidx.compose.material3.Surface
+import me.rerere.rikkahub.ui.theme.MaterialSurface as Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -57,6 +57,7 @@ import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Package01
+import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Video01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -95,6 +96,9 @@ internal fun FilesPicker(
     onPickAudio: () -> Unit,
     onRecordAudio: () -> Unit,
     onPickFile: () -> Unit,
+    onConversationSettings: () -> Unit,
+    onSharedMusic: () -> Unit,
+    conversationSettingsEnabled: Boolean,
 ) {
     // settings 仍保留给 InjectionQuickConfigSheet -> ExtensionSelector 使用（它需要完整 Settings）
     val settings = LocalSettings.current
@@ -171,6 +175,21 @@ internal fun FilesPicker(
                 .clickable {
                     onShowInjectionSheetChange(true)
                 },
+        )
+
+        ListItem(
+            leadingContent = { Icon(HugeIcons.Settings03, contentDescription = null) },
+            headlineContent = { Text("会话设置") },
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.large)
+                .clickable(enabled = conversationSettingsEnabled, onClick = onConversationSettings),
+        )
+
+        ListItem(
+            leadingContent = { Text("♫") },
+            headlineContent = { Text("一起听歌") },
+            supportingContent = { Text("网易云、歌词和你们的播放列表") },
+            modifier = Modifier.clip(MaterialTheme.shapes.large).clickable(onClick = onSharedMusic),
         )
 
         // Compress History Button

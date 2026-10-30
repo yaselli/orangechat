@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -66,10 +68,14 @@ import kotlin.time.Clock
 
 private const val TAG = "ResponseAPI"
 
-class ResponseAPI(
+class ResponseAPI private constructor(
     private val client: OkHttpClient,
-    private val keyRoulette: KeyRoulette = KeyRoulette.default()
+    private val keyRoulette: KeyRoulette,
+    private val capabilityOverride: ResponseProviderCapabilities?,
 ) : OpenAIImpl {
+    constructor(client: OkHttpClient, keyRoulette: KeyRoulette = KeyRoulette.default()) : this(client, keyRoulette, null)
+    internal constructor(client: OkHttpClient, capabilities: ResponseProviderCapabilities) :
+        this(client, KeyRoulette.default(), capabilities)
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
@@ -132,6 +138,9 @@ class ResponseAPI(
 
         Log.d(TAG, "request prepared; payload omitted")
 
+        // Per-request state: simultaneous conversations must not share item/call IDs.
+        val toolState = ResponseToolStreamState()
+        var completed = false
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -140,12 +149,13 @@ class ResponseAPI(
                 data: String
             ) {
                 if (data == "[DONE]") {
-                    close()
+                    if (capabilityOverride != null && !completed) close(IllegalStateException("Account stream ended before completion"))
+                    else close()
                     return
                 }
                 Log.d(TAG, "stream event received; payload omitted")
                 val chunkJson = try {
-                    json.parseToJsonElement(data).jsonObject
+                    parseOpenAIStreamObject(data) ?: return
                 } catch (e: Throwable) {
                     // 上游真的发了坏数据时不要让整个流直接崩掉裸抛 Unexpected EOF。
                     // Only record size: parser messages and previews can expose reply/tool content.
@@ -155,11 +165,22 @@ class ResponseAPI(
                     )
                     return
                 }
-                val chunk = parseResponseDelta(chunkJson)
+                val eventType = chunkJson["type"]?.jsonPrimitiveOrNull?.contentOrNull ?: type
+                if (capabilityOverride != null && eventType in setOf("response.failed", "response.incomplete", "error")) {
+                    close(IllegalStateException("Account generation did not complete"))
+                    return
+                }
+                if (eventType == "response.completed") completed = true
+                val chunk = try {
+                    parseResponseDelta(chunkJson, toolState)
+                } catch (e: Exception) {
+                    close(e)
+                    return
+                }
                 if (chunk != null) {
                     trySend(chunk)
                 }
-                if (type == "response.completed") {
+                if (type == "response.completed" || capabilityOverride != null && completed) {
                     close()
                 }
             }
@@ -187,7 +208,8 @@ class ResponseAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                close()
+                if (capabilityOverride != null && !completed) close(IllegalStateException("Account stream ended before completion"))
+                else close()
             }
         }
 
@@ -209,7 +231,7 @@ class ResponseAPI(
         stream: Boolean
     ): JsonObject {
         val host = providerSetting.baseUrl.toHttpUrl().host
-        val capabilities = resolveResponseProviderCapabilities(host)
+        val capabilities = capabilityOverride ?: resolveResponseProviderCapabilities(host)
         return buildJsonObject {
             put("model", params.model.modelId)
             put("stream", stream)
@@ -217,44 +239,46 @@ class ResponseAPI(
                 put("store", false)
             }
 
-            if (isModelAllowTemperature(params.model)) {
+            if (capabilities.supportsSamplingParams && isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
                 if (params.topP != null) put("top_p", params.topP)
             }
-            if (params.maxTokens != null) put("max_output_tokens", params.maxTokens)
+            if (capabilities.supportsSamplingParams && params.maxTokens != null) put("max_output_tokens", params.maxTokens)
 
-            // system instructions
-            if (messages.any { it.role == MessageRole.SYSTEM }) {
+            // Legacy API behavior stays unchanged; account endpoints put all system prompts into input.
+            if (capabilities.systemMessageRole == null && messages.any { it.role == MessageRole.SYSTEM }) {
                 val parts = messages.first { it.role == MessageRole.SYSTEM }.parts
-                put(
-                    "instructions",
-                    parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                put("instructions", parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
             }
+            val history = buildMessages(messages)
+            put("input", if (capabilities.systemMessageRole == null) history else buildJsonArray {
+                messages.filter { it.role == MessageRole.SYSTEM }.forEach { message ->
+                    add(buildJsonObject {
+                        put("role", capabilities.systemMessageRole)
+                        put("content", message.parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                    })
+                }
+                history.forEach { add(it) }
+            })
 
-            // messages
-            put("input", buildMessages(messages))
-
-            // reasoning
+            // Account endpoints always request replayable encrypted state, even for models without adjustable reasoning.
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
                 val level = params.reasoningLevel
                 put("reasoning", buildJsonObject {
-                    if (capabilities.supportsReasoningSummary) {
-                        put("summary", "auto")
-                    }
-                    if (level != ReasoningLevel.AUTO) {
-                        put("effort", level.effort)
-                    }
+                    if (capabilities.supportsReasoningSummary) put("summary", "auto")
+                    val effort = capabilities.reasoningEffort?.invoke(level, params.model.modelId)
+                        ?: if (capabilities.reasoningEffort == null && level != ReasoningLevel.AUTO) level.effort else null
+                    if (effort != null) put("effort", effort)
                 })
-                if (capabilities.supportEncryptedContent) {
-                    put("include", buildJsonArray {
-                        add("reasoning.encrypted_content")
-                    })
-                }
+            }
+            if (capabilities.supportEncryptedContent &&
+                (params.model.abilities.contains(ModelAbility.REASONING) || capabilities.alwaysIncludeEncryptedContent)) {
+                put("include", buildJsonArray { add("reasoning.encrypted_content") })
             }
 
             // tools
-            if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
-                putJsonArray("tools") {
+            val functionTools = if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
+                buildJsonArray {
                     params.tools.forEach { tool ->
                         add(buildJsonObject {
                             put("type", "function")
@@ -262,17 +286,20 @@ class ResponseAPI(
                             put("description", tool.description)
                             put(
                                 "parameters",
-                                json.encodeToJsonElement(
-                                    tool.parameters()
-                                )
+                                tool.parameters()?.let { json.encodeToJsonElement(it) }
+                                    ?: if (capabilityOverride != null) buildJsonObject {
+                                        put("type", "object"); put("properties", JsonObject(emptyMap()))
+                                    } else JsonNull
                             )
                         })
                     }
                 }
-            }
+            } else null
+            if (functionTools != null) put("tools", functionTools)
             // built-in tools
             if (params.model.tools.isNotEmpty()) {
                 putJsonArray("tools") {
+                    if (capabilityOverride != null) functionTools?.forEach { add(it) }
                     params.model.tools.forEach { builtInTool ->
                         when (builtInTool) {
                             BuiltInTools.Search -> {
@@ -293,7 +320,17 @@ class ResponseAPI(
                     }
                 }
             }
-        }.mergeCustomBody(params.customBody)
+        }.mergeCustomBody(params.customBody).let { body ->
+            if (capabilityOverride == null) body else JsonObject(body.toMutableMap().apply {
+                put("store", JsonPrimitive(false))
+                remove("previous_response_id")
+                if (!capabilities.supportsSamplingParams) {
+                    remove("temperature"); remove("top_p"); remove("max_output_tokens")
+                }
+                if (get("reasoning") is JsonObject && (get("reasoning") as JsonObject).isEmpty()) remove("reasoning")
+                if (capabilities.forceStreaming) put("stream", JsonPrimitive(true))
+            })
+        }
     }
 
     internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
@@ -477,7 +514,10 @@ class ResponseAPI(
         })
     }
 
-    private fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
+    internal fun parseResponseDelta(
+        jsonObject: JsonObject,
+        toolState: ResponseToolStreamState,
+    ): MessageChunk? {
         val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
 
         when (chunkType) {
@@ -526,8 +566,14 @@ class ResponseAPI(
             "response.output_item.added" -> {
                 val item = jsonObject["item"]?.jsonObject ?: error("chunk item not found")
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
-                val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
+                if (type == "function_call_output") {
+                    toolState.rememberOutput(item)
+                    return null // The added item may still have a provisional/empty output.
+                }
+                val id = item["id"]?.jsonPrimitive?.contentOrNull
+                    ?: item["call_id"]?.jsonPrimitive?.contentOrNull ?: error("chunk id not found")
                 if (type == "function_call") {
+                    val tool = toolState.functionCall(item, jsonObject["output_index"]?.jsonPrimitive?.intOrNull)
                     return MessageChunk(
                         id = id,
                         model = "",
@@ -538,13 +584,7 @@ class ResponseAPI(
                                 delta = UIMessage(
                                     role = MessageRole.ASSISTANT,
                                     parts = listOf(
-                                        UIMessagePart.Tool(
-                                            toolCallId = id,
-                                            toolName = item["name"]?.jsonPrimitive?.content ?: "",
-                                            input = item["arguments"]?.jsonPrimitive?.content
-                                                ?: "",
-                                            output = emptyList()
-                                        )
+                                        tool
                                     )
                                 ),
                                 finishReason = null
@@ -608,6 +648,15 @@ class ResponseAPI(
             "response.output_item.done" -> {
                 val item = jsonObject["item"]?.jsonObject ?: error("chunk item not found")
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
+                if (type == "function_call_output") {
+                    toolState.rememberOutput(item)
+                    return toolState.outputChunk(item["call_id"]?.jsonPrimitive?.contentOrNull)
+                }
+                if (type == "function_call") {
+                    return toolState.chunk(listOf(
+                        toolState.functionCall(item, jsonObject["output_index"]?.jsonPrimitive?.intOrNull)
+                    ))
+                }
                 val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
                 if (type == "reasoning") {
                     val encryptedContent = item["encrypted_content"]?.jsonPrimitive?.content
@@ -664,8 +713,9 @@ class ResponseAPI(
             }
 
             "response.function_call_arguments.done" -> {
-                val toolCallId =
+                val itemId =
                     jsonObject["item_id"]?.jsonPrimitive?.content ?: error("item_id not found")
+                val toolCallId = toolState.callId(itemId, jsonObject["output_index"]?.jsonPrimitive?.intOrNull)
                 val arguments =
                     jsonObject["arguments"]?.jsonPrimitive?.content ?: error("arguments not found")
                 return MessageChunk(
@@ -680,7 +730,7 @@ class ResponseAPI(
                                     UIMessagePart.Tool(
                                         toolCallId = toolCallId,
                                         toolName = "",
-                                        input = arguments,
+                                        input = toolState.argumentSuffix(toolCallId, arguments),
                                         output = emptyList()
                                     )
                                 )
@@ -693,11 +743,24 @@ class ResponseAPI(
             }
 
             "response.completed" -> {
+                val response = jsonObject["response"]?.jsonObjectOrNull
+                (response?.get("output") as? JsonArray)?.forEach { element ->
+                    val item = element.jsonObjectOrNull ?: return@forEach
+                    if (item["type"]?.jsonPrimitive?.contentOrNull == "function_call_output") {
+                        toolState.rememberOutput(item)
+                    }
+                }
+                val outputs = toolState.remainingOutputs()
                 return MessageChunk(
                     id = jsonObject["item_id"]?.jsonPrimitive?.contentOrNull ?: "",
                     model = "",
-                    choices = emptyList(),
-                    usage = parseTokenUsage(jsonObject["response"]?.jsonObject?.get("usage")?.jsonObject)
+                    choices = if (outputs.isEmpty()) emptyList() else listOf(UIMessageChoice(
+                        index = 0,
+                        delta = UIMessage(role = MessageRole.ASSISTANT, parts = outputs),
+                        message = null,
+                        finishReason = null,
+                    )),
+                    usage = parseTokenUsage(response?.get("usage")?.jsonObjectOrNull)
                 )
             }
         }
@@ -705,8 +768,7 @@ class ResponseAPI(
         return null
     }
 
-    private fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
-        Log.d(TAG, "Provider payload omitted")
+    internal fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
         val outputs = jsonObject["output"]?.jsonArray ?: error("output not found")
         val parts = arrayListOf<UIMessagePart>()
 
@@ -769,6 +831,18 @@ class ResponseAPI(
             }
         }
 
+        // Resolve by call_id after collecting calls, including gateways that return outputs first.
+        outputs.forEach { outputItem ->
+            val output = outputItem.jsonObjectOrNull ?: return@forEach
+            if (output["type"]?.jsonPrimitive?.contentOrNull != "function_call_output") return@forEach
+            val callId = output["call_id"]?.jsonPrimitive?.contentOrNull ?: return@forEach
+            val index = parts.indexOfLast { it is UIMessagePart.Tool && it.toolCallId == callId }
+            if (index >= 0) {
+                val tool = parts[index] as UIMessagePart.Tool
+                parts[index] = tool.copy(output = listOf(UIMessagePart.Text(output.functionCallOutputText())))
+            }
+        }
+
         return MessageChunk(
             id = jsonObject["id"]?.jsonPrimitive?.contentOrNull ?: "",
             model = jsonObject["model"]?.jsonPrimitive?.contentOrNull ?: "",
@@ -783,7 +857,7 @@ class ResponseAPI(
                     delta = null
                 )
             ),
-            usage = parseTokenUsage(jsonObject["usage"]?.jsonObject)
+            usage = parseTokenUsage(jsonObject["usage"]?.jsonObjectOrNull)
         )
     }
 
@@ -811,7 +885,12 @@ private fun List<UIMessagePart>.isOnlyTextPart(): Boolean {
 
 internal data class ResponseProviderCapabilities(
     val supportsReasoningSummary: Boolean = true,
-    val supportEncryptedContent: Boolean = true
+    val supportEncryptedContent: Boolean = true,
+    val supportsSamplingParams: Boolean = true,
+    val systemMessageRole: String? = null,
+    val alwaysIncludeEncryptedContent: Boolean = false,
+    val reasoningEffort: ((ReasoningLevel, String) -> String?)? = null,
+    val forceStreaming: Boolean = false,
 )
 
 internal fun resolveResponseProviderCapabilities(host: String): ResponseProviderCapabilities {

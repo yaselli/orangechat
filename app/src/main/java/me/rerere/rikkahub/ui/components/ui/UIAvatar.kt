@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.material3.AlertDialog
+import me.rerere.rikkahub.ui.theme.MaterialAlertDialog as AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -87,6 +88,85 @@ fun TextAvatar(
     }
 }
 
+/** Read-only chat avatars must leave touch handling to their parent's double-tap gesture. */
+@Composable
+private fun AvatarSurface(
+    interactive: Boolean,
+    modifier: Modifier,
+    shape: Shape,
+    onClick: () -> Unit,
+    tonalElevation: androidx.compose.ui.unit.Dp,
+    color: Color,
+    content: @Composable () -> Unit,
+) {
+    if (interactive) Surface(
+        onClick = onClick, modifier = modifier, shape = shape, tonalElevation = tonalElevation,
+        color = color, content = content,
+    ) else Surface(
+        modifier = modifier, shape = shape, tonalElevation = tonalElevation, color = color, content = content,
+    )
+}
+
+/** Render-only avatar for repeated chat bubbles: no picker launchers or event subscriptions. */
+@Composable
+internal fun AvatarDisplay(
+    name: String,
+    value: Avatar,
+    modifier: Modifier = Modifier,
+    loading: Boolean = false,
+    interactive: Boolean = false,
+    onClick: () -> Unit = {},
+) {
+    AvatarSurface(
+        shape = rememberAvatarShape(loading),
+        modifier = modifier,
+        interactive = interactive,
+        onClick = onClick,
+        tonalElevation = 4.dp,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            when (value) {
+                is Avatar.Image -> {
+                    AsyncImage(
+                        model = value.url,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+
+                is Avatar.Emoji -> {
+                    Text(
+                        text = value.content,
+                        autoSize = TextAutoSize.StepBased(
+                            minFontSize = 15.sp,
+                            maxFontSize = 30.sp,
+                        ),
+                        lineHeight = 0.8.em,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(5.dp)
+                    )
+                }
+
+                is Avatar.Dummy -> {
+                    Text(
+                        text = name
+                            .ifBlank { stringResource(R.string.user_default_name) }
+                            .takeIf { it.isNotEmpty() }
+                            ?.firstOrNull()?.toString()?.uppercase() ?: "A",
+                        fontSize = 20.sp,
+                        lineHeight = 1.em
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun UIAvatar(
     name: String,
@@ -94,6 +174,7 @@ fun UIAvatar(
     modifier: Modifier = Modifier,
     loading: Boolean = false,
     onUpdate: ((Avatar) -> Unit)? = null,
+    interactive: Boolean = true,
     onClick: (() -> Unit)? = null
 ) {
     val filesManager: FilesManager = koinInject()
@@ -127,56 +208,17 @@ fun UIAvatar(
     }
 
     Box(modifier = modifier.size(32.dp)) {
-        Surface(
-            shape = rememberAvatarShape(loading),
+        AvatarDisplay(
+            name = name,
+            value = value,
             modifier = Modifier.fillMaxSize(),
+            loading = loading,
+            interactive = interactive,
             onClick = {
                 onClick?.invoke()
                 if (onUpdate != null) showPickOption = true
             },
-            tonalElevation = 4.dp,
-            color = MaterialTheme.colorScheme.secondaryContainer,
-        ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                when (value) {
-                    is Avatar.Image -> {
-                        AsyncImage(
-                            model = value.url,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-
-                    is Avatar.Emoji -> {
-                        Text(
-                            text = value.content,
-                            autoSize = TextAutoSize.StepBased(
-                                minFontSize = 15.sp,
-                                maxFontSize = 30.sp,
-                            ),
-                            lineHeight = 0.8.em,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(5.dp)
-                        )
-                    }
-
-                    is Avatar.Dummy -> {
-                        Text(
-                            text = name
-                                .ifBlank { stringResource(R.string.user_default_name) }
-                                .takeIf { it.isNotEmpty() }
-                                ?.firstOrNull()?.toString()?.uppercase() ?: "A",
-                            fontSize = 20.sp,
-                            lineHeight = 1.em
-                        )
-                    }
-                }
-            }
-        }
+        )
 
         // Show edit icon when editable
         if (onUpdate != null) {

@@ -114,8 +114,9 @@ import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
-import me.rerere.rikkahub.ui.pages.disclaimer.DisclaimerPage
 import me.rerere.rikkahub.ui.pages.disclaimer.LegalPage
+import me.rerere.rikkahub.ui.theme.withSettingsBackdropMetadata
+import me.rerere.rikkahub.ui.theme.rememberSettingsBackdropDecorator
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
@@ -160,8 +161,6 @@ import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSystemToolsPage
 import me.rerere.rikkahub.ui.pages.setting.SecuritySettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProactiveMessagePage
-import me.rerere.rikkahub.ui.pages.setting.SettingWeixinBotPage
-import me.rerere.rikkahub.ui.pages.setting.SettingQqBotPage
 import me.rerere.rikkahub.plugin.webview.PluginWebViewPage
 import me.rerere.rikkahub.ui.pages.memory.MemoryBankPage
 import me.rerere.rikkahub.ui.components.ui.EmojiPickerPage
@@ -286,6 +285,14 @@ class RouteActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        intent.getStringExtra(me.rerere.rikkahub.service.MediaCreationForegroundService.EXTRA_MEDIA_SESSION_ID)
+            ?.takeIf { runCatching { Uuid.parse(it) }.isSuccess }?.let { id ->
+                navStack?.let { stack ->
+                    Snapshot.withMutableSnapshot {
+                        if (stack.lastOrNull() != Screen.MediaCreation(id)) stack.add(Screen.MediaCreation(id))
+                    }
+                }
+            }
         // Navigate to the chat screen if a conversation ID is provided
         intent.getStringExtra("conversationId")?.let { text ->
             val autoStartVoice = intent.getBooleanExtra("autoStartVoice", false)
@@ -311,6 +318,15 @@ class RouteActivity : ComponentActivity() {
             }
         }
 
+        // Return to the persistent update entry from either progress or completion notifications.
+        if (intent.getBooleanExtra("openUpdateDownload", false)) {
+            navStack?.let { stack ->
+                Snapshot.withMutableSnapshot {
+                    if (stack.lastOrNull() != Screen.UpdateDownload) stack.add(Screen.UpdateDownload)
+                }
+                intent.removeExtra("openUpdateDownload")
+            }
+        }
         // 新增逻辑: 从语音通话通知点击, 回到通话页面
         intent.getStringExtra("openVoiceCallConversationId")?.let { convId ->
             navStack?.let { stack ->
@@ -337,23 +353,6 @@ class RouteActivity : ComponentActivity() {
         val scope = rememberCoroutineScope()
         val tts = rememberCustomTtsState()
 
-        // 首次启动：未同意免责声明时强制展示
-        if (!settings.disclaimerAccepted) {
-            DisclaimerPage(
-                onAccept = {
-                    scope.launch {
-                        settingsStore.update {
-                            it.copy(
-                                disclaimerAccepted = true,
-                                disclaimerAcceptedAt = (System.currentTimeMillis() / 1000).toInt()
-                            )
-                        }
-                    }
-                },
-                onDecline = { finish() }
-            )
-            return
-        }
         val asr = rememberCustomAsrState()
         val eventBus = koinInject<AppEventBus>()
         val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
@@ -373,6 +372,17 @@ class RouteActivity : ComponentActivity() {
         SideEffect { this@RouteActivity.navStack = backStack }
 
         ShareHandler(backStack)
+        LaunchedEffect(backStack) {
+            if (intent.getBooleanExtra("openUpdateDownload", false)) {
+                if (backStack.lastOrNull() != Screen.UpdateDownload) backStack.add(Screen.UpdateDownload)
+                intent.removeExtra("openUpdateDownload")
+            }
+            intent.getStringExtra(me.rerere.rikkahub.service.MediaCreationForegroundService.EXTRA_MEDIA_SESSION_ID)
+                ?.takeIf { runCatching { Uuid.parse(it) }.isSuccess }?.let { id ->
+                    backStack.add(Screen.MediaCreation(id))
+                    intent.removeExtra(me.rerere.rikkahub.service.MediaCreationForegroundService.EXTRA_MEDIA_SESSION_ID)
+                }
+        }
 
         // 监听 App 事件: TTS 朗读 / AI 主动发起语音通话
         LaunchedEffect(tts) {
@@ -438,6 +448,7 @@ class RouteActivity : ComponentActivity() {
                         entryDecorators = listOf(
                             rememberSaveableStateHolderNavEntryDecorator(),
                             rememberViewModelStoreNavEntryDecorator(),
+                            rememberSettingsBackdropDecorator(settings.displaySetting),
                         ),
                         modifier = Modifier.fillMaxSize(),
                         onBack = { backStack.removeLastOrNull() },
@@ -456,7 +467,7 @@ class RouteActivity : ComponentActivity() {
                             slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
                                 slideOutHorizontally { it }
                         },
-                        entryProvider = entryProvider {
+                        entryProvider = entryProvider<NavKey> {
                             entry<Screen.Chat>(
                                 metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
                                         + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
@@ -533,6 +544,15 @@ class RouteActivity : ComponentActivity() {
                                 BackupPage()
                             }
 
+                            entry<Screen.MediaCreationSessions> {
+                                me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationSessionsPage()
+                            }
+                            entry<Screen.MediaCreation> { key ->
+                                me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationPage(key.id)
+                            }
+                            entry<Screen.SettingMedia> {
+                                me.rerere.rikkahub.ui.pages.setting.SettingMediaPage()
+                            }
                             entry<Screen.ImageGen> {
                                 ImageGenPage()
                             }
@@ -589,6 +609,9 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SettingAbout> {
                                 SettingAboutPage()
+                            }
+                            entry<Screen.UpdateDownload> {
+                                SettingAboutPage(openUpdateDownload = true)
                             }
 
                             entry<Screen.SettingSearch> {
@@ -698,14 +721,6 @@ entry<Screen.Extensions> {
 
                             entry<Screen.SettingExtraInjection> {
                                 SettingExtraInjectionPage()
-                            }
-
-                            entry<Screen.SettingWeixinBot> {
-                                SettingWeixinBotPage()
-                            }
-
-                            entry<Screen.SettingQqBot> {
-                                SettingQqBotPage()
                             }
 
                             entry<Screen.Workflows> {
@@ -862,7 +877,7 @@ entry<Screen.Extensions> {
                                 )
                             }
 
-                        }
+                        }.withSettingsBackdropMetadata()
                     )
                     AnimatedVisibility(
                         visible = migrationState is MigrationState.Migrating,
@@ -958,6 +973,15 @@ sealed interface Screen : NavKey {
     data object Backup : Screen
 
     @Serializable
+    data object MediaCreationSessions : Screen
+
+    @Serializable
+    data class MediaCreation(val id: String) : Screen
+
+    @Serializable
+    data object SettingMedia : Screen
+
+    @Serializable
     data object ImageGen : Screen
 
     @Serializable
@@ -1004,6 +1028,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingAbout : Screen
+
+    @Serializable
+    data object UpdateDownload : Screen
 
     @Serializable
     data object SettingSearch : Screen
@@ -1082,12 +1109,6 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingExtraInjection : Screen
-
-    @Serializable
-    data object SettingWeixinBot : Screen
-
-    @Serializable
-    data object SettingQqBot : Screen
 
     @Serializable
     data object Health : Screen

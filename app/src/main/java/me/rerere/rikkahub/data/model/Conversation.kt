@@ -35,6 +35,8 @@ data class Conversation(
     val workspaceCwd: String? = null,
     // 所属文件夹（助手内分组），null 表示未归入任何文件夹
     val folderId: Uuid? = null,
+    val contextCompaction: ContextCompaction? = null,
+    val config: ConversationConfig? = null,
     @Transient
     val newConversation: Boolean = false
 ) {
@@ -153,6 +155,20 @@ private fun UIMessagePart.fileUri(): Uri? = when (this) {
     is UIMessagePart.Image -> url.takeIf { it.startsWith("file://") }?.toUri()
     is UIMessagePart.Document -> url.takeIf { it.startsWith("file://") }?.toUri()
     is UIMessagePart.Video -> url.takeIf { it.startsWith("file://") }?.toUri()
+    is UIMessagePart.VoiceMessage -> url.takeIf { it.startsWith("file://") }?.toUri()
     is UIMessagePart.Audio -> url.takeIf { it.startsWith("file://") }?.toUri()
     else -> null
 }
+
+/** Include all branches and nested tool results when retaining queued attachments. */
+fun List<UIMessagePart>.localFileUrls(): Set<String> = collectAllParts().mapNotNull { part ->
+    val url = when (part) {
+        is UIMessagePart.Image -> part.url
+        is UIMessagePart.Document -> part.url
+        is UIMessagePart.Video -> part.url
+        is UIMessagePart.Audio -> part.url
+        is UIMessagePart.VoiceMessage -> part.url
+        else -> null
+    }
+    url?.takeIf { it.startsWith("file://") }
+}.toSet()

@@ -264,12 +264,12 @@
   <string name="chat_page_compress_additional_prompt">Дополнительные инструкции (по желанию)</string>
   <string name="chat_page_compress_additional_prompt_hint">Укажите, что сохранить или на чём сосредоточиться</string>
   <string name="chat_page_compress_context">Сжать историю</string>
-  <string name="chat_page_compress_context_desc">Сжать переписку в краткое резюме, чтобы сэкономить токены</string>
+  <string name="chat_page_compress_context_desc">Сводка ранней переписки для будущих запросов. Полная история остаётся в чате</string>
   <string name="chat_page_compress_context_title">Сжать историю чата</string>
-  <string name="chat_page_compress_keep_recent">Сохранять недавние сообщения</string>
+  <string name="chat_page_compress_keep_recent">Недавние сообщения, отправляемые целиком</string>
   <string name="chat_page_compress_not_enough_messages">Недостаточно сообщений для сжатия. Уменьшите количество сохраняемых сообщений или добавьте больше сообщений.</string>
   <string name="chat_page_compress_target_tokens">Целевой размер токенов</string>
-  <string name="chat_page_compress_warning">⚠️ Сжатие контекста приведёт к сбросу всех сообщений в текущем диалоге</string>
+  <string name="chat_page_compress_warning">Сообщения, ветки и вложения сохраняются. Сводку создаёт выбранная модель сжатия.</string>
   <string name="chat_page_compressing">Сжатие...</string>
   <string name="chat_page_conversation_system_prompt">Системный запрос для беседы</string>
   <string name="chat_page_conversation_system_prompt_clear">Очистить</string>
@@ -303,8 +303,9 @@
   <string name="chat_page_search_chats">Поиск чатов</string>
   <string name="chat_page_today">Сегодня</string>
   <string name="chat_page_yesterday">Вчера</string>
-  <string name="chat_size_dialog_content">Текущее количество сообщений: %1$d. Это может привести к вылету или зависанию приложения, а также к потере данных этой беседы. Пожалуйста, создайте новый чат как можно скорее, чтобы продолжить общение.</string>
-  <string name="chat_size_dialog_title">Данные этого разговора слишком большие</string>
+  <string name="chat_size_dialog_content">В беседе сохранено %1$d сообщений. Сжатие контекста уменьшит объём следующих запросов. Если приложение работает медленно, сохраните резервную копию беседы и продолжите в новом чате.</string>
+  <string name="chat_size_dialog_input_usage">Входные данные последнего ответа: %1$s токенов.</string>
+  <string name="chat_size_dialog_title">Длинная беседа: проверьте объём контекста</string>
   <string name="citations_count">%1$d цитирований</string>
   <string name="common_export">Экспорт</string>
   <string name="common_share">Поделиться</string>
@@ -338,7 +339,7 @@
   <string name="donate_page_donation_methods">Способы пожертвований</string>
   <string name="donate_page_kofi_desc">Для пользователей по всему миру</string>
   <string name="donate_page_sponsor_list">Список спонсоров</string>
-  <string name="donate_page_title">Поддержать</string>
+  <string name="donate_page_title">Поддержать проект</string>
   <string name="edit">Редактировать</string>
   <string name="editing">Редактирование</string>
   <string name="emoji_picker_search_placeholder">Поиск эмодзи...</string>
@@ -799,8 +800,8 @@
   <string name="setting_page_display_setting_desc">Управление настройками отображения</string>
   <string name="setting_page_documentation">Документация</string>
   <string name="setting_page_documentation_desc">Просмотрите инструкции по использованию приложения и справочную документацию</string>
-  <string name="setting_page_donate">Поддержать</string>
-  <string name="setting_page_donate_desc">Если вам нравится, поддержите автора</string>
+  <string name="setting_page_donate">Поддержать проект</string>
+  <string name="setting_page_donate_desc">Проект, обратная связь и сообщество</string>
   <string name="setting_page_dynamic_color">Динамический цвет</string>
   <string name="setting_page_dynamic_color_desc">Использовать динамический цвет</string>
   <string name="setting_page_extensions">Расширения</string>
@@ -829,7 +830,7 @@
   <string name="setting_page_search_title">Служба поиска</string>
   <string name="setting_page_share">Поделиться</string>
   <string name="setting_page_share_desc">Поделиться этим приложением с друзьями</string>
-  <string name="setting_page_share_text">西瓜瓣 — открытый Android-ассистент с ИИ\n\nСайт: https://github.com/sue1231513/orangechat</string>
+  <string name="setting_page_share_text">西瓜瓣 — открытый Android-ассистент с ИИ\n\nПроект: https://github.com/yaselli/watermelon-chat</string>
   <string name="setting_page_sponsor_alert_confirm">Пожертвовать</string>
   <string name="setting_page_sponsor_alert_desc">Вы запустили приложение более 100 раз! Если вам нравится им пользоваться, пожалуйста, поддержите разработчика.</string>
   <string name="setting_page_sponsor_alert_dismiss">Не сейчас</string>
@@ -1089,4 +1090,30 @@
   <string name="chat_page_folder_add">Новая</string>
   <string name="chat_page_delete_folder_confirm">Удалить папку "%1$s"? Беседы внутри не будут удалены, только исключены из папки.</string>
   <string name="chat_page_delete_folder_generating">Некоторые беседы в этой папке все еще генерируются. Пожалуйста, остановите их перед удалением.</string>
+  <string name="setting_provider_page_rerank_model">Реранк</string>
+  <string name="chat_page_queue_paused_count">Очередь приостановлена (%1$d)</string>
+  <string name="chat_page_queue_pending_count">В очереди (%1$d)</string>
+  <string name="chat_page_queue_resume">Продолжить</string>
+  <string name="chat_page_queue_image">[Изображение]</string>
+  <string name="chat_page_queue_file">[Файл]</string>
+  <string name="chat_page_queue_audio">[Запись]</string>
+  <string name="chat_page_queue_video">[Видео]</string>
+  <string name="chat_page_queue_editing">Редактирование</string>
+  <string name="chat_page_queue_remove">Убрать</string>
+  <string name="chat_page_queue_edit_title">Изменить сообщение в очереди</string>
+  <string name="chart_series">Ряд</string>
+  <string name="chart_series_name">Ряд %1$d</string>
+  <string name="chart_mode_chart">График</string>
+  <string name="chart_mode_table">Таблица</string>
+  <string name="translator_page_history">История</string>
+  <string name="translator_page_clear_history">Очистить историю</string>
+  <string name="translator_page_clear_history_title">Очистить историю переводов?</string>
+  <string name="translator_page_clear_history_message">Все сохранённые переводы будут удалены. Это действие нельзя отменить.</string>
+
+    <string name="image_crop_rotate">Повернуть</string>
+    <string name="image_crop_reset">Сбросить</string>
+    <string name="image_crop_free">Свободно</string>
+    <string name="image_crop_original">Оригинал</string>
+    <string name="image_crop_load_failed">Не удалось загрузить изображение</string>
+    <string name="image_crop_failed">Не удалось обрезать изображение</string>
 </resources>

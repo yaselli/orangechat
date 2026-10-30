@@ -18,6 +18,15 @@
 
 ---
 
+## 下载、文档与交流
+
+- [正式版与 Debug 安装包](https://github.com/yaselli/watermelon-chat/releases)
+- [西瓜瓣使用说明](docs/USER_GUIDE_ZH.md)
+- [问题反馈](https://github.com/yaselli/watermelon-chat/issues)
+- QQ 交流群：**728342625**
+
+日常维护分支为 `build/stable-release`。
+
 ## 🍉 为什么做西瓜瓣
 
 想要一个能聊天、用工具、记住重要事情，偶尔还能主动开口的 AI 客户端，于是从橘瓣接着改，名字叫西瓜瓣。

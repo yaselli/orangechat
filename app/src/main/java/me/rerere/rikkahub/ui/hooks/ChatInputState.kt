@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.music.musicCard
 import kotlin.uuid.Uuid
 
 class ChatInputState {
@@ -41,14 +42,14 @@ class ChatInputState {
     }
 
     fun setContents(contents: List<UIMessagePart>) {
-        val lastTextIndex = contents.indexOfLast { it is UIMessagePart.Text }
+        val lastTextIndex = contents.indexOfLast { it is UIMessagePart.Text && it.musicCard() == null }
         val text = if (lastTextIndex >= 0) {
             (contents[lastTextIndex] as UIMessagePart.Text).text
         } else {
             ""
         }
         textContent.setTextAndPlaceCursorAtEnd(text)
-        messageContent = contents.filter { it !is UIMessagePart.Text }
+        messageContent = contents.filter { it !is UIMessagePart.Text || it.musicCard() != null }
         editingParts = contents
         editingAttachmentUrls = contents.mapNotNull { it.attachmentUrlOrNull() }.toSet()
     }
@@ -58,7 +59,7 @@ class ChatInputState {
         if (isEditing()) {
             val originalParts = editingParts
             if (originalParts != null) {
-                val editedTextIndex = originalParts.indexOfLast { it is UIMessagePart.Text }
+                val editedTextIndex = originalParts.indexOfLast { it is UIMessagePart.Text && it.musicCard() == null }
                 val remainingAttachments = messageContent.toMutableList()
                 val merged = mutableListOf<UIMessagePart>()
 
@@ -66,6 +67,11 @@ class ChatInputState {
                     when {
                         index == editedTextIndex -> {
                             merged.add(UIMessagePart.Text(text))
+                        }
+
+                        part.musicCard() != null -> {
+                            val currentIndex = remainingAttachments.indexOf(part)
+                            if (currentIndex >= 0) merged.add(remainingAttachments.removeAt(currentIndex))
                         }
 
                         part is UIMessagePart.Text -> {
@@ -140,6 +146,7 @@ class ChatInputState {
             is UIMessagePart.Image -> this.url
             is UIMessagePart.Video -> this.url
             is UIMessagePart.Audio -> this.url
+            is UIMessagePart.VoiceMessage -> this.url
             is UIMessagePart.Document -> this.url
             else -> null
         }

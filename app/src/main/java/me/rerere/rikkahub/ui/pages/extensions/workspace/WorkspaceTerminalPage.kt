@@ -26,7 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
+import me.rerere.rikkahub.ui.theme.MaterialSurface as Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -53,6 +53,9 @@ import com.termux.view.TerminalView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import org.koin.compose.koinInject
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import org.koin.androidx.compose.koinViewModel
@@ -87,7 +90,7 @@ fun WorkspaceTerminalPage(id: String) {
         containerColor = Color.Black,
     ) { innerPadding ->
         WorkspaceTerminalContent(
-            root = state.workspace?.root,
+            workspace = state.workspace,
             contentPadding = innerPadding,
         )
     }
@@ -95,9 +98,11 @@ fun WorkspaceTerminalPage(id: String) {
 
 @Composable
 private fun WorkspaceTerminalContent(
-    root: String?,
+    workspace: WorkspaceEntity?,
     contentPadding: PaddingValues,
 ) {
+    val root = workspace?.root
+    val repository: WorkspaceRepository = koinInject()
     val context = LocalContext.current
     val terminalTextSizePx = with(LocalDensity.current) { 12.sp.roundToPx() }
     var finished by remember(root) { mutableStateOf(false) }
@@ -117,11 +122,22 @@ private fun WorkspaceTerminalContent(
     val sessionState by produceState<TerminalSessionUiState>(
         initialValue = TerminalSessionUiState.Loading,
         root,
+        workspace?.sshConfig,
         sessionClient,
     ) {
         val current = root
         value = if (current == null) {
             TerminalSessionUiState.Loading
+        } else if (workspace?.isSsh() == true) {
+            val settings = workspace.sshSettings()
+            if (settings == null) {
+                TerminalSessionUiState.NotInstalled
+            } else {
+                val transport = SshTerminalTransport("${settings.username}@${settings.host}:${settings.port}") {
+                        columns, rows -> repository.openSshShell(workspace, columns, rows)
+                }
+                TerminalSessionUiState.Ready(TerminalSession(transport, 2_000, sessionClient))
+            }
         } else {
             // rootfs stat 与 RootfsPatcher().patch()/DNS 查询都是阻塞 I/O，放到 IO 线程执行；
             // TerminalSession 构造内部会创建 Handler，必须回到主线程执行

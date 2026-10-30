@@ -33,9 +33,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.BottomSheetDefaults
-import androidx.compose.material3.Card
+import me.rerere.rikkahub.ui.theme.MaterialCard as Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
+import me.rerere.rikkahub.ui.theme.MaterialDropdownMenu as DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -43,7 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
@@ -141,7 +141,7 @@ fun SettingSpeechPage(vm: SettingVM = koinViewModel()) {
                     selected = selectedPage == 1,
                     onClick = { selectedPage = 1 },
                     icon = { Icon(HugeIcons.Mic01, contentDescription = null) },
-                    label = { Text(stringResource(R.string.speech_tab_asr)) }
+                    label = { Text("输入与通话") }
                 )
             }
         },
@@ -156,12 +156,32 @@ fun SettingSpeechPage(vm: SettingVM = koinViewModel()) {
                 modifier = Modifier.padding(innerPadding)
             )
 
-            1 -> ASRProviderList(
-                settings = settings,
-                onUpdateSettings = vm::updateSettings,
-                onEdit = { editingASRProvider = it },
-                modifier = Modifier.padding(innerPadding)
-            )
+            1 -> Column(Modifier.padding(innerPadding)) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("通话时发送原声", style = MaterialTheme.typography.titleSmall)
+                        Text("把录音直接发给当前聊天模型，回复仍用选好的 TTS。需要支持音频输入的模型（如 Gemini），不需要配置语音识别。下次通话生效。",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = settings.voiceCallRawAudio,
+                        onCheckedChange = { vm.updateSettings(settings.copy(voiceCallRawAudio = it)) })
+                }
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("AI 回复时继续监听", style = MaterialTheme.typography.titleSmall)
+                        Text("关闭后会暂停麦克风；仍可手动打断，回复结束后恢复聆听。",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = settings.voiceCallListenWhileReplying,
+                        onCheckedChange = { vm.updateSettings(settings.copy(voiceCallListenWhileReplying = it)) })
+                }
+                ASRProviderList(
+                    settings = settings,
+                    onUpdateSettings = vm::updateSettings,
+                    onEdit = { editingASRProvider = it },
+                    modifier = Modifier.weight(1f),
+                )
+            }
 
         }
     }

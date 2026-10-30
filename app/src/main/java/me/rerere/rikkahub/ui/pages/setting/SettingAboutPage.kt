@@ -33,9 +33,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +49,7 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
@@ -54,16 +57,63 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.easteregg.EmojiBurstHost
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.AppUpdateDialog
+import me.rerere.rikkahub.ui.components.ui.updateDownloadLabel
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.AppUpdateDownloader
 import me.rerere.rikkahub.utils.openUrl
+import me.rerere.rikkahub.utils.ProjectLinks
 import me.rerere.rikkahub.utils.plus
+import me.rerere.rikkahub.utils.UiState
+import me.rerere.rikkahub.utils.UpdateChecker
+import me.rerere.rikkahub.utils.UpdateInfo
+import kotlinx.coroutines.launch
+import android.widget.Toast
+import org.koin.compose.koinInject
 
 @Composable
-fun SettingAboutPage() {
+fun SettingAboutPage(openUpdateDownload: Boolean = false) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val context = LocalContext.current
     val navController = LocalNavController.current
+    val updateChecker: UpdateChecker = koinInject()
+    val downloads: AppUpdateDownloader = koinInject()
+    val download by downloads.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
+    LaunchedEffect(openUpdateDownload, download.info) {
+        if (openUpdateDownload && download.info != null) availableUpdate = download.info
+    }
+    fun checkUpdates() {
+        if (checking) return
+        checking = true
+        scope.launch {
+            try {
+                updateChecker.checkUpdate(force = true).collect { state ->
+                    when (state) {
+                        is UiState.Success -> {
+                            availableUpdate = state.data
+                            if (state.data == null) {
+                                Toast.makeText(context, "暂无适配当前版本和设备的更新。", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        is UiState.Error -> Toast.makeText(context, "检查更新失败，请稍后重试。", Toast.LENGTH_SHORT).show()
+                        else -> Unit
+                    }
+                }
+            } finally {
+                checking = false
+            }
+        }
+    }
+    availableUpdate?.let { info ->
+        AppUpdateDialog(
+            info = info,
+            onDismiss = { availableUpdate = null },
+        )
+    }
     val emojiOptions = remember {
         listOf(
             "🎉", "✨", "🌟", "💫", "🎊", "🥳", "🎈", "🎆", "🎇", "🧨",
@@ -142,7 +192,7 @@ fun SettingAboutPage() {
                     ) {
                         item(
                             modifier = Modifier.combinedClickable(
-                                onClick = {},
+                                onClick = { checkUpdates() },
                                 onLongClick = { navController.navigate(Screen.Debug) },
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = LocalIndication.current,
@@ -153,6 +203,20 @@ fun SettingAboutPage() {
                             },
                             headlineContent = { Text(stringResource(R.string.about_page_version)) },
                         )
+                        item(
+                            onClick = { checkUpdates() },
+                            headlineContent = { Text(if (checking) "正在检查更新…" else "检查更新") },
+                            supportingContent = {
+                                Text(if (BuildConfig.APPLICATION_ID.endsWith(".debug")) "仅检查 Debug 测试版" else "仅检查正式版")
+                            },
+                        )
+                        download.info?.let { info ->
+                            item(
+                                onClick = { availableUpdate = info },
+                                headlineContent = { Text("更新下载 · ${info.version}") },
+                                supportingContent = { Text("${updateDownloadLabel(download)}\n${info.download.name}") },
+                            )
+                        }
                         item(
                             leadingContent = { Icon(HugeIcons.SmartPhone01, null) },
                             supportingContent = {
@@ -168,26 +232,26 @@ fun SettingAboutPage() {
                         modifier = Modifier.padding(horizontal = 8.dp),
                     ) {
                         item(
-                            onClick = { context.openUrl("https://github.com/sue1231513/orangechat") },
+                            onClick = { context.openUrl(ProjectLinks.DOCUMENTATION) },
                             leadingContent = { Icon(HugeIcons.Earth, null) },
                             supportingContent = {
-                                Text("https://github.com/sue1231513/orangechat")
+                                Text(ProjectLinks.DOCUMENTATION)
                             },
-                            headlineContent = { Text(stringResource(R.string.about_page_website)) },
+                            headlineContent = { Text(stringResource(R.string.setting_page_documentation)) },
                         )
                         item(
-                            onClick = { context.openUrl("https://github.com/sue1231513/orangechat") },
+                            onClick = { context.openUrl(ProjectLinks.HOME) },
                             leadingContent = { Icon(HugeIcons.Github, null) },
                             supportingContent = {
-                                Text("https://github.com/sue1231513/orangechat")
+                                Text(ProjectLinks.HOME)
                             },
                             headlineContent = { Text(stringResource(R.string.about_page_github)) },
                         )
                         item(
-                            onClick = { context.openUrl("https://github.com/sue1231513/orangechat/blob/master/LICENSE") },
+                            onClick = { context.openUrl(ProjectLinks.LICENSE) },
                             leadingContent = { Icon(HugeIcons.File02, null) },
                             supportingContent = {
-                                Text("https://github.com/sue1231513/orangechat/blob/master/LICENSE")
+                                Text(ProjectLinks.LICENSE)
                             },
                             headlineContent = { Text(stringResource(R.string.about_page_license)) },
                         )

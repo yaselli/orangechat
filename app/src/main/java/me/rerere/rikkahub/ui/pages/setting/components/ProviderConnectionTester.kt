@@ -6,6 +6,10 @@
 
 package me.rerere.rikkahub.ui.pages.setting.components
 
+import me.rerere.rikkahub.data.ai.UsageRecorder
+import me.rerere.rikkahub.data.ai.UsageSource
+import me.rerere.rikkahub.data.ai.UsageTag
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,12 +20,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import me.rerere.rikkahub.ui.theme.MaterialAlertDialog as AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -59,6 +63,7 @@ fun ProviderConnectionTester(
 ) {
     var showTestDialog by remember { mutableStateOf(false) }
     val providerManager = koinInject<ProviderManager>()
+    val usageRecorder = koinInject<UsageRecorder>()
     val scope = rememberCoroutineScope()
 
     IconButton(onClick = { showTestDialog = true }) {
@@ -125,7 +130,9 @@ fun ProviderConnectionTester(
                 TextButton(
                     onClick = {
                         if (model == null) return@TextButton
-                        val provider = providerManager.getProviderByType(internalProvider)
+                        val provider = usageRecorder.wrap(
+                            providerManager.getProviderByType(internalProvider), UsageTag(UsageSource.CONNECTION_TEST),
+                        )
                         resetStates()
                         scope.launch {
                             launch {

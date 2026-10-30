@@ -180,6 +180,14 @@ object CustomColors {
 
     val topBarColors: TopAppBarColors
         @Composable get() {
+            if (LocalThemeMaterial.current.style != me.rerere.rikkahub.data.datastore.UiMaterialStyle.ORIGINAL) {
+                return TopAppBarDefaults.topAppBarColors(
+                    containerColor = if (LocalSoftDarkMode.current) colorScheme.surface.copy(alpha = 0.72f) else Color.Transparent,
+                    scrolledContainerColor = colorScheme.surfaceContainer.copy(
+                        alpha = LocalThemeMaterial.current.profile(LocalDarkMode.current, MaterialRole.CARD, LocalSoftDarkMode.current).tintAlpha
+                    ),
+                )
+            }
             return if (!LocalDarkMode.current) TopAppBarDefaults.topAppBarColors(
                 containerColor = colorScheme.surfaceContainer,
                 scrolledContainerColor = colorScheme.surfaceContainer

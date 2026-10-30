@@ -11,8 +11,14 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ProactiveMessageSetting(
     val enabled: Boolean = false,
+    val allowAiWakeups: Boolean = false,
+    val aiWakeups: List<ProactiveWakeup> = emptyList(),
     val minIntervalMinutes: Int = 30,
     val maxIntervalMinutes: Int = 90,
+    // Phone-local daily quiet window; equal endpoints mean no quiet window.
+    val quietHoursEnabled: Boolean = false,
+    val quietStartMinute: Int = 9 * 60,
+    val quietEndMinute: Int = 18 * 60,
     // 同一条真实用户消息之后，最多允许几次主动追问；用户一回复即清零。
     val maxFollowUpMessages: Int = 2,
     val assistantId: String = "",

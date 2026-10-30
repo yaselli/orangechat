@@ -35,6 +35,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.data.datastore.DisplaySetting
+import me.rerere.rikkahub.data.datastore.UiMaterialStyle
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.ColorPickerDialog
@@ -289,7 +290,9 @@ fun SettingDisplayColorPage(vm: SettingVM = koinViewModel()) {
                     )
                     item(
                         headlineContent = { Text("输入框背景颜色") },
-                        supportingContent = { Text("有背景图时图片优先") },
+                        supportingContent = {
+                            Text("仅在原始材质下使用；整体材质跟随主题配色，有背景图时图片优先")
+                        },
                         trailingContent = {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(
@@ -300,7 +303,10 @@ fun SettingDisplayColorPage(vm: SettingVM = koinViewModel()) {
                                             CircleShape
                                         )
                                 )
-                                TextButton(onClick = { showInputFieldColorPicker = true }) { Text("自定义") }
+                                TextButton(
+                                    enabled = displaySetting.themeMaterial.style == UiMaterialStyle.ORIGINAL,
+                                    onClick = { showInputFieldColorPicker = true },
+                                ) { Text("自定义") }
                                 if (displaySetting.inputFieldColor != null) {
                                     TextButton(onClick = { updateDisplaySetting(displaySetting.copy(inputFieldColor = null)) }) { Text("重置") }
                                 }

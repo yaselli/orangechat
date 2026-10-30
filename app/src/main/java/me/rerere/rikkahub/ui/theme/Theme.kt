@@ -27,7 +27,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import kotlinx.serialization.Serializable
-import me.rerere.rikkahub.data.datastore.VisualThemePalette
 import me.rerere.rikkahub.ui.components.ui.toComposeColor
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
@@ -45,11 +44,13 @@ private val AMOLED_DARK_BACKGROUND = Color(0xFF000000)
 enum class ColorMode {
     SYSTEM,
     LIGHT,
-    DARK
+    DARK,
+    SOFT_DARK,
 }
 
 @Composable
 fun RikkahubTheme(
+    materialBlurEnabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val settings by rememberUserSettingsState()
@@ -58,9 +59,10 @@ fun RikkahubTheme(
     val darkTheme = when (colorMode) {
         ColorMode.SYSTEM -> isSystemInDarkTheme()
         ColorMode.LIGHT -> false
-        ColorMode.DARK -> true
+        ColorMode.DARK, ColorMode.SOFT_DARK -> true
     }
     val amoledDarkMode by rememberAmoledDarkMode()
+    val softDark = colorMode == ColorMode.SOFT_DARK
 
     val colorScheme = when {
         settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -73,8 +75,8 @@ fun RikkahubTheme(
             theme.getColorScheme(dark = darkTheme)
         }
     }
-    val colorSchemeConverted = remember(darkTheme, amoledDarkMode, colorScheme) {
-        if (darkTheme && amoledDarkMode) {
+    val colorSchemeConverted = remember(darkTheme, softDark, amoledDarkMode, colorScheme) {
+        if (darkTheme && amoledDarkMode && !softDark) {
             colorScheme.copy(
                 background = AMOLED_DARK_BACKGROUND,
                 surface = AMOLED_DARK_BACKGROUND,
@@ -91,10 +93,13 @@ fun RikkahubTheme(
         settings.displaySetting.primaryColor,
         settings.displaySetting.globalTextColor,
         settings.displaySetting.visualThemePalette,
+        settings.displaySetting.themeMaterial,
         settings.themeId,
+        softDark,
     ) {
         var scheme = colorSchemeConverted
         scheme = scheme.withVisualPalette(settings.displaySetting.visualThemePalette, darkTheme)
+        if (softDark) scheme = scheme.withSoftDarkAppearance()
         settings.displaySetting.primaryColor?.let { pc ->
             val primaryColor = pc.toComposeColor()
             val luminance = 0.299f * primaryColor.red + 0.587f * primaryColor.green + 0.114f * primaryColor.blue
@@ -133,7 +138,7 @@ fun RikkahubTheme(
                 surfaceVariant = scheme.surfaceVariant.copy(alpha = glassAlpha),
             )
         }
-        scheme
+        scheme.withThemeMaterial(settings.displaySetting.themeMaterial, darkTheme)
     }
 
     // 更新状态栏图标颜色
@@ -150,13 +155,18 @@ fun RikkahubTheme(
 
     CompositionLocalProvider(
         LocalDarkMode provides darkTheme,
+        LocalSoftDarkMode provides softDark,
+        LocalThemeMaterial provides settings.displaySetting.themeMaterial,
+        LocalMaterialBlurEnabled provides materialBlurEnabled,
         LocalExtendColors provides extendColors,
         LocalOverscrollFactory provides null
     ) {
         MaterialExpressiveTheme(
             colorScheme = finalColorScheme,
             typography = Typography,
-            content = content,
+            content = {
+                MaterialBackdrop(background = { ThemeMaterialBackground() }, captureBackground = false) { content() }
+            },
             motionScheme = MotionScheme.expressive()
         )
     }

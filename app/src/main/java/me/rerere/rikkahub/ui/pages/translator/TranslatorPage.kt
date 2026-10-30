@@ -21,6 +21,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -79,6 +87,7 @@ fun TranslatorPage(vm: TranslatorVM = koinViewModel()) {
     val clipboard = LocalClipboard.current
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
+    var showHistory by remember { mutableStateOf(false) }
 
     // 处理错误
     LaunchedEffect(Unit) {
@@ -97,6 +106,7 @@ fun TranslatorPage(vm: TranslatorVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
+                    TextButton(onClick = { showHistory = true }) { Text(stringResource(R.string.translator_page_history)) }
                     ModelSelector(
                         modelId = settings.translateModeId,
                         onSelect = {
@@ -207,8 +217,42 @@ fun TranslatorPage(vm: TranslatorVM = koinViewModel()) {
                     Text("复制翻译结果", modifier = Modifier.padding(start = 4.dp))
                 }
             }
+            if (translatedText.isNotBlank()) {
+                TextButton(enabled = !translating, onClick = vm::useResultAsInput) { Text("将结果用作输入") }
+            }
         }
     }
+    if (showHistory) {
+        val history = vm.history.collectAsLazyPagingItems()
+        ModalBottomSheet(onDismissRequest = { showHistory = false }) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                TranslationHistoryHeader(onClear = vm::clearHistory)
+                Text("自动保存最近 100 条成功翻译；点击可恢复，左滑可删除。",
+                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp))
+                when {
+                    history.loadState.refresh is LoadState.Loading -> CircularProgressIndicator(Modifier.padding(16.dp))
+                    history.loadState.refresh is LoadState.Error -> TextButton(onClick = history::retry) { Text("加载失败，点击重试") }
+                    history.itemCount == 0 -> Text("还没有翻译历史", Modifier.padding(16.dp))
+                }
+                LazyColumn(
+                    Modifier.fillMaxWidth().heightIn(max = 500.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(count = history.itemCount, key = history.itemKey { it.id }) { index ->
+                        history[index]?.let { entry ->
+                            TranslationHistoryItem(entry,
+                                onClick = { vm.restoreHistory(entry); showHistory = false },
+                                onDelete = { vm.deleteHistory(entry) })
+                        }
+                    }
+                    if (history.loadState.append is LoadState.Error) {
+                        item { TextButton(onClick = history::retry) { Text("加载更多失败，点击重试") } }
+                    }
+                }
+            }
+        }
+    }
+
 }
 
 private val Locales by lazy {

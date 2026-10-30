@@ -24,6 +24,17 @@ import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
 
 val appModule = module {
+    single { me.rerere.rikkahub.data.music.SharedMusicCredentials(get()) }
+    single { me.rerere.rikkahub.data.music.SharedMusicApi(get()) }
+    single { me.rerere.rikkahub.data.music.SharedMusicManager(get(), get(), get()) }
+    single {
+        me.rerere.rikkahub.data.music.MusicCommentaryCoordinator(
+            get(), get(), get(), get(), get(), get(), get(), get(),
+        )
+    }
+    single { me.rerere.mediagen.provider.MediaGenerationManager(get()) }
+    single { me.rerere.rikkahub.service.MediaCreationService(get(), get(), get(), get(), get(), get(), get()) }
+
     single<Json> { JsonInstant }
 
     single {
@@ -42,8 +53,7 @@ val appModule = module {
         AppEventBus()
     }
 
-    // Workflows: AgentRun ledger (no-op stub), repository, engine, trigger registry.
-    single { me.rerere.rikkahub.data.agentrun.AgentRunRepository() }
+    // Workflows: repository, engine, trigger registry.
     single {
         me.rerere.rikkahub.data.repository.SshHostRepository(
             get<me.rerere.rikkahub.data.db.AppDatabase>().sshHostDao()
@@ -80,12 +90,6 @@ val appModule = module {
         LocalTools(get(), get(), get(), get(), get())
     }
 
-    // 微信 Bot (iLink 协议) HTTP 客户端
-    single { me.rerere.rikkahub.data.weixin.WeixinBotClient(get()) }
-
-    // QQ Bot (API v2) HTTP 客户端 + WebSocket 共用同一个 OkHttpClient
-    single { me.rerere.rikkahub.data.qq.QqBotClient(get()) }
-
     single {
         me.rerere.rikkahub.data.ai.tools.ToolSurfaceBuilder(
             context = get(),
@@ -96,6 +100,9 @@ val appModule = module {
             pluginToolProvider = get(),
             workspaceRepository = get(),
             json = get(),
+            sharedMusic = get(),
+            settingsStore = get(),
+            conversations = get(),
             memoryRepository = get(),
         )
     }
@@ -103,6 +110,8 @@ val appModule = module {
     single {
         UpdateChecker(get())
     }
+
+    single { me.rerere.rikkahub.utils.AppUpdateDownloader(get(), get()) }
 
     single {
         AppScope()
@@ -139,9 +148,13 @@ val appModule = module {
             settingsStore = get(),
             conversationRepo = get(),
             memoryRepository = get(),
+            memoryOrganization = get(),
+            memoryAutoIndex = get(),
+            chatInteractionRepository = get(),
             generationHandler = get(),
             templateTransformer = get(),
             providerManager = get(),
+            usageRecorder = get(),
             toolSurfaceBuilder = get(),
             mcpManager = get(),
             filesManager = get(),

@@ -6,6 +6,7 @@
 
 package me.rerere.rikkahub.ui.components.ui
 
+import me.rerere.rikkahub.data.ai.account.withoutAccountCredentials
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,7 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -96,7 +97,7 @@ fun ProviderSetting.encodeForShare(): String {
         append("ai-provider:")
         append("v1:")
 
-        val value = JsonInstant.encodeToString(this@encodeForShare.copyProvider(models = emptyList()))
+        val value = JsonInstant.encodeToString(this@encodeForShare.copyProvider(models = emptyList()).withoutAccountCredentials())
         append(Base64.encode(value.encodeToByteArray()))
     }
 }

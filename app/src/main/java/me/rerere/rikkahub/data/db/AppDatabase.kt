@@ -6,6 +6,17 @@
 
 package me.rerere.rikkahub.data.db
 
+
+import me.rerere.rikkahub.data.memory.MemoryOrganizationBatch
+import me.rerere.rikkahub.data.memory.MemoryEvidence
+import me.rerere.rikkahub.data.memory.MemoryOrganizationDAO
+import me.rerere.rikkahub.data.memory.MemoryIndexDAO
+import me.rerere.rikkahub.data.memory.MemoryVectorEntity
+import me.rerere.rikkahub.data.memory.MemoryRecallSnapshotEntity
+import me.rerere.rikkahub.data.memory.HistoryMemoryDAO
+import me.rerere.rikkahub.data.memory.HistoryMemoryVector
+import me.rerere.rikkahub.data.interaction.MessageReaction
+import me.rerere.rikkahub.data.interaction.MessageReactionDAO
 import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -45,9 +56,19 @@ import me.rerere.rikkahub.utils.JsonInstant
 
 @Database(
     entities = [
+        me.rerere.rikkahub.data.db.entity.TranslationHistoryEntity::class,
         ConversationEntity::class,
+        MemoryVectorEntity::class,
+        HistoryMemoryVector::class,
+        MemoryRecallSnapshotEntity::class,
         MemoryEntity::class,
+        MemoryOrganizationBatch::class,
+        MemoryEvidence::class,
+        me.rerere.rikkahub.data.memory.MemoryIndexAttempt::class,
         GenMediaEntity::class,
+        me.rerere.rikkahub.data.db.entity.MediaCreationSessionEntity::class,
+        me.rerere.rikkahub.data.db.entity.MediaCreationNodeEntity::class,
+        me.rerere.rikkahub.data.db.entity.MediaCreationRecordEntity::class,
         MessageNodeEntity::class,
         ManagedFileEntity::class,
         FavoriteEntity::class,
@@ -58,8 +79,10 @@ import me.rerere.rikkahub.utils.JsonInstant
         WorkflowRunEntity::class,
         SshHostEntity::class,
         SecurityAuditEntity::class,
+        MessageReaction::class,
+        me.rerere.rikkahub.data.db.entity.UsageRecordEntity::class,
     ],
-    version = 29,
+    version = 43,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -82,9 +105,24 @@ import me.rerere.rikkahub.utils.JsonInstant
 )
 @TypeConverters(TokenUsageConverter::class)
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun translationHistoryDao(): me.rerere.rikkahub.data.db.dao.TranslationHistoryDAO
+
+    abstract fun usageRecordDao(): me.rerere.rikkahub.data.db.dao.UsageRecordDAO
+
+    abstract fun memoryAutoIndexDao(): me.rerere.rikkahub.data.memory.MemoryAutoIndexDAO
+
+    abstract fun memoryOrganizationDao(): MemoryOrganizationDAO
+
+    abstract fun historyMemoryDao(): HistoryMemoryDAO
+
+    abstract fun memoryIndexDao(): MemoryIndexDAO
+    abstract fun messageReactionDao(): MessageReactionDAO
+
     abstract fun conversationDao(): ConversationDAO
 
     abstract fun memoryDao(): MemoryDAO
+
+    abstract fun mediaCreationDao(): me.rerere.rikkahub.data.db.dao.MediaCreationDAO
 
     abstract fun genMediaDao(): GenMediaDAO
 

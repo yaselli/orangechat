@@ -19,13 +19,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.material3.Card
+import me.rerere.rikkahub.ui.theme.MaterialCard as Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -70,6 +70,7 @@ fun SearchPickerButton(
     onToggleSearch: (Boolean) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
     model: Model?,
+    onUpdateModel: ((Model) -> Unit)? = null,
 ) {
     var showSearchPicker by remember { mutableStateOf(false) }
     val currentService = settings.searchServices.getOrNull(settings.searchServiceSelected)
@@ -142,6 +143,7 @@ fun SearchPickerButton(
                         .fillMaxWidth()
                         .weight(1f),
                     model = model,
+                    onUpdateModel = onUpdateModel,
                     onDismiss = {
                         showSearchPicker = false
                     }
@@ -159,13 +161,14 @@ private fun SearchPicker(
     modifier: Modifier = Modifier,
     onToggleSearch: (Boolean) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onUpdateModel: ((Model) -> Unit)? = null,
 ) {
     val navBackStack = LocalNavController.current
 
     // 模型内置搜索
     if (model != null && (ModelRegistry.GEMINI_SERIES.match(model.modelId) || model.modelId.contains("gpt-"))) {
-        BuiltInSearchSetting(model = model)
+        BuiltInSearchSetting(model = model, onUpdateModel = onUpdateModel)
     }
 
     // 如果没有开启内置搜索，显示搜索服务选择
@@ -295,7 +298,7 @@ private fun AppSearchSettings(
 }
 
 @Composable
-private fun BuiltInSearchSetting(model: Model) {
+private fun BuiltInSearchSetting(model: Model, onUpdateModel: ((Model) -> Unit)?) {
     val settingsStore = koinInject<SettingsStore>()
     val scope = rememberCoroutineScope()
     Card {
@@ -325,7 +328,10 @@ private fun BuiltInSearchSetting(model: Model) {
             Switch(
                 checked = model.tools.contains(BuiltInTools.Search),
                 onCheckedChange = { checked ->
-                    scope.launch {
+                    if (onUpdateModel != null) {
+                        onUpdateModel(model.copy(tools = if (checked) model.tools + BuiltInTools.Search
+                            else model.tools - BuiltInTools.Search))
+                    } else scope.launch {
                         settingsStore.update { current ->
                             current.copy(providers = current.providers.map { provider ->
                                 val latestModel = provider.models.find { it.id == model.id }

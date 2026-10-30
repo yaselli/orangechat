@@ -6,8 +6,14 @@
 
 package me.rerere.rikkahub.data.ai
  
+import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.data.interaction.ChatInteractionRepository
+import me.rerere.rikkahub.data.interaction.ReactionContextTurn
+import me.rerere.rikkahub.data.music.withSharedMusicContext
 import android.content.Context
 import android.util.Log
+import me.rerere.common.android.Logging
+import me.rerere.rikkahub.utils.JsonInstant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -19,9 +25,13 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import me.rerere.ai.core.InputSchema
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -35,6 +45,14 @@ import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.handleMessageChunk
+import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
+import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
+import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
+import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
+import me.rerere.rikkahub.data.ai.transformers.VoiceMessageTransformer
+import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
+import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
@@ -42,12 +60,19 @@ import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTools
+import me.rerere.rikkahub.data.ai.tools.createToolDiscoverySession
+import me.rerere.rikkahub.data.ai.tools.ToolDiscoveryProfile
 import me.rerere.rikkahub.data.ai.tools.buildWriteFilesTool
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.memory.MemoryRecallService
+import me.rerere.rikkahub.data.memory.MemoryRecallTurn
+import me.rerere.rikkahub.data.model.MemorySource
+import me.rerere.rikkahub.data.model.ContextCompaction
+import me.rerere.rikkahub.data.model.selectCompactedContext
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -79,7 +104,13 @@ class GenerationHandler(
     private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
     private val memoryBankService: MemoryBankService,
+    private val memoryRecallService: MemoryRecallService,
+    private val chatInteractionRepository: ChatInteractionRepository,
+    private val sharedMusic: me.rerere.rikkahub.data.music.SharedMusicManager,
+    private val usageRecorder: UsageRecorder,
 ) {
+    private val cacheRequestDiagnostics by lazy { CacheRequestDiagnostics() }
+
     fun generateText(
         settings: Settings,
         model: Model,
@@ -91,18 +122,36 @@ class GenerationHandler(
         tools: List<Tool> = emptyList(),
         maxSteps: Int = 256,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        contextCompaction: ContextCompaction? = null,
         conversationSystemPrompt: String? = null,
         workspaceCwd: String? = null,
         pluginPromptInjections: List<String> = emptyList(),
         conversationId: String? = null,
+        usageSource: UsageSource = UsageSource.CHAT,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
-        val providerImpl = providerManager.getProviderByType(provider)
+        val providerImpl = usageRecorder.wrap(
+            providerManager.getProviderByType(provider),
+            UsageTag(usageSource, assistant.id, conversationId?.let { kotlin.uuid.Uuid.parse(it) }),
+        )
  
-        runGenerationToolLoop(
+        val recallHistory = selectCompactedContext(messages, contextCompaction).messages
+        val recallTurn = memoryRecallService.prepare(
+            assistant, settings, conversationId,
+            selectGenerationHistory(recallHistory, assistant.contextMessageSize, GenerationScene.CHAT),
+        )
+        val reactionTurn = chatInteractionRepository.prepare(messages, conversationId, assistant)
+        val musicContext = sharedMusic.contextFor(assistant.id.toString())
+
+        val discovery = createToolDiscoverySession(assistant, settings, model, tools)
+        var fullToolBytes = 0L
+        var requestProfile: JsonElement? = null
+        val originalMessageIds = messages.mapTo(hashSetOf()) { it.id }
+        val completedMessages = runGenerationToolLoop(
             initialMessages = messages,
             maxSteps = maxSteps,
             resumeApprovedTools = true,
+            discovery = discovery,
             onStep = { stepIndex, _ ->
                 Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
             },
@@ -115,22 +164,32 @@ class GenerationHandler(
                         } else {
                             assistant.id.toString()
                         }
+                        val memorySource = MemorySource(
+                            kind = "tool",
+                            conversationId = conversationId.orEmpty(),
+                            messageId = messages.lastOrNull { it.role == MessageRole.USER }?.id?.toString().orEmpty(),
+                        )
                         buildMemoryTools(
                             json = json,
                             onCreation = { content ->
-                                memoryRepo.addMemory(memoryAssistantId, content)
+                                memoryRepo.addMemory(memoryAssistantId, content, memorySource)
                             },
                             onUpdate = { id, content ->
-                                memoryRepo.updateContent(id, content)
+                                memoryRepo.updateContent(id, content, memorySource, memoryAssistantId)
                             },
+                            onRead = { id -> memoryRepo.getMemoryInScope(id, memoryAssistantId) },
                             onDelete = { id ->
-                                memoryRepo.deleteMemory(id)
+                                memoryRepo.deleteMemory(id, memoryAssistantId)
                             }
                         ).let(this::addAll)
                     }
                     // 文件写入工具 - AI可直接将文件内容写入设备或打包ZIP
                     add(buildWriteFilesTool(conversationId))
                     addAll(tools)
+                }.also { registered ->
+                    if (discovery != null && BuildConfig.DEBUG && settings.displaySetting.showTokenUsage) {
+                        fullToolBytes = runCatching { toolDefinitionSizes(registered).sumOf { it.bytes } }.getOrDefault(0L)
+                    }
                 }
             },
             generateTurn = { currentMessages, toolsInternal, _ ->
@@ -140,8 +199,13 @@ class GenerationHandler(
                     settings = settings,
                     messages = turnMessages,
                     pluginPromptInjections = pluginPromptInjections,
-                    onUpdateMessages = {
-                        turnMessages = it.transforms(
+                    onUpdateMessages = { updated ->
+                        val recorded = updated.mapIndexed { index, message ->
+                            if (index == updated.lastIndex && message.id !in originalMessageIds) {
+                                recallTurn.annotate(message).attachRequestInputProfileValue(requestProfile)
+                            } else message
+                        }
+                        turnMessages = recorded.transforms(
                             transformers = outputTransformers,
                             context = context,
                             model = model,
@@ -166,10 +230,17 @@ class GenerationHandler(
                     provider = provider,
                     tools = toolsInternal,
                     memories = memories ?: emptyList(),
+                    recallTurn = recallTurn,
+                    reactionTurn = reactionTurn,
+                    musicContext = musicContext,
+                    discoveryProfile = discovery?.profile(fullToolBytes),
+                    onRequestProfile = { requestProfile = it?.let(::encodeRequestInputProfile) },
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
+                    contextCompaction = contextCompaction,
                     conversationSystemPrompt = conversationSystemPrompt,
                     workspaceCwd = workspaceCwd,
+                    conversationId = conversationId,
                 )
                 turnMessages = turnMessages.visualTransforms(
                     transformers = outputTransformers,
@@ -185,7 +256,11 @@ class GenerationHandler(
                     assistant = assistant,
                     settings = settings
                 )
-                turnMessages = turnMessages.slice(0 until turnMessages.lastIndex) + turnMessages.last().copy(
+                val lastReply = turnMessages.last()
+                val recordedReply = if (lastReply.id !in originalMessageIds) {
+                    recallTurn.annotate(lastReply).attachRequestInputProfileValue(requestProfile)
+                } else lastReply
+                turnMessages = turnMessages.slice(0 until turnMessages.lastIndex) + recordedReply.copy(
                     finishedAt = Clock.System.now()
                         .toLocalDateTime(TimeZone.currentSystemDefault())
                 )
@@ -214,6 +289,8 @@ class GenerationHandler(
                 }
             },
         )
+        val acknowledgedMessages = reactionTurn.finish(completedMessages)
+        if (acknowledgedMessages != completedMessages) emit(GenerationChunk.Messages(acknowledgedMessages))
  
     }.throttleLatest(STREAM_UI_THROTTLE_MS)
         .flowOn(Dispatchers.IO)
@@ -230,36 +307,73 @@ class GenerationHandler(
         provider: ProviderSetting,
         tools: List<Tool>,
         memories: List<AssistantMemory>,
+        recallTurn: MemoryRecallTurn,
+        reactionTurn: ReactionContextTurn,
+        musicContext: String?,
+        discoveryProfile: ToolDiscoveryProfile?,
+        onRequestProfile: (RequestInputProfile?) -> Unit,
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        contextCompaction: ContextCompaction? = null,
         conversationSystemPrompt: String? = null,
         workspaceCwd: String? = null,
+        conversationId: String? = null,
     ) {
-        val internalMessages = buildList {
+        val collectProfile = BuildConfig.DEBUG && settings.displaySetting.showTokenUsage
+        val collectCacheDiagnostics = settings.displaySetting.cacheRequestDiagnosticsEnabled && conversationId != null &&
+            provider is ProviderSetting.OpenAI && !provider.useResponseApi
+        val systemSizes = linkedMapOf<String, Long>()
+        val transformationSizes = mutableListOf<InputSizeEntry>()
+        val systemCheckpoints = mutableListOf<CacheSystemCheckpoint>()
+        fun captureSystem(label: String, rows: List<UIMessage>) {
+            if (!collectCacheDiagnostics) return
+            runCatching {
+                val system = JsonArray(rows.filter { it.role == MessageRole.SYSTEM }.map { message ->
+                    JsonArray(message.parts.filterIsInstance<UIMessagePart.Text>().map { JsonPrimitive(it.text) })
+                })
+                systemCheckpoints += cacheRequestDiagnostics.checkpoint(label, system, stage = true)
+            }
+        }
+        fun capturePart(label: String, text: String) {
+            if (!collectCacheDiagnostics || text.isEmpty()) return
+            runCatching {
+                systemCheckpoints += cacheRequestDiagnostics.checkpoint(label, JsonPrimitive(text))
+            }
+        }
+        fun measured(label: String, text: String): String {
+            if (collectProfile) {
+                systemSizes[label] = (systemSizes[label] ?: 0L) + inputUtf8Bytes(text)
+            }
+            capturePart(label, text)
+            return text
+        }
+        val baseMessages = buildList {
             val system = buildString {
                 val effectiveSystemPrompt = selectGenerationSystemPrompt(
                     assistant, GenerationScene.CHAT, conversationSystemPrompt
                 )
                 if (effectiveSystemPrompt.isNotBlank()) {
-                    append(effectiveSystemPrompt)
+                    append(measured("角色/会话设定", effectiveSystemPrompt))
                 }
  
                 // 记忆
-                append(buildGenerationMemoryPrompt(assistant.enableMemory, memories, GenerationScene.CHAT))
+                append(measured("旧整库记忆", buildGenerationMemoryPrompt(
+                    assistant.enableMemory && !assistant.memoryRecallEnabled, memories, GenerationScene.CHAT
+                )))
  
                 if (assistant.enableRecentChatsReference) {
                     appendLine()
-                    append(buildRecentChatsPrompt(assistant, conversationRepo))
+                    append(measured("近期聊天标题", buildRecentChatsPrompt(assistant, conversationRepo)))
                 }
  
                 // 代码文件命名和ZIP打包功能说明
                 appendLine()
-                append(buildCodeBlockPrompt())
+                append(measured("代码与打包说明", buildCodeBlockPrompt()))
  
                 // 工具prompt
                 tools.forEach { tool ->
                     appendLine()
-                    append(tool.systemPrompt(model, messages))
+                    append(measured("工具附加说明", tool.systemPrompt(model, messages)))
                 }
  
                 // 插件提示词注入
@@ -267,10 +381,11 @@ class GenerationHandler(
                     pluginPromptInjections.forEach { injection ->
                         appendLine()
                         appendLine()
-                        append(injection)
+                        append(measured("插件/额外背景", injection))
                     }
                 }
  
+                val otherInstructionsStart = length
                 // 允许跳过回复
                 if (assistant.allowSkipReply) {
                     appendLine()
@@ -302,10 +417,18 @@ class GenerationHandler(
                     appendLine("Your reply will be automatically split into separate chat bubbles at every line break (\\n) you write, similar to how a person sends several short texts in a row instead of one long message. You are fully in control of this: write a line break whenever you want the previous thought/sentence to appear as its own bubble, and keep things on the same line when they belong together. Do not insert blank lines purely for spacing — every line break becomes a new bubble, so use them intentionally. Exception: line breaks inside fenced code blocks (```) and Markdown tables are preserved as-is and will NOT create new bubbles, since those must stay intact as a single block.")
                 }
  
+                if (collectCacheDiagnostics) {
+                    capturePart("界面/跳转/其他说明", substring(otherInstructionsStart))
+                }
+            }
+            if (collectProfile) {
+                systemSizes["界面/跳转/其他说明"] = (inputUtf8Bytes(system) - systemSizes.values.sum()).coerceAtLeast(0)
             }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(selectGenerationHistory(messages, assistant.contextMessageSize, GenerationScene.CHAT))
-        }.transforms(
+            val compacted = selectCompactedContext(messages, contextCompaction)
+            compacted.summary?.let { add(contextSummaryMessage(it)) }
+            addAll(selectGenerationHistory(compacted.messages, assistant.contextMessageSize, GenerationScene.CHAT))
+        }.also { captureSystem("系统初始组装后", it) }.transforms(
             transformers = transformers,
             context = context,
             model = model,
@@ -313,9 +436,64 @@ class GenerationHandler(
             settings = settings,
             processingStatus = processingStatus,
             workspaceCwd = workspaceCwd,
+            onTransformed = if (collectProfile || collectCacheDiagnostics) { transformer, before, after ->
+                if (collectProfile) {
+                    transformationSizes += InputSizeEntry(transformer.javaClass.simpleName.take(80),
+                        inputTextBytes(after) - inputTextBytes(before))
+                }
+                // Stable labels also work after Release shrinking/obfuscation.
+                val stage = when (transformer) {
+                    TimeReminderTransformer -> "时间提醒后"
+                    PromptInjectionTransformer -> "世界书/模式注入后"
+                    PlaceholderTransformer -> "占位符替换后"
+                    DocumentAsPromptTransformer -> "文档转文本后"
+                    OcrTransformer -> "图片识别后"
+                    VoiceMessageTransformer -> "语音处理后"
+                    is TemplateTransformer -> "消息模板后"
+                    is WorkspaceReminderTransformer -> "工作区说明后"
+                    else -> "其他转换后"
+                }
+                captureSystem(stage, after)
+            } else null,
         )
  
-        val params = buildGenerationRequestParameters(assistant, model, tools)
+        val interactionMessages = reactionTurn.apply(baseMessages).withSharedMusicContext(musicContext)
+        captureSystem("互动/音乐背景后", interactionMessages)
+        val internalMessages = memoryRecallService.apply(recallTurn, interactionMessages)
+        captureSystem("记忆召回后", internalMessages)
+
+        val params = buildGenerationRequestParameters(assistant, model, tools).let { parameters ->
+            if (collectCacheDiagnostics) {
+                parameters.copy(onRequestBuilt = { payload ->
+                    val summary = runCatching {
+                        cacheRequestDiagnostics.compare(
+                            scope = "${assistant.id}:$conversationId:${provider.id}:${model.id}",
+                            payload = payload,
+                            checkpoints = systemCheckpoints,
+                        ).summary()
+                    }.getOrElse { "诊断跳过：无法安全比较本次请求。" }
+                    Logging.log("缓存诊断", summary)
+                })
+            } else parameters
+        }
+        // Sizes are local diagnostics, not billable token estimates. A diagnostics failure cannot stop chat.
+        onRequestProfile(if (collectProfile) runCatching {
+            val exposedTools = if (ModelAbility.TOOL in model.abilities) params.tools else emptyList()
+            val toolSizes = toolDefinitionSizes(exposedTools)
+            RequestInputProfile(
+                messageCount = internalMessages.size,
+                textBytes = inputTextBytes(internalMessages),
+                roles = inputRoleSizes(internalMessages),
+                systemParts = systemSizes.map { InputSizeEntry(it.key, it.value) },
+                transformations = transformationSizes,
+                recallBytes = inputTextBytes(internalMessages) - inputTextBytes(baseMessages),
+                toolCount = toolSizes.size,
+                toolSchemaBytes = toolSizes.sumOf { it.bytes },
+                largestTools = toolSizes.sortedByDescending { it.bytes }.take(10),
+                customBodyKeys = params.customBody.size,
+                discovery = discoveryProfile,
+            )
+        }.getOrNull() else null)
         aiLoggingManager.addLog(
             AILogging.Generation(
                 messageCount = messages.size,
@@ -347,7 +525,9 @@ class GenerationHandler(
         val provider = model.findProvider(settings.providers)
             ?: error("Translation provider not found")
  
-        val providerHandler = providerManager.getProviderByType(provider)
+        val providerHandler = usageRecorder.wrap(
+            providerManager.getProviderByType(provider), UsageTag(UsageSource.TRANSLATION),
+        )
  
         if (!ModelRegistry.QWEN_MT.match(model.modelId)) {
             // Use regular translation with prompt

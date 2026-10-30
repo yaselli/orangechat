@@ -264,12 +264,12 @@
   <string name="chat_page_compress_additional_prompt">추가 지침(선택 사항)</string>
   <string name="chat_page_compress_additional_prompt_hint">보존하거나 집중할 내용을 지정하세요</string>
   <string name="chat_page_compress_context">기록 압축</string>
-  <string name="chat_page_compress_context_desc">대화를 요약하여 토큰을 절약하세요</string>
+  <string name="chat_page_compress_context_desc">이전 대화를 다음 요청용으로 요약하며 전체 기록은 그대로 보관합니다</string>
   <string name="chat_page_compress_context_title">대화 기록 압축</string>
-  <string name="chat_page_compress_keep_recent">최근 메시지 유지</string>
+  <string name="chat_page_compress_keep_recent">원문으로 보낼 최근 메시지 수</string>
   <string name="chat_page_compress_not_enough_messages">압축할 메시지가 부족합니다. 유지할 메시지 수를 줄이거나 더 많은 메시지를 추가하세요.</string>
   <string name="chat_page_compress_target_tokens">대상 토큰 크기</string>
-  <string name="chat_page_compress_warning">⚠️ 문맥 압축 시 현재 대화의 모든 메시지가 초기화됩니다</string>
+  <string name="chat_page_compress_warning">원본 메시지, 분기, 첨부 파일은 유지됩니다. 요약은 선택한 압축 모델을 호출합니다.</string>
   <string name="chat_page_compressing">압축 중...</string>
   <string name="chat_page_conversation_system_prompt">대화 시스템 프롬프트</string>
   <string name="chat_page_conversation_system_prompt_clear">지우기</string>
@@ -303,8 +303,9 @@
   <string name="chat_page_search_chats">채팅 검색</string>
   <string name="chat_page_today">오늘</string>
   <string name="chat_page_yesterday">어제</string>
-  <string name="chat_size_dialog_content">현재 메시지 수: %1$d. 이로 인해 앱이 강제 종료되거나 느려질 수 있으며, 대화 데이터가 손실될 수도 있습니다. 계속 대화하려면 새 대화를 만들어 주세요.</string>
-  <string name="chat_size_dialog_title">이 대화 데이터가 너무 큽니다</string>
+  <string name="chat_size_dialog_content">이 대화에는 메시지 %1$d개가 저장되어 있습니다. 컨텍스트를 압축하면 이후 요청에 포함되는 기록을 줄일 수 있습니다. 앱이 느려지면 대화를 백업하고 새 채팅에서 계속해 주세요.</string>
+  <string name="chat_size_dialog_input_usage">최근 응답의 입력 사용량: %1$s 토큰.</string>
+  <string name="chat_size_dialog_title">긴 대화: 컨텍스트 사용량을 확인해 주세요</string>
   <string name="citations_count">%1$d 출처</string>
   <string name="common_export">내보내기</string>
   <string name="common_share">공유</string>
@@ -338,7 +339,7 @@
   <string name="donate_page_donation_methods">후원 방법</string>
   <string name="donate_page_kofi_desc">글로벌 사용자용</string>
   <string name="donate_page_sponsor_list">후원자 목록</string>
-  <string name="donate_page_title">후원</string>
+  <string name="donate_page_title">프로젝트 지원</string>
   <string name="edit">편집</string>
   <string name="editing">편집 중</string>
   <string name="emoji_picker_search_placeholder">이모지 검색...</string>
@@ -799,8 +800,8 @@
   <string name="setting_page_display_setting_desc">디스플레이 설정 관리</string>
   <string name="setting_page_documentation">문서</string>
   <string name="setting_page_documentation_desc">앱 사용법 및 도움말 문서 보기</string>
-  <string name="setting_page_donate">후원</string>
-  <string name="setting_page_donate_desc">앱이 마음에 드시면 제작자의 작업을 후원해 주세요</string>
+  <string name="setting_page_donate">프로젝트 지원</string>
+  <string name="setting_page_donate_desc">프로젝트, 피드백 및 커뮤니티</string>
   <string name="setting_page_dynamic_color">동적 색상</string>
   <string name="setting_page_dynamic_color_desc">동적 색상 사용</string>
   <string name="setting_page_extensions">확장 기능</string>
@@ -829,7 +830,7 @@
   <string name="setting_page_search_title">검색 서비스</string>
   <string name="setting_page_share">공유</string>
   <string name="setting_page_share_desc">앱을 친구들과 공유하기</string>
-  <string name="setting_page_share_text">西瓜瓣 - 오픈소스 Android AI 어시스턴트\n\n웹사이트: https://github.com/sue1231513/orangechat</string>
+  <string name="setting_page_share_text">西瓜瓣 - 오픈소스 Android AI 어시스턴트\n\n프로젝트: https://github.com/yaselli/watermelon-chat</string>
   <string name="setting_page_sponsor_alert_confirm">기부하기</string>
   <string name="setting_page_sponsor_alert_desc">앱을 100번 이상 실행하셨네요! 만족스럽게 사용하고 계시다면 개발자를 후원해 주세요.</string>
   <string name="setting_page_sponsor_alert_dismiss">나중에</string>
@@ -1089,4 +1090,30 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_folder_add">새로 만들기</string>
   <string name="chat_page_delete_folder_confirm">폴더 "%1$s"를 삭제하시겠습니까? 내부의 대화는 삭제되지 않고 폴더에서만 제거됩니다.</string>
   <string name="chat_page_delete_folder_generating">이 폴더의 일부 대화가 아직 생성 중입니다. 삭제하기 전에 중지해 주세요.</string>
+  <string name="setting_provider_page_rerank_model">재순위</string>
+  <string name="chat_page_queue_paused_count">대기열 일시 중지 (%1$d)</string>
+  <string name="chat_page_queue_pending_count">전송 대기 (%1$d)</string>
+  <string name="chat_page_queue_resume">전송 재개</string>
+  <string name="chat_page_queue_image">[이미지]</string>
+  <string name="chat_page_queue_file">[파일]</string>
+  <string name="chat_page_queue_audio">[녹음]</string>
+  <string name="chat_page_queue_video">[동영상]</string>
+  <string name="chat_page_queue_editing">편집 중</string>
+  <string name="chat_page_queue_remove">철회</string>
+  <string name="chat_page_queue_edit_title">대기 중인 메시지 편집</string>
+  <string name="chart_series">계열</string>
+  <string name="chart_series_name">계열 %1$d</string>
+  <string name="chart_mode_chart">차트</string>
+  <string name="chart_mode_table">표</string>
+  <string name="translator_page_history">기록</string>
+  <string name="translator_page_clear_history">기록 지우기</string>
+  <string name="translator_page_clear_history_title">번역 기록을 지울까요?</string>
+  <string name="translator_page_clear_history_message">저장된 번역을 모두 삭제합니다. 이 작업은 되돌릴 수 없습니다.</string>
+
+    <string name="image_crop_rotate">회전</string>
+    <string name="image_crop_reset">초기화</string>
+    <string name="image_crop_free">자유</string>
+    <string name="image_crop_original">원본</string>
+    <string name="image_crop_load_failed">이미지를 불러올 수 없습니다</string>
+    <string name="image_crop_failed">이미지를 자를 수 없습니다</string>
 </resources>

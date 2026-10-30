@@ -52,7 +52,7 @@ fun ProviderConfigure(
         modifier = modifier
     ) {
         // Type
-        if (!provider.builtIn) {
+        if (!provider.builtIn && provider !is ProviderSetting.Account) {
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -79,6 +79,7 @@ fun ProviderConfigure(
 
         // Provider Configure
         when (provider) {
+            is ProviderSetting.Account -> AccountProviderConfigure(provider, onEdit)
             is ProviderSetting.OpenAI -> {
                 ProviderConfigureOpenAI(provider, onEdit)
             }
@@ -100,12 +101,14 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
     }
 
     val apiKey = when (this) {
+        is ProviderSetting.Account -> ""
         is ProviderSetting.OpenAI -> this.apiKey
         is ProviderSetting.Google -> this.apiKey
         is ProviderSetting.Claude -> this.apiKey
     }
 
     val sourceBaseUrl = when (this) {
+        is ProviderSetting.Account -> ""
         is ProviderSetting.OpenAI -> this.baseUrl
         is ProviderSetting.Google -> this.baseUrl
         is ProviderSetting.Claude -> this.baseUrl
@@ -166,6 +169,7 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
     val defaultProvider = DEFAULT_PROVIDERS.find { it.id == id }
     if (defaultProvider != null) {
         when (this) {
+            is ProviderSetting.Account -> return ""
             is ProviderSetting.OpenAI -> if (defaultProvider is ProviderSetting.OpenAI) return defaultProvider.baseUrl
             is ProviderSetting.Google -> if (defaultProvider is ProviderSetting.Google) return defaultProvider.baseUrl
             is ProviderSetting.Claude -> if (defaultProvider is ProviderSetting.Claude) return defaultProvider.baseUrl
@@ -173,6 +177,7 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
     }
 
     return when (this) {
+        is ProviderSetting.Account -> ""
         is ProviderSetting.OpenAI -> ProviderSetting.OpenAI().baseUrl
         is ProviderSetting.Google -> ProviderSetting.Google().baseUrl
         is ProviderSetting.Claude -> ProviderSetting.Claude().baseUrl
@@ -182,6 +187,7 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
 internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
     val defaultBaseUrl = defaultBaseUrlForReset()
     return when (this) {
+        is ProviderSetting.Account -> this
         is ProviderSetting.OpenAI -> this.copy(baseUrl = defaultBaseUrl)
         is ProviderSetting.Google -> this.copy(baseUrl = defaultBaseUrl)
         is ProviderSetting.Claude -> this.copy(baseUrl = defaultBaseUrl)
@@ -190,6 +196,7 @@ internal fun ProviderSetting.resetBaseUrlToDefault(): ProviderSetting {
 
 internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
     val baseUrl = when (this) {
+        is ProviderSetting.Account -> ""
         is ProviderSetting.OpenAI -> this.baseUrl
         is ProviderSetting.Google -> this.baseUrl
         is ProviderSetting.Claude -> this.baseUrl
@@ -512,9 +519,21 @@ private fun ColumnScope.ProviderConfigureGoogle(
         Checkbox(
             checked = provider.vertexAI,
             onCheckedChange = {
-                onEdit(provider.copy(vertexAI = it))
+                onEdit(provider.copy(vertexAI = it, useInteractionsApi = if (it) false else provider.useInteractionsApi))
             }
         )
+    }
+
+    if (!provider.vertexAI) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("使用 Gemini Interactions API")
+                Text("按本地会话管理历史，不启用服务端续接。关闭可使用原 GenerateContent 接口。",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            Checkbox(checked = provider.useInteractionsApi,
+                onCheckedChange = { onEdit(provider.copy(useInteractionsApi = it)) })
+        }
     }
 
     if (!(provider.vertexAI && provider.useServiceAccount)) {

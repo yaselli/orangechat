@@ -21,6 +21,7 @@ class ToolSurfacePolicyTest {
     fun `chat does not register memory a second time and keeps ordinary tool exposure`() {
         val policy = ToolSurfacePolicy.forChat(allowAppUsage = true, chatBlocked = false)
         assertFalse(policy.includeMemoryTools)
+        assertTrue(policy.allowSharedMusic)
         assertEquals(local, policy.localOptions(local))
         assertEquals(system, policy.systemOptions(system))
         assertTrue(policy.requireReadyWorkspace)
@@ -35,8 +36,9 @@ class ToolSurfacePolicyTest {
     }
 
     @Test
-    fun `blocked chat excludes only voice call and retains workflow authoring tools`() {
+    fun `blocked chat excludes voice call and shared music while retaining workflow authoring tools`() {
         val policy = ToolSurfacePolicy.forChat(allowAppUsage = true, chatBlocked = true)
+        assertFalse(policy.allowSharedMusic)
         assertEquals(listOf(LocalToolOption.TimeInfo, LocalToolOption.Workflows), policy.localOptions(local))
         assertEquals(system, policy.systemOptions(system))
         assertTrue(LocalToolOption.RequestVoiceCall in local)
@@ -70,4 +72,9 @@ class ToolSurfacePolicyTest {
         assertFalse(policy.workspaceAllowed(null, null))
         assertFalse(policy.workspaceAllowed("  ", null))
     }
+    @Test fun `blocked chat cannot expose proactive wakeup scheduling`() {
+        assertFalse(ToolSurfacePolicy.forChat(false, true).allowProactiveWakeup)
+        assertTrue(ToolSurfacePolicy.forChat(false, false).allowProactiveWakeup)
+    }
+
 }

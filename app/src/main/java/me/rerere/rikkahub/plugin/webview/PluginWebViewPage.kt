@@ -6,6 +6,10 @@
 
 package me.rerere.rikkahub.plugin.webview
 
+import me.rerere.rikkahub.data.ai.UsageRecorder
+import me.rerere.rikkahub.data.ai.UsageSource
+import me.rerere.rikkahub.data.ai.UsageTag
+
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -656,7 +660,10 @@ fun PluginWebViewPage(
                                                                     if (providerSetting == null) {
                                                                         """{"success":false,"error":"Provider not found"}"""
                                                                     } else {
-                                                                        val providerImpl = providerManager.getProviderByType(providerSetting)
+                                                                        val usageRecorder: UsageRecorder = org.koin.java.KoinJavaComponent.get(UsageRecorder::class.java)
+                                                                        val providerImpl = usageRecorder.wrap(
+                                                                            providerManager.getProviderByType(providerSetting), UsageTag(UsageSource.PLUGIN),
+                                                                        )
                                                                         val systemPrompt = "你是一个番茄钟陪伴助手。用户正在使用番茄钟专注。请用简短温暖的话回应，鼓励用户保持专注。当前上下文：$contextJson"
                                                                         val messages = listOf(
                                                                             UIMessage(role = MessageRole.SYSTEM, parts = listOf(UIMessagePart.Text(systemPrompt))),
@@ -1301,7 +1308,10 @@ private class PluginWebViewClient(
         val providerSetting = model.findProvider(settings.providers)
             ?: return """{"success":false,"error":"Provider not found for model"}"""
 
-        val providerImpl = providerManager.getProviderByType(providerSetting)
+        val usageRecorder: UsageRecorder = org.koin.java.KoinJavaComponent.get(UsageRecorder::class.java)
+        val providerImpl = usageRecorder.wrap(
+            providerManager.getProviderByType(providerSetting), UsageTag(UsageSource.PLUGIN),
+        )
 
         val systemPrompt = buildString {
             append("\u4F60\u662F\u4E00\u4E2A\u9605\u8BFB\u52A9\u624B\u3002\u8BF7\u6839\u636E\u7528\u6237\u7684\u95EE\u9898\u7ED9\u51FA\u6709\u6DF1\u5EA6\u7684\u3001\u6E29\u67D4\u7684\u56DE\u7B54\u3002")

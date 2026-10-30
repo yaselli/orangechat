@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Card
+import me.rerere.rikkahub.ui.theme.MaterialCard as Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -177,6 +177,13 @@ private fun SearchServiceOptionsEditor(
     onUpdateOptions: (SearchServiceOptions) -> Unit
 ) {
     when (options) {
+        is SearchServiceOptions.DeepSeekOptions -> {
+            FormItem(label = { Text(stringResource(R.string.search_detail_api_key)) }) {
+                OutlinedTextField(value = options.apiKey,
+                    onValueChange = { onUpdateOptions(options.copy(apiKey = it.trim())) },
+                    modifier = Modifier.fillMaxWidth())
+            }
+        }
         is SearchServiceOptions.TavilyOptions -> {
             TavilyOptions(options) { onUpdateOptions(it) }
         }

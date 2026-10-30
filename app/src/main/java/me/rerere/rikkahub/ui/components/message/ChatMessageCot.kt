@@ -8,6 +8,13 @@ package me.rerere.rikkahub.ui.components.message
 
 import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.ToolApprovalState
+import me.rerere.rikkahub.data.datastore.ChatDisplayMode
+import me.rerere.rikkahub.ui.components.charts.ChartSpec
+import me.rerere.rikkahub.utils.JsonInstant
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 /**
  * 思考步骤类型，用于分组 Reasoning 和 Tool
@@ -22,10 +29,16 @@ sealed interface ThinkingStep {
     ) : ThinkingStep
 }
 
+/** Presentation only: pending confirmations/questions must remain reachable in everyday chat. */
+internal fun List<ThinkingStep>.forChatDisplay(mode: ChatDisplayMode): List<ThinkingStep> =
+    if (mode == ChatDisplayMode.STANDARD) this
+    else filter { it is ThinkingStep.ToolStep && !it.tool.isExecuted && it.tool.isPending }
+
 /**
  * 消息部分块类型，用于保持渲染顺序
  */
 sealed interface MessagePartBlock {
+    data class ChartBlock(val spec: ChartSpec, val index: Int) : MessagePartBlock
     data class ThinkingBlock(val steps: List<ThinkingStep>) : MessagePartBlock
     data class ContentBlock(val part: UIMessagePart, val index: Int) : MessagePartBlock
 }
@@ -53,6 +66,10 @@ fun List<UIMessagePart>.groupMessageParts(): List<MessagePartBlock> {
 
             is UIMessagePart.Tool -> {
                 currentThinkingSteps.add(ThinkingStep.ToolStep(part))
+                chartSpecOf(part)?.let { spec ->
+                    flushThinkingSteps()
+                    result.add(MessagePartBlock.ChartBlock(spec, index))
+                }
             }
 
             else -> {
@@ -63,4 +80,13 @@ fun List<UIMessagePart>.groupMessageParts(): List<MessagePartBlock> {
     }
     flushThinkingSteps()
     return result
+}
+
+internal fun chartSpecOf(tool: UIMessagePart.Tool): ChartSpec? {
+    if (tool.toolName != "chart_display" || !tool.isExecuted || tool.approvalState is ToolApprovalState.Denied) return null
+    val result = runCatching {
+        JsonInstant.parseToJsonElement(tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+    }.getOrNull() as? JsonObject ?: return null
+    if ((result["success"] as? JsonPrimitive)?.booleanOrNull != true) return null
+    return ChartSpec.fromJson(tool.inputAsJson())
 }

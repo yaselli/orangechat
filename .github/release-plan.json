@@ -1,0 +1,14 @@
+{
+  "version": "2.3.6",
+  "versionCode": 171,
+  "testedCommit": "fba4a4978273c96b551b989bd1ea1ae889e1a9eb",
+  "channels": [
+    "release",
+    "debug"
+  ],
+  "notes": "docs/releases/2.3.6.md",
+  "verifiedRuns": {
+    "release": 0,
+    "debug": 0
+  }
+}

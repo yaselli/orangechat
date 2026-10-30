@@ -26,9 +26,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import me.rerere.rikkahub.ui.theme.MaterialCard as Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import me.rerere.rikkahub.ui.theme.MaterialDropdownMenu as DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -281,7 +281,13 @@ private fun WorkspaceBasicPage(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            RootfsCard(
+            if (state.workspace?.isSsh() == true) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("远程 SSH 工作区", style = MaterialTheme.typography.titleMedium)
+                    Text(state.workspace.workspaceDir(), style = MaterialTheme.typography.bodySmall)
+                    Text("无需安装本地 Linux 环境。连接设置可在工作区列表的菜单中编辑。")
+                }
+            } else RootfsCard(
                 status = state.shellStatus,
                 installing = state.installing,
                 progressStageText = installProgressText(state),

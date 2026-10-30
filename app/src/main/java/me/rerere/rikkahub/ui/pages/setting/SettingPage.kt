@@ -8,10 +8,7 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.widget.Toast
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,18 +18,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import me.rerere.rikkahub.ui.theme.MaterialCard as Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.ListItem
+import me.rerere.rikkahub.ui.theme.MaterialListItem as ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -40,13 +34,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -54,14 +47,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.Alert01
-import me.rerere.hugeicons.stroke.CloudServer
 import me.rerere.hugeicons.stroke.Book01
-import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Clapping01
 import me.rerere.hugeicons.stroke.Database02
-import me.rerere.hugeicons.stroke.Developer
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
 import me.rerere.hugeicons.stroke.InLove
@@ -78,28 +68,26 @@ import me.rerere.hugeicons.stroke.Share04
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.hugeicons.stroke.Time02
 import me.rerere.hugeicons.stroke.WavingHand01
-import me.rerere.hugeicons.stroke.MessageMultiple01
-import me.rerere.hugeicons.stroke.Message01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.ProjectCommunityDialog
 import me.rerere.rikkahub.ui.components.ui.Select
-import me.rerere.rikkahub.ui.components.ui.icons.DiscordIcon
 import me.rerere.rikkahub.ui.components.ui.icons.TencentQQIcon
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
 import me.rerere.rikkahub.ui.theme.ColorMode
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.utils.joinQQGroup
+import me.rerere.rikkahub.utils.ProjectLinks
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-import java.io.File
 
 @Composable
 fun SettingPage(vm: SettingVM = koinViewModel()) {
@@ -107,51 +95,14 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val filesManager: FilesManager = koinInject()
-    val settingsBackground = settings.displaySetting.settingsBackgroundPath
-        .takeIf { it.isNotBlank() && File(it).exists() }
-    val settingsUiAlpha = settings.displaySetting.settingsUiAlpha.coerceIn(0.25f, 1f)
-    val settingsCardColors = ListItemDefaults.colors(
-        containerColor = MaterialTheme.colorScheme.surfaceBright.copy(alpha = settingsUiAlpha)
+
+    var showCommunity by remember { mutableStateOf(false) }
+    var showSharedMusic by remember { mutableStateOf(false) }
+    if (showSharedMusic) me.rerere.rikkahub.ui.components.music.SharedMusicSheet(
+        assistantId = settings.getCurrentAssistant().id.toString(),
+        onDismiss = { showSharedMusic = false },
     )
-
-    if (settings.launchCount > 100 && (settings.launchCount - settings.sponsorAlertDismissedAt) >= 50) {
-        AlertDialog(
-            onDismissRequest = {
-                vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
-            },
-            icon = { Icon(HugeIcons.WavingHand01, null) },
-            title = { Text(stringResource(R.string.setting_page_sponsor_alert_title)) },
-            text = { Text(stringResource(R.string.setting_page_sponsor_alert_desc)) },
-            confirmButton = {
-                Button(onClick = {
-                    vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
-                    navController.navigate(Screen.SettingDonate)
-                }) {
-                    Text(stringResource(R.string.setting_page_sponsor_alert_confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    vm.updateSettings(settings.copy(sponsorAlertDismissedAt = settings.launchCount))
-                }) {
-                    Text(stringResource(R.string.setting_page_sponsor_alert_dismiss))
-                }
-            },
-        )
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        settingsBackground?.let { path ->
-            val bitmap = remember(path) { BitmapFactory.decodeFile(path) }
-            bitmap?.let {
-                Image(
-                    bitmap = it.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            }
-        }
+    if (showCommunity) ProjectCommunityDialog(onDismiss = { showCommunity = false })
 
     Scaffold(
         topBar = {
@@ -165,17 +116,11 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 scrollBehavior = scrollBehavior,
                 actions = {
                 },
-                colors = if (settingsBackground != null) {
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = settingsUiAlpha),
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = settingsUiAlpha),
-                    )
-                } else CustomColors.topBarColors
+                colors = CustomColors.topBarColors
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = if (settingsBackground != null) Color.Transparent
-        else CustomColors.topBarColors.containerColor
+        containerColor = CustomColors.topBarColors.containerColor
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -194,11 +139,11 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     ColorMode.SYSTEM -> stringResource(R.string.setting_page_color_mode_system)
                     ColorMode.LIGHT -> stringResource(R.string.setting_page_color_mode_light)
                     ColorMode.DARK -> stringResource(R.string.setting_page_color_mode_dark)
+                    ColorMode.SOFT_DARK -> "柔和暗色"
                 }
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_general_settings)) },
-                    colors = settingsCardColors,
                 ) {
                     item(
                         leadingContent = { Icon(HugeIcons.Sun01, null) },
@@ -219,6 +164,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                                         ColorMode.SYSTEM -> stringResource(R.string.setting_page_color_mode_system)
                                         ColorMode.LIGHT -> stringResource(R.string.setting_page_color_mode_light)
                                         ColorMode.DARK -> stringResource(R.string.setting_page_color_mode_dark)
+                                        ColorMode.SOFT_DARK -> "柔和暗色"
                                     }
                                 },
                                 modifier = Modifier.width(150.dp)
@@ -238,6 +184,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Package, null) },
                         supportingContent = { Text("管理本地插件，导入ZIP插件包") },
                         headlineContent = { Text("插件管理") },
+                    )
+                    item(
+                        onClick = { showSharedMusic = true },
+                        leadingContent = { Text("♫") },
+                        supportingContent = { Text("登录自己的网易云，与 AI 一起听歌") },
+                        headlineContent = { Text("一起听歌") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingSecurity) },
@@ -264,7 +216,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_model_and_services)) },
-                    colors = settingsCardColors,
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.SettingModels) },
@@ -277,6 +228,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Brain02, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_providers_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_providers)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingMedia) },
+                        leadingContent = { Icon(HugeIcons.ImageUpload, null) },
+                        supportingContent = { Text("图片、视频生成与素材上传配置") },
+                        headlineContent = { Text("媒体提供商") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingSearch) },
@@ -321,18 +278,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text("额外注入") },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.SettingWeixinBot) },
-                        leadingContent = { Icon(HugeIcons.MessageMultiple01, null) },
-                        supportingContent = { Text("把微信号变成 AI 入口，扫码登录后用微信收发消息") },
-                        headlineContent = { Text("微信 Bot") },
-                    )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingQqBot) },
-                        leadingContent = { Icon(HugeIcons.Message01, null) },
-                        supportingContent = { Text("填 AppID/Secret，用 QQ 私聊跟 AI 对话") },
-                        headlineContent = { Text("QQ Bot") },
-                    )
-                    item(
                         onClick = { navController.navigate(Screen.Workflows) },
                         leadingContent = { Icon(HugeIcons.SmartPhone01, null) },
                         supportingContent = { Text("Tasker 风格自动化：触发器 + 条件 -> 执行动作，由 AI 编写") },
@@ -354,7 +299,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_data_settings)) },
-                    colors = settingsCardColors,
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.Backup) },
@@ -391,7 +335,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_about)) },
-                    colors = settingsCardColors,
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.SettingAbout) },
@@ -404,23 +347,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                             ) {
                                 IconButton(
                                     onClick = {
-                                        context.joinQQGroup("Qsm0whzbPsm1UyNpR683ulLyMZ2Pqrw0")
+                                        showCommunity = true
                                     }
                                 ) {
                                     Icon(
                                         imageVector = TencentQQIcon,
-                                        contentDescription = "QQ",
-                                        tint = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        context.openUrl("https://discord.gg/9weBqxe5c4")
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = DiscordIcon,
-                                        contentDescription = "Discord",
+                                        contentDescription = "西瓜瓣 QQ 群 ${ProjectLinks.QQ_GROUP}",
                                         tint = MaterialTheme.colorScheme.secondary
                                     )
                                 }
@@ -429,7 +361,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_about)) },
                     )
                     item(
-                        onClick = { context.openUrl("https://github.com/sue1231513/orangechat") },
+                        onClick = { context.openUrl(ProjectLinks.DOCUMENTATION) },
                         leadingContent = { Icon(HugeIcons.Book01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_documentation_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_documentation)) },
@@ -470,7 +402,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
         }
-    }
     }
 }
 

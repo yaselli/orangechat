@@ -18,6 +18,9 @@ import me.rerere.rikkahub.data.repository.LightConversationEntity
 
 @Dao
 interface ConversationDAO {
+    @Query("UPDATE ConversationEntity SET conversation_config = :config WHERE id = :id")
+    suspend fun updateConfig(id: String, config: String): Int
+
     @Query("SELECT * FROM conversationentity ORDER BY is_pinned DESC, update_at DESC")
     fun getAll(): Flow<List<ConversationEntity>>
 
@@ -95,6 +98,9 @@ interface ConversationDAO {
 
     @Query("UPDATE conversationentity SET suggestions = :suggestions WHERE id = :id")
     suspend fun updateSuggestions(id: String, suggestions: String): Int
+
+    @Query("UPDATE conversationentity SET context_compaction = :value WHERE id = :id")
+    suspend fun updateCompaction(id: String, value: String): Int
 
     @Query("UPDATE conversationentity SET folder_id = :folderId WHERE id = :id")
     suspend fun updateFolderId(id: String, folderId: String)

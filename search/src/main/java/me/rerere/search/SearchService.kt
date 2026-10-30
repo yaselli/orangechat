@@ -51,6 +51,7 @@ interface SearchService<T : SearchServiceOptions> {
         @Suppress("UNCHECKED_CAST")
         fun <T : SearchServiceOptions> getService(options: T): SearchService<T> {
             return when (options) {
+                is SearchServiceOptions.DeepSeekOptions -> DeepSeekSearchService
                 is SearchServiceOptions.TavilyOptions -> TavilySearchService
                 is SearchServiceOptions.ExaOptions -> ExaSearchService
                 is SearchServiceOptions.ZhipuOptions -> ZhipuSearchService
@@ -147,6 +148,7 @@ sealed class SearchServiceOptions {
             BingLocalOptions::class to "Bing",
             RikkaHubOptions::class to "RikkaHub",
             ZhipuOptions::class to "智谱",
+            DeepSeekOptions::class to "DeepSeek",
             TavilyOptions::class to "Tavily",
             ExaOptions::class to "Exa",
             SearXNGOptions::class to "SearXNG",
@@ -163,6 +165,13 @@ sealed class SearchServiceOptions {
             CustomJsOptions::class to "Custom JS",
         )
     }
+
+    @Serializable
+    @SerialName("deepseek")
+    data class DeepSeekOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
+    ) : SearchServiceOptions()
 
     @Serializable
     @SerialName("bing_local")

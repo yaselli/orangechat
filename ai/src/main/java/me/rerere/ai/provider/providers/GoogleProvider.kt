@@ -83,6 +83,7 @@ private const val TAG = "GoogleProvider"
 
 class GoogleProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Google> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
+    private val interactions by lazy { me.rerere.ai.provider.providers.google.InteractionsAPI(client, keyRoulette) }
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
     }
@@ -167,6 +168,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): MessageChunk = withContext(Dispatchers.IO) {
+        if (providerSetting.useInteractionsApi) return@withContext interactions.generateText(providerSetting, messages, params)
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -222,7 +224,9 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         providerSetting: ProviderSetting.Google,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<MessageChunk> = if (providerSetting.useInteractionsApi) {
+        interactions.streamText(providerSetting, messages, params)
+    } else callbackFlow {
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(

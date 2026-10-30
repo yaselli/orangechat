@@ -96,6 +96,38 @@ private fun AssistantLocalToolContent(
     ) {
         CardGroup {
             item(
+                headlineContent = { Text("工具按需加载（实验）") },
+                supportingContent = {
+                    Text("默认关闭。开启后常用工具完整常驻，其余显示简短目录，用到时加载。本轮加载后保持可用；关闭即可恢复全量。首次加载会增加模型请求。自定义请求体若覆盖工具或消息，则保留原配置、使用全量模式。")
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.toolDiscoveryEnabled,
+                        onCheckedChange = { onUpdate(assistant.copy(toolDiscoveryEnabled = it)) },
+                    )
+                },
+            )
+            if (assistant.toolDiscoveryEnabled) {
+                item(
+                    headlineContent = { Text("常驻范围") },
+                    supportingContent = {
+                        Text("内置记忆、拍一拍、贴表情、一起听、联网与网页、时间与提醒、朗读/提问/剪贴板、表情包和天气。仅保留原本已启用的工具；外置记忆库等整组常驻可在角色的 MCP 页面选择。")
+                    },
+                )
+            }
+        }
+        CardGroup {
+            item(
+                headlineContent = { Text("图表展示") },
+                supportingContent = { Text("允许 AI 在聊天中展示折线图、柱状图、散点图和数据表格") },
+                trailingContent = {
+                    Switch(
+                        checked = LocalToolOption.ChartDisplay in assistant.localTools,
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.ChartDisplay, it) },
+                    )
+                },
+            )
+            item(
                 headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_javascript_engine_title))
                 },

@@ -134,6 +134,17 @@ class AssistantDetailVM(
         }
     }
 
+    /** Apply a single interaction field against the latest saved assistant, not an older UI snapshot. */
+    fun updateChatInteraction(edit: (Assistant) -> Assistant) {
+        viewModelScope.launch {
+            settingsStore.update { current ->
+                current.copy(assistants = current.assistants.map { assistant ->
+                    if (assistant.id == assistantId) edit(assistant) else assistant
+                })
+            }
+        }
+    }
+
     fun addMemory(memory: AssistantMemory) {
         viewModelScope.launch {
             val memoryAssistantId = if (assistant.value.useGlobalMemory) {

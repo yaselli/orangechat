@@ -26,7 +26,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
+import me.rerere.rikkahub.data.backup.AutoBackupStore
+import me.rerere.rikkahub.data.backup.AutoBackupScheduler
 import me.rerere.common.android.appTempFolder
 import com.whl.quickjs.android.QuickJSLoader
 import me.rerere.rikkahub.di.appModule
@@ -35,6 +39,7 @@ import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.plugin.di.pluginModule
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.datastore.recoverWakeupsBefore
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.service.DailySummaryService
 import me.rerere.rikkahub.data.service.ProactiveMessageService
@@ -50,6 +55,7 @@ import org.koin.core.context.startKoin
 
 private const val TAG = "RikkaHubApp"
 
+const val MEDIA_CREATION_NOTIFICATION_CHANNEL_ID = "media_creation"
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
@@ -74,6 +80,12 @@ class RikkaHubApp : Application() {
             modules(appModule, viewModelModule, dataSourceModule, repositoryModule, pluginModule)
         }
         this.createNotificationChannel()
+        // Resume polling only after preferences are decoded, without re-submitting interrupted requests.
+        get<me.rerere.rikkahub.AppScope>().launch {
+            get<SettingsStore>().settingsFlowRaw.first()
+            get<me.rerere.rikkahub.data.music.MusicCommentaryCoordinator>().start()
+            get<me.rerere.rikkahub.service.MediaCreationService>().resumePending()
+        }
 
         // 预热 ChatService 单例: 强制在主线程(Application.onCreate 由 Android 保证
         // 在主线程执行, 且先于同一进程内任何 Service/BroadcastReceiver/Activity 回调)
@@ -123,6 +135,16 @@ class RikkaHubApp : Application() {
         // Reschedule daily_cron alarm if plugins need it
         rescheduleDailyCronIfEnabled()
 
+        get<AppScope>().launch {
+            val backupStore = get<AutoBackupStore>()
+            var initial = true
+            backupStore.states.map { it.config }.distinctUntilChanged().collect { config ->
+                runCatching { get<AutoBackupScheduler>().schedule(config, changed = !initial) }
+                    .onFailure { Log.e(TAG, "Unable to schedule local backup", it) }
+                initial = false
+            }
+        }
+
         // Increment launch count
         incrementLaunchCount()
 
@@ -161,16 +183,34 @@ class RikkaHubApp : Application() {
     }
 
     private fun rescheduleProactiveMessageIfEnabled() {
+        val recoveryCutoff = System.currentTimeMillis()
         get<AppScope>().launch {
             runCatching {
-                val settings = get<SettingsStore>().settingsFlowRaw.first()
+                val store = get<SettingsStore>()
+                if (
+                    store.settingsFlowRaw.first().proactiveMessageSetting.aiWakeups.any {
+                        it.status == me.rerere.rikkahub.data.datastore.ProactiveWakeupStatus.Running &&
+                            (it.startedAtMillis ?: 0L) < recoveryCutoff
+                    }
+                )
+                    store.update { current ->
+                        current.copy(
+                            proactiveMessageSetting =
+                                current.proactiveMessageSetting.recoverWakeupsBefore(recoveryCutoff)
+                        )
+                    }
+                val settings = store.settingsFlowRaw.first()
                 if (settings.proactiveMessageSetting.enabled) {
-                    ProactiveMessageService.scheduleNext(this@RikkaHubApp, settings.proactiveMessageSetting)
+                    ProactiveMessageService.scheduleNext(
+                        this@RikkaHubApp,
+                        settings.proactiveMessageSetting,
+                    )
                     Log.i(TAG, "Rescheduled proactive message alarm on app start")
                 }
-            }.onFailure {
-                Log.e(TAG, "rescheduleProactiveMessageIfEnabled failed", it)
             }
+                .onFailure {
+                    Log.e(TAG, "rescheduleProactiveMessageIfEnabled failed", it)
+                }
         }
     }
 
@@ -245,6 +285,9 @@ class RikkaHubApp : Application() {
 
     private fun createNotificationChannel() {
         val notificationManager = NotificationManagerCompat.from(this)
+        notificationManager.createNotificationChannel(NotificationChannelCompat
+            .Builder(MEDIA_CREATION_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+            .setName("图片与视频创作").build())
         val chatCompletedChannel = NotificationChannelCompat
             .Builder(
                 CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID,

@@ -13,4 +13,6 @@ object ServiceNotificationIds {
     const val QQ_ERROR = 20_021
     const val KEEP_ALIVE = 30_001
     const val VOICE_CALL = 40_001
+    const val APP_UPDATE = 50_001
+    const val APP_UPDATE_RESULT = 50_002
 }

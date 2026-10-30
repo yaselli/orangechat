@@ -30,7 +30,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Card
+import me.rerere.rikkahub.ui.theme.MaterialCard as Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -62,6 +62,7 @@ import java.util.Locale
 @Composable
 fun StatsPage(vm: StatsVM = koinViewModel()) {
     val stats by vm.stats.collectAsStateWithLifecycle()
+    val usage by vm.usage.collectAsStateWithLifecycle()
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -93,10 +94,22 @@ fun StatsPage(vm: StatsVM = koinViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 item {
+                    RequestUsageCard(
+                        stats = usage,
+                        onRangeChange = vm::selectRange,
+                        onRetry = vm::refreshUsage,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                }
+                item {
                     HeatmapCard(
                         conversationsPerDay = stats.conversationsPerDay,
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
+                }
+                item {
+                    Text("聊天记录概览（含历史消息）", modifier = Modifier.padding(horizontal = 16.dp),
+                        style = MaterialTheme.typography.titleMedium)
                 }
                 item {
                     StatsGrid(
@@ -374,7 +387,7 @@ private fun formatCount(count: Long): String = when {
     else -> count.toString()
 }
 
-private fun formatTokens(count: Long): String = when {
+internal fun formatTokens(count: Long): String = when {
     count >= 1_000_000_000 -> "%.2fB".format(count / 1_000_000_000.0)
     count >= 1_000_000 -> "%.2fM".format(count / 1_000_000.0)
     count >= 1_000 -> "%.1fK".format(count / 1_000.0)
