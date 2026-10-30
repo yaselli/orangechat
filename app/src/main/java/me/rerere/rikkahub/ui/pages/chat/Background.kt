@@ -15,8 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.layout.ContentScale
-import coil3.compose.AsyncImage
+import me.rerere.rikkahub.ui.theme.WallpaperImage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ui.toComposeColor
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -35,10 +34,8 @@ fun AssistantBackground(setting: Settings) {
             val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
             // Preserve the wallpaper's colors. Material tints belong to surfaces,
             // not to an automatic full-screen veil over the user's image.
-            AsyncImage(
+            WallpaperImage(
                 model = assistant.background,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
                     .alpha(backgroundOpacity)

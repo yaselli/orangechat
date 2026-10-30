@@ -766,7 +766,6 @@ internal fun BubbleSurface(
     if (materialStyle != UiMaterialStyle.ORIGINAL) {
         Box(
             modifier = Modifier
-                .animateContentSize()
                 .shadow(
                     elevation =
                             LocalThemeMaterial.current
@@ -777,15 +776,20 @@ internal fun BubbleSurface(
                     ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                     spotColor = Color.Black.copy(alpha = 0.10f),
                 )
-                .themeMaterial(
-                    shape = bubbleShape,
-                    tint = color,
-                    role = MaterialRole.BUBBLE,
-                    opacity = bubbleAlpha,
-                    drawFill = !hasImage,
-                )
+                .clip(bubbleShape)
                 .then(clickModifier)
         ) {
+            // Only the background needs a sampled/offscreen layer. Streamed text stays
+            // on the normal canvas, and layout follows each update without restarting
+            // a size tween (and resizing two nested render targets) every 50 ms.
+            val materialBackground = Modifier.matchParentSize().themeMaterial(
+                shape = bubbleShape,
+                tint = color,
+                role = MaterialRole.BUBBLE,
+                opacity = bubbleAlpha,
+                drawFill = !hasImage,
+            )
+            if (!hasImage) Box(materialBackground)
             if (hasImage) {
                 AsyncImage(
                     model = imagePath,
@@ -799,6 +803,7 @@ internal fun BubbleSurface(
                             .background(color.copy(alpha = bubbleAlpha))
                     )
                 }
+                Box(materialBackground)
             }
             Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)) {
                 content()
