@@ -25,7 +25,6 @@ import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -45,33 +44,33 @@ private fun materialEnabled(color: Color): Boolean {
         return false
     val scheme = MaterialTheme.colorScheme
     // Brand swatches, error/status colors and other meaningful fills retain their exact colors.
-    val neutralColors =
-        remember(scheme) {
-            listOf(
-                    scheme.background,
-                    scheme.surface,
-                    scheme.surfaceDim,
-                    scheme.surfaceBright,
-                    scheme.surfaceContainerLowest,
-                    scheme.surfaceContainerLow,
-                    scheme.surfaceContainer,
-                    scheme.surfaceContainerHigh,
-                    scheme.surfaceContainerHighest,
-                    scheme.surfaceVariant,
-                )
-                .map { it.copy(alpha = 1f).value }
-                .toSet()
-        }
-    return color.copy(alpha = 1f).value in neutralColors
+    val opaque = color.copy(alpha = 1f)
+    // ColorScheme updates observable fields in place. Compare current values rather
+    // than caching by its stable object, so live palette/mode changes keep working.
+    return opaque == scheme.background.copy(alpha = 1f) ||
+        opaque == scheme.surface.copy(alpha = 1f) ||
+        opaque == scheme.surfaceDim.copy(alpha = 1f) ||
+        opaque == scheme.surfaceBright.copy(alpha = 1f) ||
+        opaque == scheme.surfaceContainerLowest.copy(alpha = 1f) ||
+        opaque == scheme.surfaceContainerLow.copy(alpha = 1f) ||
+        opaque == scheme.surfaceContainer.copy(alpha = 1f) ||
+        opaque == scheme.surfaceContainerHigh.copy(alpha = 1f) ||
+        opaque == scheme.surfaceContainerHighest.copy(alpha = 1f) ||
+        opaque == scheme.surfaceVariant.copy(alpha = 1f)
 }
 
 @Composable
 private fun CardColors.forPlainSettings(): CardColors {
-    if (LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL || !LocalSettingsWallpaperActive.current) return this
+    if (
+        LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL ||
+            !LocalSettingsWallpaperActive.current
+    )
+        return this
     val opacity = LocalMaterialSurfaceOpacity.current
     return copy(
         containerColor = containerColor.copy(alpha = minOf(containerColor.alpha, opacity)),
-        disabledContainerColor = disabledContainerColor.copy(alpha = minOf(disabledContainerColor.alpha, opacity)),
+        disabledContainerColor =
+            disabledContainerColor.copy(alpha = minOf(disabledContainerColor.alpha, opacity)),
     )
 }
 

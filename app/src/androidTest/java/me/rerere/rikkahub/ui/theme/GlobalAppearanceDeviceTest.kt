@@ -68,6 +68,7 @@ class GlobalAppearanceDeviceTest {
         var soft by mutableStateOf(false)
         var path by mutableStateOf(file.absolutePath)
         var style by mutableStateOf(UiMaterialStyle.FOG_GLASS)
+        var container by mutableStateOf(Color(0xFFF0F5FA))
         val stack = mutableStateListOf<NavKey>(Screen.Setting)
         try {
             compose.setContent {
@@ -75,7 +76,8 @@ class GlobalAppearanceDeviceTest {
                 val display =
                     DisplaySetting(settingsBackgroundPath = path, themeMaterial = material)
                 val scheme =
-                    if (soft) darkColorScheme().withSoftDarkAppearance() else lightColorScheme()
+                    if (soft) darkColorScheme().withSoftDarkAppearance()
+                    else lightColorScheme(surfaceContainerLow = container)
                 MaterialTheme(colorScheme = scheme.withThemeMaterial(material, soft)) {
                     CompositionLocalProvider(
                         LocalThemeMaterial provides material,
@@ -110,6 +112,16 @@ class GlobalAppearanceDeviceTest {
             assertTrue(
                 "Global cards did not use the selected material",
                 abs(fog.red - matte.red) > 0.04f,
+            )
+            compose.runOnIdle {
+                container = Color(0xFFE6EEF8)
+                style = UiMaterialStyle.FOG_GLASS
+            }
+            compose.mainClock.advanceTimeBy(250)
+            val recolored = compose.onNodeWithTag("global-card").captureToImage().toPixelMap()
+            assertTrue(
+                "Palette change made the global card opaque",
+                recolored[recolored.width * 3 / 4, recolored.height * 3 / 4].red < 0.75f,
             )
             for (dark in listOf(false, true)) {
                 compose.runOnIdle { soft = dark }
