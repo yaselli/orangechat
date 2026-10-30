@@ -145,8 +145,9 @@ class CacheRequestDiagnosticsTest {
     @Test
     fun `arbitrary role values never appear in diagnostic output and scratch buffers are erased`() {
         val tracker = CacheRequestDiagnostics()
-        tracker.compare("chat", payload())
-        val result = tracker.compare("chat", payload(messages = listOf(message("private-role-secret", "private-body"))))
+        val scope = "private-conversation-scope-12345"
+        tracker.compare(scope, payload())
+        val result = tracker.compare(scope, payload(messages = listOf(message("private-role-secret", "private-body"))))
         assertEquals("OTHER", result.firstChangedRole)
         assertFalse(result.summary().contains("private"))
         val buffer = CacheRequestDiagnostics::class.java.getDeclaredField("hashBuffer").apply { isAccessible = true }
@@ -155,7 +156,7 @@ class CacheRequestDiagnosticsTest {
         val saved = previous.get(tracker).toString()
         assertFalse(saved.contains("private-role-secret"))
         assertFalse(saved.contains("private-body"))
-        assertFalse(saved.contains("chat"))
+        assertFalse(saved.contains(scope))
     }
 
     @Test
@@ -166,5 +167,89 @@ class CacheRequestDiagnosticsTest {
         assertEquals(1L, tracker.compare("chat", payload()).baselineNumber ?: -1L)
         val buffer = CacheRequestDiagnostics::class.java.getDeclaredField("hashBuffer").apply { isAccessible = true }
         assertTrue((buffer.get(tracker) as ByteArray).all { it == 0.toByte() })
+    }
+
+    @Test
+    fun `equal size recent title reorder is attributed to that source without retaining titles`() {
+        val tracker = CacheRequestDiagnostics()
+        fun checkpoints(titles: String) = listOf(
+            tracker.checkpoint("角色/会话设定", JsonPrimitive("private-persona")),
+            tracker.checkpoint("近期聊天标题", JsonPrimitive(titles)),
+            tracker.checkpoint("系统初始组装后", JsonPrimitive("private-persona" + titles), stage = true),
+        )
+        val oldTitles = "private-title-a,private-title-b"
+        val newTitles = "private-title-b,private-title-a"
+        tracker.compare("chat", payload(messages = listOf(message("system", oldTitles))), checkpoints(oldTitles))
+        val result = tracker.compare(
+            "chat", payload(messages = listOf(message("system", newTitles))), checkpoints(newTitles),
+        )
+        assertTrue(result.systemChanged)
+        assertEquals(listOf("近期聊天标题"), result.changedSystemSources)
+        assertEquals("系统初始组装后", result.firstChangedSystemStage)
+        assertFalse(result.systemCheckpointsIncomplete)
+        assertFalse(result.summary().contains("private-"))
+    }
+
+    @Test
+    fun `zero byte size difference from injection is located before later propagated differences`() {
+        val tracker = CacheRequestDiagnostics()
+        fun checkpoints(text: String) = listOf(
+            tracker.checkpoint("系统初始组装后", JsonPrimitive("fixed"), stage = true),
+            tracker.checkpoint("时间提醒后", JsonPrimitive("fixed"), stage = true),
+            tracker.checkpoint("世界书/模式注入后", JsonPrimitive(text), stage = true),
+            tracker.checkpoint("消息模板后", JsonPrimitive(text), stage = true),
+        )
+        tracker.compare("chat", payload(messages = listOf(message("system", "fixed-a"))), checkpoints("fixed-a"))
+        val result = tracker.compare(
+            "chat", payload(messages = listOf(message("system", "fixed-b"))), checkpoints("fixed-b"),
+        )
+        assertTrue(result.changedSystemSources.isEmpty())
+        assertEquals("世界书/模式注入后", result.firstChangedSystemStage)
+    }
+
+    @Test
+    fun `duplicate source fragments retain ordering and arbitrary labels never reach logs`() {
+        val tracker = CacheRequestDiagnostics()
+        val before = listOf(
+            tracker.checkpoint("工具附加说明", JsonPrimitive("first")),
+            tracker.checkpoint("工具附加说明", JsonPrimitive("second")),
+            tracker.checkpoint("private-source-label", JsonPrimitive("private-body-a")),
+        )
+        val after = listOf(
+            tracker.checkpoint("工具附加说明", JsonPrimitive("second")),
+            tracker.checkpoint("工具附加说明", JsonPrimitive("first")),
+            tracker.checkpoint("private-source-label", JsonPrimitive("private-body-b")),
+        )
+        tracker.compare("chat", payload(), before)
+        val result = tracker.compare("chat", payload(messages = listOf(message("system", "other"))), after)
+        assertEquals(listOf("工具附加说明", "其他来源"), result.changedSystemSources)
+        assertFalse(result.summary().contains("private-"))
+    }
+
+    @Test
+    fun `oversized source checksums are marked incomplete rather than named as a changed source`() {
+        val tracker = CacheRequestDiagnostics(maxCharacters = 2000)
+        val before = tracker.checkpoint("角色/会话设定", JsonPrimitive("a".repeat(3000)))
+        val after = tracker.checkpoint("角色/会话设定", JsonPrimitive("b".repeat(3000)))
+        tracker.compare("chat", payload(), listOf(before))
+        val result = tracker.compare(
+            "chat", payload(messages = listOf(message("system", "other"))), listOf(after),
+        )
+        assertTrue(result.systemCheckpointsIncomplete)
+        assertTrue(result.changedSystemSources.isEmpty())
+        assertNull(result.firstChangedSystemStage)
+        assertTrue(result.summary().contains("分段诊断不完整"))
+    }
+
+    @Test
+    fun `final payload differences are not falsely attributed to unchanged assembly checkpoints`() {
+        val tracker = CacheRequestDiagnostics()
+        val stages = listOf(tracker.checkpoint("系统初始组装后", JsonPrimitive("fixed"), stage = true))
+        tracker.compare("chat", payload(), stages)
+        val result = tracker.compare("chat", payload(messages = listOf(message("system", "other"))), stages)
+        assertTrue(result.systemChanged)
+        assertTrue(result.changedSystemSources.isEmpty())
+        assertNull(result.firstChangedSystemStage)
+        assertFalse(result.systemCheckpointsIncomplete)
     }
 }

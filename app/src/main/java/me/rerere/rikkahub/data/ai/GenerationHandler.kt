@@ -25,6 +25,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -311,10 +312,31 @@ class GenerationHandler(
         conversationId: String? = null,
     ) {
         val collectProfile = BuildConfig.DEBUG && settings.displaySetting.showTokenUsage
+        val collectCacheDiagnostics = collectProfile && conversationId != null &&
+            provider is ProviderSetting.OpenAI && !provider.useResponseApi
         val systemSizes = linkedMapOf<String, Long>()
         val transformationSizes = mutableListOf<InputSizeEntry>()
+        val systemCheckpoints = mutableListOf<CacheSystemCheckpoint>()
+        fun captureSystem(label: String, rows: List<UIMessage>) {
+            if (!collectCacheDiagnostics) return
+            runCatching {
+                val system = JsonArray(rows.filter { it.role == MessageRole.SYSTEM }.map { message ->
+                    JsonArray(message.parts.filterIsInstance<UIMessagePart.Text>().map { JsonPrimitive(it.text) })
+                })
+                systemCheckpoints += cacheRequestDiagnostics.checkpoint(label, system, stage = true)
+            }
+        }
+        fun capturePart(label: String, text: String) {
+            if (!collectCacheDiagnostics || text.isEmpty()) return
+            runCatching {
+                systemCheckpoints += cacheRequestDiagnostics.checkpoint(label, JsonPrimitive(text))
+            }
+        }
         fun measured(label: String, text: String): String {
-            if (collectProfile) systemSizes[label] = (systemSizes[label] ?: 0L) + inputUtf8Bytes(text)
+            if (collectProfile) {
+                systemSizes[label] = (systemSizes[label] ?: 0L) + inputUtf8Bytes(text)
+            }
+            capturePart(label, text)
             return text
         }
         val baseMessages = buildList {
@@ -355,6 +377,7 @@ class GenerationHandler(
                     }
                 }
  
+                val otherInstructionsStart = length
                 // 允许跳过回复
                 if (assistant.allowSkipReply) {
                     appendLine()
@@ -386,6 +409,9 @@ class GenerationHandler(
                     appendLine("Your reply will be automatically split into separate chat bubbles at every line break (\\n) you write, similar to how a person sends several short texts in a row instead of one long message. You are fully in control of this: write a line break whenever you want the previous thought/sentence to appear as its own bubble, and keep things on the same line when they belong together. Do not insert blank lines purely for spacing — every line break becomes a new bubble, so use them intentionally. Exception: line breaks inside fenced code blocks (```) and Markdown tables are preserved as-is and will NOT create new bubbles, since those must stay intact as a single block.")
                 }
  
+                if (collectCacheDiagnostics) {
+                    capturePart("界面/跳转/其他说明", substring(otherInstructionsStart))
+                }
             }
             if (collectProfile) {
                 systemSizes["界面/跳转/其他说明"] = (inputUtf8Bytes(system) - systemSizes.values.sum()).coerceAtLeast(0)
@@ -394,7 +420,7 @@ class GenerationHandler(
             val compacted = selectCompactedContext(messages, contextCompaction)
             compacted.summary?.let { add(contextSummaryMessage(it)) }
             addAll(selectGenerationHistory(compacted.messages, assistant.contextMessageSize, GenerationScene.CHAT))
-        }.transforms(
+        }.also { captureSystem("系统初始组装后", it) }.transforms(
             transformers = transformers,
             context = context,
             model = model,
@@ -405,19 +431,34 @@ class GenerationHandler(
             onTransformed = if (collectProfile) { transformer, before, after ->
                 transformationSizes += InputSizeEntry(transformer.javaClass.simpleName.take(80),
                     inputTextBytes(after) - inputTextBytes(before))
+                val stage = when (transformer.javaClass.simpleName) {
+                    "TimeReminderTransformer" -> "时间提醒后"
+                    "PromptInjectionTransformer" -> "世界书/模式注入后"
+                    "PlaceholderTransformer" -> "占位符替换后"
+                    "DocumentAsPromptTransformer" -> "文档转文本后"
+                    "OcrTransformer" -> "图片识别后"
+                    "VoiceMessageTransformer" -> "语音处理后"
+                    "TemplateTransformer" -> "消息模板后"
+                    "WorkspaceReminderTransformer" -> "工作区说明后"
+                    else -> "其他转换后"
+                }
+                captureSystem(stage, after)
             } else null,
         )
  
-        val internalMessages = memoryRecallService.apply(recallTurn,
-            reactionTurn.apply(baseMessages).withSharedMusicContext(musicContext))
+        val interactionMessages = reactionTurn.apply(baseMessages).withSharedMusicContext(musicContext)
+        captureSystem("互动/音乐背景后", interactionMessages)
+        val internalMessages = memoryRecallService.apply(recallTurn, interactionMessages)
+        captureSystem("记忆召回后", internalMessages)
 
         val params = buildGenerationRequestParameters(assistant, model, tools).let { parameters ->
-            if (collectProfile && conversationId != null) {
+            if (collectCacheDiagnostics) {
                 parameters.copy(onRequestBuilt = { payload ->
                     val summary = runCatching {
                         cacheRequestDiagnostics.compare(
                             scope = "${assistant.id}:$conversationId:${provider.id}:${model.id}",
                             payload = payload,
+                            checkpoints = systemCheckpoints,
                         ).summary()
                     }.getOrElse { "诊断跳过：无法安全比较本次请求。" }
                     Logging.log("缓存诊断", summary)

@@ -8,6 +8,9 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
+/** Checksums only; labels are restricted to application-owned source/stage names. */
+internal data class CacheSystemCheckpoint(val label: String, val checksum: String?, val stage: Boolean)
+
 /** Local comparisons of prepared requests, never an estimate of provider cache hits. */
 internal data class CacheRequestComparison(
     val requestNumber: Long,
@@ -22,6 +25,9 @@ internal data class CacheRequestComparison(
     val firstChangedField: String? = null,
     val optionsChanged: Boolean = false,
     val skipped: Boolean = false,
+    val changedSystemSources: List<String> = emptyList(),
+    val firstChangedSystemStage: String? = null,
+    val systemCheckpointsIncomplete: Boolean = false,
 ) {
     fun summary(): String = buildString {
         appendLine("请求 #$requestNumber" + (baselineNumber?.let { "，对照 #$it" } ?: ""))
@@ -34,6 +40,13 @@ internal data class CacheRequestComparison(
             return@buildString
         }
         appendLine("系统提示：${if (systemChanged) "变化" else "相同"}")
+        if (systemChanged) {
+            if (changedSystemSources.isNotEmpty()) {
+                appendLine("变化的系统组成：${changedSystemSources.joinToString("、")}")
+            }
+            firstChangedSystemStage?.let { appendLine("最早出现系统差异的阶段：$it") }
+            if (systemCheckpointsIncomplete) appendLine("分段诊断不完整（存在未采集或超限阶段）。")
+        }
         appendLine("工具定义：${if (toolsChanged) "变化" else "相同"}" +
             (firstChangedTool?.let { "，首个差异在第 ${it + 1} 项（含增删和顺序）" } ?: ""))
         when {
@@ -72,6 +85,8 @@ internal class CacheRequestDiagnostics(
         val toolSurface: String,
         val messages: List<MessageFingerprint>,
         val options: String,
+        val checkpoints: List<CacheSystemCheckpoint>,
+        val checkpointsIncomplete: Boolean,
     )
 
     private val salt = ByteArray(32).also { SecureRandom().nextBytes(it) }
@@ -82,19 +97,41 @@ internal class CacheRequestDiagnostics(
     private class DiagnosticLimit : RuntimeException()
     private val messageFields = listOf("role", "content", "reasoning_content", "tool_calls", "tool_call_id", "name")
     private val roles = setOf("system", "developer", "user", "assistant", "tool")
+    private val sourceLabels = setOf(
+        "角色/会话设定", "旧整库记忆", "近期聊天标题", "代码与打包说明", "工具附加说明", "插件/额外背景",
+        "界面/跳转/其他说明",
+    )
+    private val stageLabels = setOf(
+        "系统初始组装后", "时间提醒后", "世界书/模式注入后", "占位符替换后", "文档转文本后", "图片识别后",
+        "语音处理后", "消息模板后", "工作区说明后", "互动/音乐背景后", "记忆召回后",
+    )
+
+    /** Fingerprint immediately at the source; callers do not need to retain raw checkpoint text. */
+    @Synchronized
+    fun checkpoint(label: String, value: JsonElement, stage: Boolean = false): CacheSystemCheckpoint {
+        val allowed = if (stage) stageLabels else sourceLabels
+        val safeLabel = label.takeIf { it in allowed } ?: if (stage) "其他转换后" else "其他来源"
+        remainingCharacters = minOf(maxCharacters, 500_000)
+        val checksum = runCatching { hash(value) }.getOrNull()
+        return CacheSystemCheckpoint(safeLabel, checksum, stage)
+    }
 
     @Synchronized
-    fun compare(scope: String, payload: JsonObject): CacheRequestComparison {
+    fun compare(
+        scope: String, payload: JsonObject, checkpoints: List<CacheSystemCheckpoint> = emptyList(),
+    ): CacheRequestComparison {
         val number = ++sequence
         remainingCharacters = maxCharacters
         return try {
-            compareWithinBudget(number, scope, payload)
+            compareWithinBudget(number, scope, payload, checkpoints)
         } catch (_: DiagnosticLimit) {
             CacheRequestComparison(number, skipped = true)
         }
     }
 
-    private fun compareWithinBudget(number: Long, scope: String, payload: JsonObject): CacheRequestComparison {
+    private fun compareWithinBudget(
+        number: Long, scope: String, payload: JsonObject, checkpoints: List<CacheSystemCheckpoint>,
+    ): CacheRequestComparison {
         val messages = payload["messages"] as? JsonArray
         val rawTools = payload["tools"]
         if (messages == null || messages.size > maxMessages ||
@@ -117,6 +154,9 @@ internal class CacheRequestDiagnostics(
             toolSurface = hash(rawTools),
             messages = fingerprints,
             options = hash(JsonObject(payload.filterKeys { it != "messages" && it != "tools" })),
+            checkpoints = checkpoints.take(128).toList(),
+            checkpointsIncomplete = checkpoints.isEmpty() || checkpoints.size > 128 ||
+                checkpoints.any { it.checksum == null },
         )
         val scopeHash = hash(JsonPrimitive(scope))
         // Access order, so idle conversations are the first to be evicted.
@@ -134,6 +174,20 @@ internal class CacheRequestDiagnostics(
         val firstTool = if (toolChanged) {
             baseline.tools.zip(tools).takeWhile { (old, new) -> old == new }.size
         } else null
+        val beforeSources = baseline.checkpoints.filterNot { it.stage }.groupBy { it.label }
+        val afterSources = snapshot.checkpoints.filterNot { it.stage }.groupBy { it.label }
+        val changedSources = (beforeSources.keys + afterSources.keys).filter { label ->
+            beforeSources[label].orEmpty().all { it.checksum != null } &&
+                afterSources[label].orEmpty().all { it.checksum != null } &&
+                beforeSources[label] != afterSources[label]
+        }
+        val beforeStages = baseline.checkpoints.filter { it.stage }.groupBy { it.label }
+        val afterStages = snapshot.checkpoints.filter { it.stage }.groupBy { it.label }
+        val firstStage = (beforeStages.keys + afterStages.keys).firstOrNull { label ->
+            beforeStages[label].orEmpty().all { it.checksum != null } &&
+                afterStages[label].orEmpty().all { it.checksum != null } &&
+                beforeStages[label] != afterStages[label]
+        }
         return CacheRequestComparison(
             requestNumber = number,
             baselineNumber = baseline.number,
@@ -146,6 +200,9 @@ internal class CacheRequestDiagnostics(
             firstChangedRole = if (changed) fingerprints[common].role.uppercase() else null,
             firstChangedField = changedField,
             optionsChanged = baseline.options != snapshot.options,
+            changedSystemSources = changedSources,
+            firstChangedSystemStage = firstStage,
+            systemCheckpointsIncomplete = baseline.checkpointsIncomplete || snapshot.checkpointsIncomplete,
         )
     }
 
