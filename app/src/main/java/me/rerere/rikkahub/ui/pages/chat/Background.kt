@@ -21,6 +21,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ui.toComposeColor
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.ui.theme.ThemeMaterialBackground
+import me.rerere.rikkahub.ui.theme.SoftDarkWallpaperShade
 
 @Composable
 fun AssistantBackground(setting: Settings) {
@@ -42,6 +43,7 @@ fun AssistantBackground(setting: Settings) {
                     .fillMaxSize()
                     .alpha(backgroundOpacity)
             )
+            SoftDarkWallpaperShade()
         }
 
         chatBackgroundColor != null -> {

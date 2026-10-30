@@ -1,7 +1,7 @@
 package me.rerere.rikkahub.ui.components.sketch
 
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
+import me.rerere.rikkahub.ui.theme.MaterialAlertDialog as AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton

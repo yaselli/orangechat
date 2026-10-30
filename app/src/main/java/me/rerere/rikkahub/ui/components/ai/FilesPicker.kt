@@ -27,11 +27,11 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
+import me.rerere.rikkahub.ui.theme.MaterialListItem as ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
-import androidx.compose.material3.Surface
+import me.rerere.rikkahub.ui.theme.MaterialSurface as Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable

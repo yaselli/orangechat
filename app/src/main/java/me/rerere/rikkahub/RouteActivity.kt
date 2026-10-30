@@ -115,6 +115,8 @@ import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.disclaimer.LegalPage
+import me.rerere.rikkahub.ui.theme.withSettingsBackdropMetadata
+import me.rerere.rikkahub.ui.theme.rememberSettingsBackdropDecorator
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
@@ -446,6 +448,7 @@ class RouteActivity : ComponentActivity() {
                         entryDecorators = listOf(
                             rememberSaveableStateHolderNavEntryDecorator(),
                             rememberViewModelStoreNavEntryDecorator(),
+                            rememberSettingsBackdropDecorator(settings.displaySetting),
                         ),
                         modifier = Modifier.fillMaxSize(),
                         onBack = { backStack.removeLastOrNull() },
@@ -464,7 +467,7 @@ class RouteActivity : ComponentActivity() {
                             slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
                                 slideOutHorizontally { it }
                         },
-                        entryProvider = entryProvider {
+                        entryProvider = entryProvider<NavKey> {
                             entry<Screen.Chat>(
                                 metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
                                         + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
@@ -874,7 +877,7 @@ entry<Screen.Extensions> {
                                 )
                             }
 
-                        }
+                        }.withSettingsBackdropMetadata()
                     )
                     AnimatedVisibility(
                         visible = migrationState is MigrationState.Migrating,

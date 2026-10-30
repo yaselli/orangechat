@@ -1,7 +1,7 @@
 package me.rerere.rikkahub.ui.components.ui
 
 import android.widget.Toast
-import androidx.compose.material3.AlertDialog
+import me.rerere.rikkahub.ui.theme.MaterialAlertDialog as AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable

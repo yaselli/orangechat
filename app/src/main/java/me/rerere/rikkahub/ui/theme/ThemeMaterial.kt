@@ -42,11 +42,12 @@ internal val LocalMaterialBlurEnabled = compositionLocalOf { true }
 @Composable
 internal fun MaterialBackdrop(
     background: @Composable () -> Unit,
+    captureBackground: Boolean = true,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val state = rememberHazeState()
     val active =
-        LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL &&
+        captureBackground && LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL &&
             LocalMaterialBlurEnabled.current
     val capture = LocalScrollCaptureInProgress.current
     CompositionLocalProvider(
@@ -92,8 +93,9 @@ internal fun Modifier.themeMaterial(
     val material = LocalThemeMaterial.current
     if (material.style == UiMaterialStyle.ORIGINAL) return this
     val dark = LocalDarkMode.current
-    val profile = material.profile(dark, role)
-    val strength = if (opacity.isFinite()) opacity.coerceIn(0f, 1f) else 1f
+    val profile = material.profile(dark, role, LocalSoftDarkMode.current)
+    val contextualOpacity = if (role == MaterialRole.DIALOG) 1f else LocalMaterialSurfaceOpacity.current
+    val strength = (if (opacity.isFinite()) opacity.coerceIn(0f, 1f) else 1f) * contextualOpacity
     val capture = LocalScrollCaptureInProgress.current
     val useHaze =
         hazeState != null &&

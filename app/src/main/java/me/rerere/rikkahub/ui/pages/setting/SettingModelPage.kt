@@ -37,8 +37,8 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedCard
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
+import me.rerere.rikkahub.ui.theme.MaterialOutlinedCard as OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold

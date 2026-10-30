@@ -5,6 +5,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
+import me.rerere.rikkahub.ui.theme.MaterialListItem as ListItem
+import me.rerere.rikkahub.ui.theme.MaterialSurface as Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier

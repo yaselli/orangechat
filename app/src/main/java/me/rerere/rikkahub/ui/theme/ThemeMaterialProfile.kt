@@ -21,7 +21,11 @@ internal data class ThemeMaterialProfile(
     val elevation: Float,
 )
 
-internal fun ThemeMaterialSetting.profile(dark: Boolean, role: MaterialRole): ThemeMaterialProfile {
+internal fun ThemeMaterialSetting.profile(
+    dark: Boolean,
+    role: MaterialRole,
+    softDark: Boolean = false,
+): ThemeMaterialProfile {
     val base =
         when (style) {
             UiMaterialStyle.ORIGINAL -> ThemeMaterialProfile(1f, 0f, 0f, 0f, 0f, 0f)
@@ -55,23 +59,35 @@ internal fun ThemeMaterialSetting.profile(dark: Boolean, role: MaterialRole): Th
                 )
         }
     if (style == UiMaterialStyle.ORIGINAL) return base
-    return when (role) {
-        MaterialRole.BUBBLE,
-        MaterialRole.INPUT -> base
-        MaterialRole.CARD ->
-            base.copy(tintAlpha = maxOf(base.tintAlpha, if (dark) 0.58f else 0.35f))
-        MaterialRole.DRAWER ->
-            base.copy(
-                tintAlpha = maxOf(base.tintAlpha, if (dark) 0.85f else 0.50f),
-                blurRadius = if (style == UiMaterialStyle.LIQUID_GLASS) 12f else 24f,
-                elevation = 12f,
-            )
-        // Popups live in separate windows; use a readable static material instead of sampling
-        // a Haze source from another window. Modal surfaces are intentionally thicker.
-        MaterialRole.DIALOG ->
-            base.copy(
-                tintAlpha = maxOf(base.tintAlpha, if (dark) 0.97f else 0.94f),
-                blurRadius = 0f,
-            )
-    }
+    val result =
+        when (role) {
+            MaterialRole.BUBBLE,
+            MaterialRole.INPUT -> base
+            MaterialRole.CARD ->
+                base.copy(tintAlpha = maxOf(base.tintAlpha, if (dark) 0.58f else 0.35f))
+            MaterialRole.DRAWER ->
+                base.copy(
+                    tintAlpha = maxOf(base.tintAlpha, if (dark) 0.85f else 0.50f),
+                    blurRadius = if (style == UiMaterialStyle.LIQUID_GLASS) 12f else 24f,
+                    elevation = 12f,
+                )
+            // Popups live in separate windows; use a readable static material instead of sampling
+            // a Haze source from another window. Modal surfaces are intentionally thicker.
+            MaterialRole.DIALOG ->
+                base.copy(
+                    tintAlpha = maxOf(base.tintAlpha, if (dark) 0.97f else 0.94f),
+                    blurRadius = 0f,
+                )
+        }
+    if (!softDark) return result
+    // White text must remain readable over pale photographs in the optional soft dark mode.
+    val minimum =
+        when (role) {
+            MaterialRole.BUBBLE,
+            MaterialRole.INPUT -> 0.72f
+            MaterialRole.CARD -> 0.80f
+            MaterialRole.DRAWER -> 0.86f
+            MaterialRole.DIALOG -> 0.97f
+        }
+    return result.copy(tintAlpha = maxOf(result.tintAlpha, minimum))
 }

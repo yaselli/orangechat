@@ -30,12 +30,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
+import me.rerere.rikkahub.ui.theme.MaterialDropdownMenu as DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -119,6 +119,7 @@ import me.rerere.rikkahub.ui.theme.LocalThemeMaterial
 import me.rerere.rikkahub.ui.theme.MaterialAlertDialog as AlertDialog
 import me.rerere.rikkahub.ui.theme.MaterialRole
 import me.rerere.rikkahub.ui.theme.themeMaterial
+import me.rerere.rikkahub.ui.theme.SoftDarkWallpaperShade
 
 @Composable
 fun ChatDrawerContent(
@@ -253,6 +254,7 @@ fun ChatDrawerContent(
                                 .alpha(0.15f),
                             contentScale = ContentScale.Crop,
                         )
+                        SoftDarkWallpaperShade()
                     }
                 }
             }

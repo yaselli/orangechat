@@ -41,6 +41,8 @@ import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.LocalThemeMaterial
 import me.rerere.rikkahub.ui.theme.themeMaterial
+import me.rerere.rikkahub.ui.theme.LocalMaterialSurfaceOpacity
+import me.rerere.rikkahub.ui.theme.LocalSettingsWallpaperActive
 
 private val CardGroupCorner = 20.dp
 private val CardGroupItemSpacing = 2.dp
@@ -112,8 +114,11 @@ private fun CardGroupListItem(
         bottomStart = bottomCorner,
         bottomEnd = bottomCorner,
     )
-    val colors = item.colors ?: CustomColors.listItemColors
     val useGlass = LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL
+    val baseColors = item.colors ?: CustomColors.listItemColors
+    val colors = if (!useGlass && LocalSettingsWallpaperActive.current) baseColors.copy(
+        containerColor = baseColors.containerColor.copy(alpha = minOf(baseColors.containerColor.alpha, LocalMaterialSurfaceOpacity.current))
+    ) else baseColors
 
     ListItem(
         headlineContent = item.headlineContent,

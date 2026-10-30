@@ -45,6 +45,7 @@ enum class ColorMode {
     SYSTEM,
     LIGHT,
     DARK,
+    SOFT_DARK,
 }
 
 @Composable
@@ -58,9 +59,10 @@ fun RikkahubTheme(
     val darkTheme = when (colorMode) {
         ColorMode.SYSTEM -> isSystemInDarkTheme()
         ColorMode.LIGHT -> false
-        ColorMode.DARK -> true
+        ColorMode.DARK, ColorMode.SOFT_DARK -> true
     }
     val amoledDarkMode by rememberAmoledDarkMode()
+    val softDark = colorMode == ColorMode.SOFT_DARK
 
     val colorScheme = when {
         settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -73,8 +75,8 @@ fun RikkahubTheme(
             theme.getColorScheme(dark = darkTheme)
         }
     }
-    val colorSchemeConverted = remember(darkTheme, amoledDarkMode, colorScheme) {
-        if (darkTheme && amoledDarkMode) {
+    val colorSchemeConverted = remember(darkTheme, softDark, amoledDarkMode, colorScheme) {
+        if (darkTheme && amoledDarkMode && !softDark) {
             colorScheme.copy(
                 background = AMOLED_DARK_BACKGROUND,
                 surface = AMOLED_DARK_BACKGROUND,
@@ -93,9 +95,11 @@ fun RikkahubTheme(
         settings.displaySetting.visualThemePalette,
         settings.displaySetting.themeMaterial,
         settings.themeId,
+        softDark,
     ) {
         var scheme = colorSchemeConverted
         scheme = scheme.withVisualPalette(settings.displaySetting.visualThemePalette, darkTheme)
+        if (softDark) scheme = scheme.withSoftDarkAppearance()
         settings.displaySetting.primaryColor?.let { pc ->
             val primaryColor = pc.toComposeColor()
             val luminance = 0.299f * primaryColor.red + 0.587f * primaryColor.green + 0.114f * primaryColor.blue
@@ -151,6 +155,7 @@ fun RikkahubTheme(
 
     CompositionLocalProvider(
         LocalDarkMode provides darkTheme,
+        LocalSoftDarkMode provides softDark,
         LocalThemeMaterial provides settings.displaySetting.themeMaterial,
         LocalMaterialBlurEnabled provides materialBlurEnabled,
         LocalExtendColors provides extendColors,
@@ -160,7 +165,7 @@ fun RikkahubTheme(
             colorScheme = finalColorScheme,
             typography = Typography,
             content = {
-                MaterialBackdrop(background = { ThemeMaterialBackground() }) { content() }
+                MaterialBackdrop(background = { ThemeMaterialBackground() }, captureBackground = false) { content() }
             },
             motionScheme = MotionScheme.expressive()
         )
