@@ -31,7 +31,9 @@ import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.ui.context.LocalDisplaySettings
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.AvatarDisplay
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.utils.toLocalString
@@ -55,6 +57,41 @@ private fun AvatarFrameOverlay(
                 .offset(x = offsetX.dp, y = offsetY.dp),
             contentScale = ContentScale.Fit,
             alpha = 1f,
+        )
+    }
+}
+
+/** Compact avatars are repeated beside every bubble, independent of standard-mode header toggles. */
+@Composable
+internal fun ChatBubbleAvatar(
+    isUser: Boolean,
+    model: Model?,
+    assistant: Assistant?,
+    interactionModifier: Modifier = Modifier,
+) {
+    val display = LocalDisplaySettings.current
+    Box(modifier = interactionModifier, contentAlignment = Alignment.Center) {
+        when {
+            isUser -> AvatarDisplay(
+                name = display.userNickname,
+                value = display.userAvatar,
+                modifier = Modifier.size(32.dp),
+                interactive = false,
+            )
+            assistant?.useAssistantAvatar == true || model == null -> AvatarDisplay(
+                name = assistant?.name.orEmpty(),
+                value = assistant?.avatar ?: Avatar.Dummy,
+                modifier = Modifier.size(32.dp),
+                interactive = false,
+            )
+            else -> AutoAIIcon(name = model.modelId, modifier = Modifier.size(32.dp), loading = false)
+        }
+        AvatarFrameOverlay(
+            framePath = if (isUser) display.userAvatarFramePath else display.aiAvatarFramePath,
+            offsetX = if (isUser) display.userAvatarFrameOffsetX else display.aiAvatarFrameOffsetX,
+            offsetY = if (isUser) display.userAvatarFrameOffsetY else display.aiAvatarFrameOffsetY,
+            scale = if (isUser) display.userAvatarFrameScale else display.aiAvatarFrameScale,
+            baseSize = 32f,
         )
     }
 }

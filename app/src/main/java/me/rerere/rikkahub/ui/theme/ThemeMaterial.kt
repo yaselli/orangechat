@@ -18,7 +18,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
@@ -111,7 +113,18 @@ internal fun Modifier.themeMaterial(
                     HazeTint(tint.copy(alpha = maxOf(profile.tintAlpha, 0.70f) * strength)),
             )
         }
-    return clip(shape)
+    // Keep each sampled surface in its own bounded render target. In particular, a
+    // drawer's moving/3D parent layer must not become the target for a bubble's blur.
+    // Static/export paths retain the cheaper ordinary shape clip.
+    val surfaceLayer =
+        if (useHaze)
+            Modifier.graphicsLayer {
+                this.shape = shape
+                clip = true
+                compositingStrategy = CompositingStrategy.Offscreen
+            }
+        else Modifier.clip(shape)
+    return then(surfaceLayer)
         .then(
             if (useHaze) Modifier.hazeEffect(state = hazeState!!, style = hazeStyle) else Modifier
         )

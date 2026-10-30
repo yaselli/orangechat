@@ -107,6 +107,66 @@ private fun AvatarSurface(
     )
 }
 
+/** Render-only avatar for repeated chat bubbles: no picker launchers or event subscriptions. */
+@Composable
+internal fun AvatarDisplay(
+    name: String,
+    value: Avatar,
+    modifier: Modifier = Modifier,
+    loading: Boolean = false,
+    interactive: Boolean = false,
+    onClick: () -> Unit = {},
+) {
+    AvatarSurface(
+        shape = rememberAvatarShape(loading),
+        modifier = modifier,
+        interactive = interactive,
+        onClick = onClick,
+        tonalElevation = 4.dp,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            when (value) {
+                is Avatar.Image -> {
+                    AsyncImage(
+                        model = value.url,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+
+                is Avatar.Emoji -> {
+                    Text(
+                        text = value.content,
+                        autoSize = TextAutoSize.StepBased(
+                            minFontSize = 15.sp,
+                            maxFontSize = 30.sp,
+                        ),
+                        lineHeight = 0.8.em,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(5.dp)
+                    )
+                }
+
+                is Avatar.Dummy -> {
+                    Text(
+                        text = name
+                            .ifBlank { stringResource(R.string.user_default_name) }
+                            .takeIf { it.isNotEmpty() }
+                            ?.firstOrNull()?.toString()?.uppercase() ?: "A",
+                        fontSize = 20.sp,
+                        lineHeight = 1.em
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun UIAvatar(
     name: String,
@@ -148,57 +208,17 @@ fun UIAvatar(
     }
 
     Box(modifier = modifier.size(32.dp)) {
-        AvatarSurface(
-            shape = rememberAvatarShape(loading),
+        AvatarDisplay(
+            name = name,
+            value = value,
             modifier = Modifier.fillMaxSize(),
+            loading = loading,
             interactive = interactive,
             onClick = {
                 onClick?.invoke()
                 if (onUpdate != null) showPickOption = true
             },
-            tonalElevation = 4.dp,
-            color = MaterialTheme.colorScheme.secondaryContainer,
-        ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                when (value) {
-                    is Avatar.Image -> {
-                        AsyncImage(
-                            model = value.url,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-
-                    is Avatar.Emoji -> {
-                        Text(
-                            text = value.content,
-                            autoSize = TextAutoSize.StepBased(
-                                minFontSize = 15.sp,
-                                maxFontSize = 30.sp,
-                            ),
-                            lineHeight = 0.8.em,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(5.dp)
-                        )
-                    }
-
-                    is Avatar.Dummy -> {
-                        Text(
-                            text = name
-                                .ifBlank { stringResource(R.string.user_default_name) }
-                                .takeIf { it.isNotEmpty() }
-                                ?.firstOrNull()?.toString()?.uppercase() ?: "A",
-                            fontSize = 20.sp,
-                            lineHeight = 1.em
-                        )
-                    }
-                }
-            }
-        }
+        )
 
         // Show edit icon when editable
         if (onUpdate != null) {

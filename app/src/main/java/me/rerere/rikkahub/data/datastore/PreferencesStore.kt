@@ -728,6 +728,7 @@ private inline fun MutablePreferences.putSecretIfChanged(
 data class Settings(
     @Transient
     val init: Boolean = false,
+    // Legacy backup fields; no longer used to gate application startup.
     val disclaimerAccepted: Boolean = false,
     val disclaimerAcceptedAt: Int = 0,
     val dynamicColor: Boolean = true,
@@ -829,6 +830,7 @@ data class AnniversaryEntry(
 
 @Serializable
 data class DisplaySetting(
+    val chatDisplayMode: ChatDisplayMode = ChatDisplayMode.STANDARD,
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
     val useAppIconStyleLoadingIndicator: Boolean = true,

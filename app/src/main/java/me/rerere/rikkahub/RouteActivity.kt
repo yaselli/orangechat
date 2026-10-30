@@ -114,7 +114,6 @@ import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
-import me.rerere.rikkahub.ui.pages.disclaimer.DisclaimerPage
 import me.rerere.rikkahub.ui.pages.disclaimer.LegalPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
@@ -352,23 +351,6 @@ class RouteActivity : ComponentActivity() {
         val scope = rememberCoroutineScope()
         val tts = rememberCustomTtsState()
 
-        // 首次启动：未同意免责声明时强制展示
-        if (!settings.disclaimerAccepted) {
-            DisclaimerPage(
-                onAccept = {
-                    scope.launch {
-                        settingsStore.update {
-                            it.copy(
-                                disclaimerAccepted = true,
-                                disclaimerAcceptedAt = (System.currentTimeMillis() / 1000).toInt()
-                            )
-                        }
-                    }
-                },
-                onDecline = { finish() }
-            )
-            return
-        }
         val asr = rememberCustomAsrState()
         val eventBus = koinInject<AppEventBus>()
         val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
