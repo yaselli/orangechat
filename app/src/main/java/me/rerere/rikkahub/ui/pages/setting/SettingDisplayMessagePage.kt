@@ -210,6 +210,18 @@ fun SettingDisplayMessagePage(vm: SettingVM = koinViewModel()) {
                             )
                         },
                     )
+                    item(
+                        headlineContent = { Text("缓存请求诊断") },
+                        supportingContent = { Text("排查缓存未命中：在设置的请求日志查看差异位置。不保存聊天正文，不增加请求；支持 OpenAI 兼容聊天接口。") },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.cacheRequestDiagnosticsEnabled,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(cacheRequestDiagnosticsEnabled = it))
+                                },
+                            )
+                        },
+                    )
                     if (BuildConfig.DEBUG) {
                         item(
                             headlineContent = { Text("显示记忆引用") },
