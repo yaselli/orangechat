@@ -8,7 +8,6 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import me.rerere.rikkahub.data.music.cardPart
 import me.rerere.rikkahub.data.music.musicCard
-
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Spring
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
@@ -78,8 +76,6 @@ import me.rerere.hugeicons.stroke.Voice
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.datastore.UiMaterialStyle
-import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -105,6 +101,10 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
+import me.rerere.rikkahub.ui.theme.MaterialAlertDialog as AlertDialog
+import me.rerere.rikkahub.ui.theme.MaterialBackdrop
+import me.rerere.rikkahub.ui.theme.MaterialRole
+import me.rerere.rikkahub.ui.theme.themeMaterial
 
 @Composable
 fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, autoStartVoice: Boolean = false) {
@@ -194,7 +194,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
         }
     }
 
-    when {
+    MaterialBackdrop(background = { AssistantBackground(setting = setting) }) {
+        when {
         isBigScreen -> {
             PermanentNavigationDrawer(
                 drawerContent = {
@@ -203,7 +204,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
                         current = conversation,
                         vm = vm,
                         settings = setting,
-                        hazeState = hazeState,
                     )
                 }
             ) {
@@ -254,7 +254,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
                         current = conversation,
                         vm = vm,
                         settings = setting,
-                        hazeState = hazeState,
                     )
                 }
             ) {
@@ -312,6 +311,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
         }
     }
 }
+}
 
 @Composable
 private fun ChatPageContent(
@@ -339,8 +339,7 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     val scrollCaptureInProgress = LocalScrollCaptureInProgress.current
     val displaySetting = setting.displaySetting
-    val needsLiveHaze = displaySetting.inputMaterialStyle == UiMaterialStyle.LIQUID_GLASS ||
-        displaySetting.enableBlurEffect || displaySetting.enableGlassDrawer
+    val needsLiveHaze = displaySetting.enableBlurEffect
     var previewMode by rememberSaveable { mutableStateOf(false) }
     var showConversationSettings by rememberSaveable(conversation.id) { mutableStateOf(false) }
     var showSharedMusic by rememberSaveable(conversation.id) { mutableStateOf(false) }
@@ -362,10 +361,9 @@ private fun ChatPageContent(
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
     Surface(
-        color = MaterialTheme.colorScheme.background,
+        color = Color.Transparent,
         modifier = Modifier.fillMaxSize()
     ) {
-        AssistantBackground(setting = setting)
         Scaffold(
             topBar = {
                 TopBar(
@@ -413,7 +411,8 @@ private fun ChatPageContent(
                     )
                 } else Column {
                     me.rerere.rikkahub.ui.components.music.SharedMusicMiniBar(
-                        conversation.assistantId.toString(), onOpen = { sharedMusicTab = 2; showSharedMusic = true },
+                        conversation.assistantId.toString(), onOpen = { sharedMusicTab = 2
+                                showSharedMusic = true },
                     )
                     inputState.messageContent.filter { it.musicCard() != null }.forEach { part ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -451,7 +450,8 @@ private fun ChatPageContent(
                         hazeState = hazeState,
                         autoStartVoice = autoStartVoice,
                         onConversationSettings = { showConversationSettings = true },
-                        onSharedMusic = { sharedMusicTab = 0; showSharedMusic = true },
+                        onSharedMusic = { sharedMusicTab = 0
+                                showSharedMusic = true },
                         onCancelClick = {
                             vm.stopGeneration()
                         },
@@ -673,6 +673,12 @@ private fun TopBar(
     }
 
     TopAppBar(
+        modifier =
+            Modifier.themeMaterial(
+                shape = androidx.compose.ui.graphics.RectangleShape,
+                tint = MaterialTheme.colorScheme.surfaceContainer,
+                role = MaterialRole.CARD,
+            ),
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
         navigationIcon = {
             if (!bigScreen) {
@@ -714,8 +720,7 @@ private fun TopBar(
                             maxLines = 1,
                             color = LocalContentColor.current.copy(0.65f),
                             style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 8.sp,
-                            )
+                                fontSize = 8.sp)
                         )
                     }
                 }

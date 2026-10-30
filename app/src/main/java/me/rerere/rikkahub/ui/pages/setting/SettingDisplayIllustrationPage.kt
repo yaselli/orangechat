@@ -96,7 +96,7 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
         }
     }
 
-    // Settings home background picker launcher
+    // Settings background picker launcher
     val settingsBgPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -168,14 +168,14 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
             contentPadding = contentPadding + PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Settings home background and surface transparency
+            // Settings background and surface transparency
             item {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("设置主页背景") },
+                    title = { Text("全部设置页面背景") },
                 ) {
                     item(
-                        headlineContent = { Text("自定义设置主页背景图") },
+                        headlineContent = { Text("自定义全部设置页面背景图") },
                         supportingContent = {
                             Text(
                                 if (displaySetting.settingsBackgroundPath.isNotBlank() &&
@@ -183,7 +183,7 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                                 ) {
                                     "当前背景: ${File(displaySetting.settingsBackgroundPath).name}"
                                 } else {
-                                    "选择一张图片作为设置主页背景"
+                                    "选择一张图片作为全部设置页面背景"
                                 }
                             )
                         },
@@ -202,7 +202,7 @@ fun SettingDisplayIllustrationPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
-                        headlineContent = { Text("设置卡片透明度") },
+                        headlineContent = { Text("设置卡片不透明度") },
                         supportingContent = {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

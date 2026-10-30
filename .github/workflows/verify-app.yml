@@ -2,7 +2,7 @@ name: Verify app changes
 
 on:
   pull_request:
-    branches: [build/stable-release]
+    branches: [build/stable-release, ui/unified-theme-materials, ui/everyday-chat-mode]
     paths:
       - "app/**"
       - "ai/**"
@@ -26,7 +26,7 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Download color utilities
@@ -62,3 +62,92 @@ jobs:
             **/build/test-results/**
             **/build/reports/lint-results*
           if-no-files-found: warn
+      - name: Prepare emulator-only test signing and KVM
+        if: github.head_ref == 'ui/unified-theme-materials' || github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/')
+        run: |
+          sudo chmod 666 /dev/kvm
+          if [ ! -f app/debug.keystore ]; then
+            keytool -genkeypair -noprompt -keystore app/debug.keystore -storepass android -keypass android -alias androiddebugkey -dname 'CN=Android Debug' -keyalg RSA -validity 10000
+          fi
+      - name: Verify material colors and navigation backgrounds on Android
+        if: github.head_ref == 'ui/unified-theme-materials' || github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/')
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=${{ (github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/')) && 'me.rerere.rikkahub.ui.theme.ThemeMaterialRenderingDeviceTest,me.rerere.rikkahub.ui.components.message.EverydayChatModeDeviceTest,me.rerere.rikkahub.ui.theme.GlobalAppearanceDeviceTest' || github.head_ref == 'ui/everyday-chat-mode' && 'me.rerere.rikkahub.ui.theme.ThemeMaterialRenderingDeviceTest,me.rerere.rikkahub.ui.components.message.EverydayChatModeDeviceTest' || 'me.rerere.rikkahub.ui.theme.ThemeMaterialRenderingDeviceTest' }}
+      - name: Upload material rendering test results
+        if: always() && (github.head_ref == 'ui/unified-theme-materials' || github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: theme-material-rendering-results
+          path: |
+            **/build/reports/androidTests/**
+            **/build/outputs/androidTest-results/**
+          if-no-files-found: warn
+
+  everyday-preview:
+    needs: checks
+    if: (github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance') && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      # The same immutable pull-request merge commit was checked in the preceding job.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Download color utilities
+        run: git submodule update --init --depth 1 material3/material-color-utilities
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+      - name: Install web dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore existing Debug signing identity
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_DEBUG_KEYSTORE_BASE64" ]; then
+            echo '::error::The shared Debug signing key is unavailable.'
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > app/debug.keystore
+      - name: Build combined everyday chat test APKs
+        run: bash gradlew :app:assembleDebug
+      - name: Verify signatures and prepare test downloads
+        run: |
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          test -n "$AAPT"
+          test -n "$APKSIGNER"
+          for apk in app/build/outputs/apk/debug/*.apk; do
+            "$APKSIGNER" verify "$apk"
+          done
+          python3 scripts/prepare-update-assets.py --apk-dir app/build/outputs/apk/debug --output-dir everyday-preview --channel debug --aapt "$AAPT"
+          python3 scripts/report-apk-size.py --apk-dir app/build/outputs/apk/debug --output everyday-preview/apk-size.json
+      - name: Upload downloadable everyday chat test APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.head_ref == 'ui/global-appearance' && 'Xiguaban-global-appearance-debug' || 'Xiguaban-everyday-chat-debug' }}
+          path: everyday-preview/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Remove signing files
+        if: always()
+        run: rm -f app/debug.keystore

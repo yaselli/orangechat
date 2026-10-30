@@ -8,10 +8,7 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.widget.Toast
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,16 +18,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Card
+import me.rerere.rikkahub.ui.theme.MaterialCard as Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.ListItem
+import me.rerere.rikkahub.ui.theme.MaterialListItem as ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -43,9 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -53,14 +47,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.Alert01
-import me.rerere.hugeicons.stroke.CloudServer
 import me.rerere.hugeicons.stroke.Book01
-import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Clapping01
 import me.rerere.hugeicons.stroke.Database02
-import me.rerere.hugeicons.stroke.Developer
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
 import me.rerere.hugeicons.stroke.InLove
@@ -97,7 +88,6 @@ import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-import java.io.File
 
 @Composable
 fun SettingPage(vm: SettingVM = koinViewModel()) {
@@ -105,12 +95,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val filesManager: FilesManager = koinInject()
-    val settingsBackground = settings.displaySetting.settingsBackgroundPath
-        .takeIf { it.isNotBlank() && File(it).exists() }
-    val settingsUiAlpha = settings.displaySetting.settingsUiAlpha.coerceIn(0.25f, 1f)
-    val settingsCardColors = ListItemDefaults.colors(
-        containerColor = MaterialTheme.colorScheme.surfaceBright.copy(alpha = settingsUiAlpha)
-    )
 
     var showCommunity by remember { mutableStateOf(false) }
     var showSharedMusic by remember { mutableStateOf(false) }
@@ -119,19 +103,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
         onDismiss = { showSharedMusic = false },
     )
     if (showCommunity) ProjectCommunityDialog(onDismiss = { showCommunity = false })
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        settingsBackground?.let { path ->
-            val bitmap = remember(path) { BitmapFactory.decodeFile(path) }
-            bitmap?.let {
-                Image(
-                    bitmap = it.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            }
-        }
 
     Scaffold(
         topBar = {
@@ -145,17 +116,11 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 scrollBehavior = scrollBehavior,
                 actions = {
                 },
-                colors = if (settingsBackground != null) {
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = settingsUiAlpha),
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = settingsUiAlpha),
-                    )
-                } else CustomColors.topBarColors
+                colors = CustomColors.topBarColors
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = if (settingsBackground != null) Color.Transparent
-        else CustomColors.topBarColors.containerColor
+        containerColor = CustomColors.topBarColors.containerColor
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -174,11 +139,11 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     ColorMode.SYSTEM -> stringResource(R.string.setting_page_color_mode_system)
                     ColorMode.LIGHT -> stringResource(R.string.setting_page_color_mode_light)
                     ColorMode.DARK -> stringResource(R.string.setting_page_color_mode_dark)
+                    ColorMode.SOFT_DARK -> "柔和暗色"
                 }
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_general_settings)) },
-                    colors = settingsCardColors,
                 ) {
                     item(
                         leadingContent = { Icon(HugeIcons.Sun01, null) },
@@ -199,6 +164,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                                         ColorMode.SYSTEM -> stringResource(R.string.setting_page_color_mode_system)
                                         ColorMode.LIGHT -> stringResource(R.string.setting_page_color_mode_light)
                                         ColorMode.DARK -> stringResource(R.string.setting_page_color_mode_dark)
+                                        ColorMode.SOFT_DARK -> "柔和暗色"
                                     }
                                 },
                                 modifier = Modifier.width(150.dp)
@@ -250,7 +216,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_model_and_services)) },
-                    colors = settingsCardColors,
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.SettingModels) },
@@ -334,7 +299,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_data_settings)) },
-                    colors = settingsCardColors,
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.Backup) },
@@ -371,7 +335,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_about)) },
-                    colors = settingsCardColors,
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.SettingAbout) },
@@ -439,7 +402,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
         }
-    }
     }
 }
 

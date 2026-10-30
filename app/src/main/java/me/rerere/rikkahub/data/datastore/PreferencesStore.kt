@@ -728,6 +728,7 @@ private inline fun MutablePreferences.putSecretIfChanged(
 data class Settings(
     @Transient
     val init: Boolean = false,
+    // Legacy backup fields; no longer used to gate application startup.
     val disclaimerAccepted: Boolean = false,
     val disclaimerAcceptedAt: Int = 0,
     val dynamicColor: Boolean = true,
@@ -807,13 +808,6 @@ enum class ChatFontFamily {
 }
 
 @Serializable
-enum class UiMaterialStyle {
-    ORIGINAL,
-    LIQUID_GLASS,
-    FROSTED,
-}
-
-@Serializable
 enum class VisualThemePalette {
     ORIGINAL,
     SEA_SALT,
@@ -836,6 +830,7 @@ data class AnniversaryEntry(
 
 @Serializable
 data class DisplaySetting(
+    val chatDisplayMode: ChatDisplayMode = ChatDisplayMode.STANDARD,
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
     val useAppIconStyleLoadingIndicator: Boolean = true,
@@ -845,6 +840,7 @@ data class DisplaySetting(
     val showModelName: Boolean = true,
     val showDateBelowName: Boolean = false,
     val showTokenUsage: Boolean = true,
+    val cacheRequestDiagnosticsEnabled: Boolean = false,
     val showMemoryRecallReferences: Boolean = true,
     val showThinkingContent: Boolean = true,
     val autoCloseThinking: Boolean = true,
@@ -867,7 +863,8 @@ data class DisplaySetting(
     val enableAutoScroll: Boolean = true,
     val enableLatexRendering: Boolean = true,
     val enableBlurEffect: Boolean = false,
-    // 可独立启用的水玻璃界面效果，默认关闭以保持原有体验
+    val themeMaterial: ThemeMaterialSetting = ThemeMaterialSetting(),
+    // Retained for reading/writing older backups; appearance now uses themeMaterial.
     val enableGlassDrawer: Boolean = false,
     val enableDrawerCardTransform: Boolean = false,
     val enableGlassCardsAndBubbles: Boolean = false,
@@ -902,7 +899,7 @@ data class DisplaySetting(
     val drawerBackgroundPath: String = "",
     // 侧边栏元素透明度
     val drawerItemAlpha: Float = 1f,
-    // 设置主页背景与卡片透明度
+    // 设置主页及全部子页面的共用背景与卡片不透明度
     val settingsBackgroundPath: String = "",
     val settingsUiAlpha: Float = 0.88f,
     // 颜色自定义

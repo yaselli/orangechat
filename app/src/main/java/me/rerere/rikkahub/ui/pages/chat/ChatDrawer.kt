@@ -6,15 +6,9 @@
 
 package me.rerere.rikkahub.ui.pages.chat
 
-import me.rerere.rikkahub.ui.theme.LocalDarkMode
-
-import me.rerere.rikkahub.ui.theme.glassSurface
-
 import androidx.compose.ui.platform.LocalResources
 import androidx.activity.ComponentActivity
 import android.graphics.BitmapFactory
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -23,7 +17,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -36,14 +29,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
+import me.rerere.rikkahub.ui.theme.MaterialDropdownMenu as DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import me.rerere.rikkahub.ui.theme.MaterialModalBottomSheet as ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -64,7 +56,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -73,9 +64,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.materials.HazeMaterials
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import kotlinx.coroutines.flow.collectLatest
@@ -127,6 +115,11 @@ import me.rerere.rikkahub.utils.toDp
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
+import me.rerere.rikkahub.ui.theme.LocalThemeMaterial
+import me.rerere.rikkahub.ui.theme.MaterialAlertDialog as AlertDialog
+import me.rerere.rikkahub.ui.theme.MaterialRole
+import me.rerere.rikkahub.ui.theme.themeMaterial
+import me.rerere.rikkahub.ui.theme.SoftDarkWallpaperShade
 
 @Composable
 fun ChatDrawerContent(
@@ -134,7 +127,6 @@ fun ChatDrawerContent(
     vm: ChatVM,
     settings: Settings,
     current: Conversation,
-    hazeState: HazeState,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -173,8 +165,7 @@ fun ChatDrawerContent(
     }
 
     val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
-        initialValue = emptyMap(),
-    )
+        initialValue = emptyMap())
 
     // 昵称编辑状态
     val nicknameEditState = useEditState<String> { newNickname ->
@@ -205,7 +196,7 @@ fun ChatDrawerContent(
     var drawerSection by remember { mutableStateOf(DrawerSection.CHATS) }
     var showPluginShortcutSheet by remember { mutableStateOf(false) }
 
-    val glassDrawerEnabled = settings.displaySetting.enableGlassDrawer
+    val glassDrawerEnabled = LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL
     val drawerShape = if (glassDrawerEnabled) {
         RoundedCornerShape(topEnd = 30.dp, bottomEnd = 30.dp)
     } else {
@@ -232,15 +223,10 @@ fun ChatDrawerContent(
                             spotColor = Color.Black.copy(alpha = 0.14f),
                         )
                         .clip(drawerShape)
-                        .hazeEffect(
-                            state = hazeState,
-                            style = HazeMaterials.ultraThin(containerColor = glassTint),
-                        )
-                        .glassSurface(
+                        .themeMaterial(
                             shape = drawerShape,
                             tint = glassTint,
-                            dark = LocalDarkMode.current,
-                            drawFill = false,
+                            role = MaterialRole.DRAWER,
                         )
                 } else {
                     Modifier
@@ -268,6 +254,7 @@ fun ChatDrawerContent(
                                 .alpha(0.15f),
                             contentScale = ContentScale.Crop,
                         )
+                        SoftDarkWallpaperShade()
                     }
                 }
             }
@@ -337,8 +324,7 @@ fun ChatDrawerContent(
                         )
                     }
                     Greeting(
-                        style = MaterialTheme.typography.labelMedium,
-                    )
+                        style = MaterialTheme.typography.labelMedium)
                 }
             }
 
@@ -369,7 +355,8 @@ fun ChatDrawerContent(
                     conversationJobs = conversationJobs.keys,
                     listState = conversationListState,
                     drawerItemAlpha = settings.displaySetting.drawerItemAlpha,
-                    glassStyleEnabled = settings.displaySetting.bubbleMaterialStyle == UiMaterialStyle.LIQUID_GLASS,
+                    glassStyleEnabled =
+                            LocalThemeMaterial.current.style != UiMaterialStyle.ORIGINAL,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -682,8 +669,7 @@ fun ChatDrawerContent(
                 }
 
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(folders) { folder ->
                         val isCurrent = folder.id == conversationToMoveFolder?.folderId
                         Surface(
@@ -831,8 +817,7 @@ fun ChatDrawerContent(
                 )
 
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(settings.assistants) { assistant ->
                         AssistantItem(
                             assistant = assistant,
@@ -1264,8 +1249,7 @@ private fun PluginShortcutPickerSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-        ) {
+                .padding(horizontal = 20.dp, vertical = 8.dp)) {
             Text("侧边栏快捷插件", style = MaterialTheme.typography.titleLarge)
             Text(
                 "这里只显示已启用并且带管理页面的插件。",
