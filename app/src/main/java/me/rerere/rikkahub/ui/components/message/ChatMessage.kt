@@ -6,8 +6,6 @@
 
 package me.rerere.rikkahub.ui.components.message
 
-import me.rerere.rikkahub.data.message.MessageQuote
-import me.rerere.rikkahub.data.message.messageQuote
 import me.rerere.rikkahub.data.music.musicCard
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import android.content.Intent
@@ -163,7 +161,6 @@ fun ChatMessage(
     onAvatarInteraction: ((UIMessage) -> Unit)? = null,
     avatarPulse: String? = null,
     conversationId: String = "",
-    onQuote: ((MessageQuote) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
     if (message.avatarInteraction() != null) {
@@ -197,8 +194,7 @@ fun ChatMessage(
             }
         }
     )
-    var showActionsSheet by remember(message.id) { mutableStateOf(false) }
-    var selectedBubbleText by remember(message.id) { mutableStateOf<String?>(null) }
+    var showActionsSheet by remember { mutableStateOf(false) }
     var showProcessSheet by remember(message.id) { mutableStateOf(false) }
     var showReactionPicker by remember(message.id) { mutableStateOf(false) }
     var showSelectCopySheet by remember { mutableStateOf(false) }
@@ -253,9 +249,8 @@ fun ChatMessage(
                 assistant = assistant,
                 conversationId = conversationId,
                 role = message.role,
-                parts = message.parts.filterNot { it.messageQuote() != null },
+                parts = message.parts,
                 annotations = message.annotations,
-                quote = message.parts.firstNotNullOfOrNull { it.messageQuote() },
                 loading = loading,
                 model = model,
                 onToolApproval = onToolApproval,
@@ -266,11 +261,7 @@ fun ChatMessage(
                 bubbleAvatar = {
                     ChatBubbleAvatar(message.role == MessageRole.USER, model, assistant, avatarGesture)
                 },
-                onBubbleLongClick = { selectedBubbleText = null; showActionsSheet = true },
-                onTextBubbleLongClick = if (everyday || onQuote != null) ({ text ->
-                    selectedBubbleText = text
-                    showActionsSheet = true
-                }) else null,
+                onBubbleLongClick = { showActionsSheet = true },
             )
 
             message.translation?.let { translation ->
@@ -304,7 +295,6 @@ fun ChatMessage(
                     node = node,
                     onUpdate = onUpdate,
                     onOpenActionSheet = {
-                        selectedBubbleText = null
                         showActionsSheet = true
                     },
                     onTranslate = onTranslate,
@@ -325,17 +315,6 @@ fun ChatMessage(
     if (showActionsSheet) {
         ChatMessageActionsSheet(
             message = message,
-            onQuote = onQuote?.let { callback ->
-                val text = selectedBubbleText ?: message.parts.filterIsInstance<UIMessagePart.Text>()
-                    .filterNot { it.isExtraInfoInjectionPart() || it.messageQuote() != null || it.musicCard() != null }
-                    .joinToString("\n") { it.text }.trim()
-                if (text.isBlank()) null else ({ callback(MessageQuote(
-                    messageId = message.id.toString(),
-                    author = if (message.role == MessageRole.USER) settings.userNickname.ifBlank { "我" }
-                        else assistant?.name?.takeIf { it.isNotBlank() } ?: model?.displayName ?: "AI",
-                    text = text,
-                )) })
-            },
             onEdit = onEdit,
             onDelete = onDelete,
             onShare = onShare,
@@ -451,8 +430,6 @@ private fun MessagePartsBlock(
     onReact: ((String, String) -> Unit)? = null,
     bubbleAvatar: @Composable () -> Unit = {},
     onBubbleLongClick: (() -> Unit)? = null,
-    onTextBubbleLongClick: ((String) -> Unit)? = null,
-    quote: MessageQuote? = null,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -499,10 +476,6 @@ private fun MessagePartsBlock(
     val groupedParts = remember(parts) {
         parts.filterNot { it.isExtraInfoInjectionPart() || it.musicCard() != null }.groupMessageParts()
     }
-    val quotedBlockIndex = groupedParts.filterIsInstance<MessagePartBlock.ContentBlock>().firstOrNull {
-        val part = it.part
-        part !is UIMessagePart.Text || part.text.isNotBlank()
-    }?.index
     groupedParts.fastForEach { block ->
         when (block) {
             is MessagePartBlock.ChartBlock -> key("chart", block.index) {
@@ -554,8 +527,6 @@ private fun MessagePartsBlock(
                     avatar = bubbleAvatar,
                     onLongClick = onBubbleLongClick,
                 ) {
-                    val blockQuote = quote.takeIf { block.index == quotedBlockIndex }
-                    if (block.part !is UIMessagePart.Text && blockQuote != null) MessageQuoteCard(blockQuote)
                     when (val part = block.part) {
                         is UIMessagePart.Text -> {
                             // 从显示文本中移除[zip:...]标记
@@ -572,8 +543,7 @@ private fun MessagePartsBlock(
                                 onUserMessageClick = onUserMessageClick,
                                 onClickCitation = handleClickCitation,
                                 avatar = bubbleAvatar,
-                                onLongClick = onTextBubbleLongClick,
-                                quote = blockQuote,
+                                onLongClick = onBubbleLongClick,
                             )
                         }
 

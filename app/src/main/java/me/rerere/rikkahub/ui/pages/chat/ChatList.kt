@@ -98,7 +98,6 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.interaction.MessageReaction
 import me.rerere.rikkahub.data.interaction.avatarInteraction
 import me.rerere.ai.core.MessageRole
-import me.rerere.rikkahub.data.message.MessageQuote
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
@@ -158,7 +157,6 @@ fun ChatList(
     reactions: List<MessageReaction> = emptyList(),
     onReact: ((UIMessage, String, String) -> Unit)? = null,
     onAvatarInteraction: ((UIMessage) -> Unit)? = null,
-    onQuote: ((MessageQuote) -> Unit)? = null,
 ) {
     AnimatedContent(
         targetState = previewMode,
@@ -203,7 +201,6 @@ fun ChatList(
                 reactions = reactions,
                 onReact = onReact,
                 onAvatarInteraction = onAvatarInteraction,
-                onQuote = onQuote,
             )
         }
     }
@@ -237,7 +234,6 @@ private fun ChatListNormal(
     reactions: List<MessageReaction> = emptyList(),
     onReact: ((UIMessage, String, String) -> Unit)? = null,
     onAvatarInteraction: ((UIMessage) -> Unit)? = null,
-    onQuote: ((MessageQuote) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -391,7 +387,6 @@ private fun ChatListNormal(
                     ) {
                         ChatMessage(
                             node = node,
-                            onQuote = onQuote,
                             conversationId = conversation.id.toString(),
                             reactions = reactions.filter { it.messageId == node.currentMessage.id.toString() },
                             onReact = if (currentAssistant?.enableMessageReactions == true &&

@@ -137,9 +137,6 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 import me.rerere.rikkahub.ui.theme.LocalThemeMaterial
 import me.rerere.rikkahub.ui.theme.MaterialRole
-import me.rerere.rikkahub.ui.components.message.MessageQuoteCard
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import me.rerere.rikkahub.ui.theme.themeMaterial
 import me.rerere.rikkahub.ui.theme.inputMaterialTint
 
@@ -936,13 +933,6 @@ private fun TextInputRow(
             }
         }
 
-        state.quotedMessage?.let {
-            MessageQuoteCard(it, onCancel = state::clearQuote, modifier = Modifier.fillMaxWidth())
-        }
-        val quoteFocusRequester = remember { FocusRequester() }
-        LaunchedEffect(state.quotedMessage) {
-            if (state.quotedMessage != null) quoteFocusRequester.requestFocus()
-        }
         var isFocused by remember { mutableStateOf(false) }
         var isFullScreen by remember { mutableStateOf(false) }
         val receiveContentListener = remember(
@@ -986,7 +976,6 @@ private fun TextInputRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .contentReceiver(receiveContentListener)
-                .focusRequester(quoteFocusRequester)
                 .onFocusChanged {
                     isFocused = it.isFocused
                 },

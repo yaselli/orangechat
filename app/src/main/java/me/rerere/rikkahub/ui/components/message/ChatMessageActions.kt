@@ -6,6 +6,8 @@
 
 package me.rerere.rikkahub.ui.components.message
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -244,7 +246,6 @@ fun ChatMessageActionsSheet(
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
     onReact: (() -> Unit)? = null,
-    onQuote: (() -> Unit)? = null,
     onShowProcess: (() -> Unit)? = null,
     onMessageActions: (@Composable () -> Unit)? = null,
     onWebViewPreview: () -> Unit,
@@ -257,20 +258,12 @@ fun ChatMessageActionsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             onMessageActions?.invoke()
-            if (onQuote != null) {
-                Card(
-                    onClick = { onDismissRequest(); onQuote() },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Text("引用", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
-                }
-            }
             if (onShowProcess != null) {
                 Card(
                     onClick = { onDismissRequest(); onShowProcess() },

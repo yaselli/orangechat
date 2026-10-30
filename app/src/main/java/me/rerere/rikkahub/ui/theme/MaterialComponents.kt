@@ -447,15 +447,15 @@ internal fun MaterialModalBottomSheet(
     ) {
         NativeModalBottomSheet(
             onDismissRequest = onDismissRequest,
-            modifier =
-                if (active)
-                    modifier.themeMaterial(shape, containerColor, role = MaterialRole.DIALOG)
-                else modifier,
+            // The native sheet applies its offset inside this modifier. Drawing a background
+            // here paints at the unshifted bounds (over the chat and scrim). Let its own
+            // Surface draw the readable container after positioning and animate it as one layer.
+            modifier = modifier,
             sheetState = sheetState,
             sheetMaxWidth = sheetMaxWidth,
             sheetGesturesEnabled = sheetGesturesEnabled,
             shape = shape,
-            containerColor = if (active) Color.Transparent else containerColor,
+            containerColor = if (active) containerColor.copy(alpha = 1f) else containerColor,
             contentColor = contentColor,
             tonalElevation = if (active) 0.dp else tonalElevation,
             scrimColor = scrimColor,
