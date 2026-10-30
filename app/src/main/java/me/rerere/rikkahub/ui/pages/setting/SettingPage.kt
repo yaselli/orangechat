@@ -104,7 +104,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     )
     if (showCommunity) ProjectCommunityDialog(onDismiss = { showCommunity = false })
 
-        Scaffold(
+    Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
