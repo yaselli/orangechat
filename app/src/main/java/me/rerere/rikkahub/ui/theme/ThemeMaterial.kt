@@ -128,7 +128,11 @@ internal fun Modifier.themeMaterial(
         else Modifier.clip(shape)
     return then(surfaceLayer)
         .then(
-            if (useHaze) Modifier.hazeEffect(state = hazeState!!, style = hazeStyle) else Modifier
+            if (useHaze) Modifier.hazeEffect(state = hazeState!!, style = hazeStyle) {
+                // Some device RenderNodes do not propagate source invalidations through
+                // the additional clipped surface layer. Redraw when its wallpaper draws.
+                forceInvalidateOnPreDraw = true
+            } else Modifier
         )
         .drawWithCache {
             val fill =

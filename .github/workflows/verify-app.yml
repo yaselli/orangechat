@@ -63,24 +63,24 @@ jobs:
             **/build/reports/lint-results*
           if-no-files-found: warn
       - name: Prepare emulator-only test signing and KVM
-        if: github.head_ref == 'ui/unified-theme-materials' || github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/')
+        if: github.head_ref == 'ui/unified-theme-materials' || github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/') || github.head_ref == 'fix/material-rendering-flicker'
         run: |
           sudo chmod 666 /dev/kvm
           if [ ! -f app/debug.keystore ]; then
             keytool -genkeypair -noprompt -keystore app/debug.keystore -storepass android -keypass android -alias androiddebugkey -dname 'CN=Android Debug' -keyalg RSA -validity 10000
           fi
       - name: Verify material colors and navigation backgrounds on Android
-        if: github.head_ref == 'ui/unified-theme-materials' || github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/')
+        if: github.head_ref == 'ui/unified-theme-materials' || github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/') || github.head_ref == 'fix/material-rendering-flicker'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           target: default
-          disable-animations: true
+          disable-animations: ${{ github.head_ref != 'fix/material-rendering-flicker' }}
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=${{ (github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/')) && 'me.rerere.rikkahub.ui.theme.ThemeMaterialRenderingDeviceTest,me.rerere.rikkahub.ui.components.message.EverydayChatModeDeviceTest,me.rerere.rikkahub.ui.theme.GlobalAppearanceDeviceTest' || github.head_ref == 'ui/everyday-chat-mode' && 'me.rerere.rikkahub.ui.theme.ThemeMaterialRenderingDeviceTest,me.rerere.rikkahub.ui.components.message.EverydayChatModeDeviceTest' || 'me.rerere.rikkahub.ui.theme.ThemeMaterialRenderingDeviceTest' }}
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=${{ (github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/') || github.head_ref == 'fix/material-rendering-flicker') && 'me.rerere.rikkahub.ui.theme.ThemeMaterialRenderingDeviceTest,me.rerere.rikkahub.ui.components.message.EverydayChatModeDeviceTest,me.rerere.rikkahub.ui.theme.GlobalAppearanceDeviceTest,me.rerere.rikkahub.ui.theme.RenderingFlickerDeviceTest' || github.head_ref == 'ui/everyday-chat-mode' && 'me.rerere.rikkahub.ui.theme.ThemeMaterialRenderingDeviceTest,me.rerere.rikkahub.ui.components.message.EverydayChatModeDeviceTest' || 'me.rerere.rikkahub.ui.theme.ThemeMaterialRenderingDeviceTest' }}
       - name: Upload material rendering test results
-        if: always() && (github.head_ref == 'ui/unified-theme-materials' || github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/'))
+        if: always() && (github.head_ref == 'ui/unified-theme-materials' || github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance' || startsWith(github.head_ref, 'release/') || github.head_ref == 'fix/material-rendering-flicker')
         uses: actions/upload-artifact@v4
         with:
           name: theme-material-rendering-results
@@ -91,7 +91,7 @@ jobs:
 
   everyday-preview:
     needs: checks
-    if: (github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance') && github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.head_ref == 'ui/everyday-chat-mode' || github.head_ref == 'ui/global-appearance' || github.head_ref == 'fix/material-rendering-flicker') && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -143,7 +143,7 @@ jobs:
       - name: Upload downloadable everyday chat test APKs
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.head_ref == 'ui/global-appearance' && 'Xiguaban-global-appearance-debug' || 'Xiguaban-everyday-chat-debug' }}
+          name: ${{ github.head_ref == 'fix/material-rendering-flicker' && 'Xiguaban-rendering-fix-debug' || github.head_ref == 'ui/global-appearance' && 'Xiguaban-global-appearance-debug' || 'Xiguaban-everyday-chat-debug' }}
           path: everyday-preview/*
           if-no-files-found: error
           compression-level: 0

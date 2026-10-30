@@ -117,6 +117,11 @@ import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.disclaimer.LegalPage
 import me.rerere.rikkahub.ui.theme.withSettingsBackdropMetadata
 import me.rerere.rikkahub.ui.theme.rememberSettingsBackdropDecorator
+import me.rerere.rikkahub.ui.theme.LocalWallpapers
+import me.rerere.rikkahub.ui.theme.rememberWallpapers
+import me.rerere.rikkahub.ui.theme.SettingsWallpaper
+import me.rerere.rikkahub.ui.theme.usesSettingsBackdrop
+import me.rerere.rikkahub.ui.pages.chat.AssistantBackground
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
@@ -420,6 +425,9 @@ class RouteActivity : ComponentActivity() {
                 LocalToaster provides toastState,
                 LocalTTSState provides tts,
                 LocalASRState provides asr,
+                LocalWallpapers provides rememberWallpapers(
+                    listOf(settings.getCurrentAssistant().background, settings.displaySetting.settingsBackgroundPath)
+                ),
             ) {
                 Toaster(
                     state = toastState,
@@ -443,6 +451,14 @@ class RouteActivity : ComponentActivity() {
                             }
                         }
                 ) {
+                    // Keep the destination's loaded wallpaper behind navigation's moving
+                    // entries. Their scale/fade must not expose a plain, bright root frame.
+                    val destination = backStack.lastOrNull() as? Screen
+                    when {
+                        destination?.usesSettingsBackdrop == true ->
+                            SettingsWallpaper(settings.displaySetting.settingsBackgroundPath)
+                        destination is Screen.Chat -> AssistantBackground(settings)
+                    }
                     NavDisplay(
                         backStack = backStack,
                         entryDecorators = listOf(

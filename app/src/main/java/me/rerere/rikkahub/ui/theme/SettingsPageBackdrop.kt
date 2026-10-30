@@ -10,11 +10,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavEntryDecorator
 import androidx.navigation3.runtime.NavKey
-import coil3.compose.AsyncImage
 import java.io.File
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DisplaySetting
@@ -71,21 +69,20 @@ internal fun SettingsPageBackdrop(
             LocalSettingsWallpaperActive provides (wallpaper != null),
         ) {
             MaterialBackdrop(
-                background = {
-                    ThemeMaterialBackground()
-                    if (wallpaper != null) {
-                        AsyncImage(
-                            model = File(wallpaper),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                        SoftDarkWallpaperShade()
-                    }
-                },
+                background = { SettingsWallpaper(wallpaper) },
                 captureBackground = wallpaper != null,
                 content = content,
             )
         }
+    }
+}
+
+/** Also used below NavDisplay to fill gaps between moving/fading settings entries. */
+@Composable
+internal fun SettingsWallpaper(path: String?) {
+    ThemeMaterialBackground()
+    if (!path.isNullOrBlank() && File(path).isFile) {
+        WallpaperImage(path, Modifier.fillMaxSize())
+        SoftDarkWallpaperShade()
     }
 }
