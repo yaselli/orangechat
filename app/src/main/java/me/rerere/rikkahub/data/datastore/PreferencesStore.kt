@@ -728,6 +728,7 @@ private inline fun MutablePreferences.putSecretIfChanged(
 data class Settings(
     @Transient
     val init: Boolean = false,
+    // Legacy backup fields; no longer used to gate application startup.
     val disclaimerAccepted: Boolean = false,
     val disclaimerAcceptedAt: Int = 0,
     val dynamicColor: Boolean = true,
